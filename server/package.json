@@ -1,0 +1,19 @@
+{
+  "name": "checkq-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "fastify": "^5.2.0",
+    "@fastify/cookie": "^11.0.1",
+    "@fastify/static": "^8.0.3",
+    "@fastify/multipart": "^9.0.3",
+    "jexl": "^2.3.0",
+    "croner": "^9.0.0"
+  }
+}

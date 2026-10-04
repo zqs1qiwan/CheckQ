@@ -1,0 +1,12 @@
+services:
+  checkq:
+    build: .
+    container_name: checkq
+    restart: unless-stopped
+    ports:
+      - "18888:8888"
+    environment:
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./data:/data

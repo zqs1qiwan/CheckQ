@@ -1,0 +1,263 @@
+import React from 'react';
+import { STEP_TYPES } from '../stepTypes.js';
+
+export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete }) {
+  if (!node) {
+    return (
+      <div className="config-panel">
+        <div className="empty" style={{ padding: 30, color: 'var(--muted)', fontSize: 13, lineHeight: 1.8 }}>
+          点击画布上的节点<br />在此配置参数
+        </div >
+      </div >
+    );
+  }
+
+  const type = node.type;
+  const config = node.config || {};
+
+  return (
+    <div className="config-panel">
+      <div className="section-title">{STEP_TYPES[type]?.label || type}</div >
+      <div className="field">
+        <label>节点名称</label>
+        <input value={node.name} onChange={(e) => onUpdate({ name: e.target.value })} />
+      </div >
+
+      {type === 'http' && (
+        <>{/* HTTP logic */}
+          <div className="field-inline">
+            <div className="field">
+              <label>Method</label>
+              <select value={config.method} onChange={(e) => onConfigUpdate({ method: e.target.value })}>
+                {['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD'].map((m) => <option key={m}>{m}</option>)}
+              </select>
+            </div >
+            <div className="field">
+              <label>超时 (秒)</label>
+              <input type="number" value={(config.timeout || 30000) / 1000}
+                onChange={(e) => onConfigUpdate({ timeout: Math.max(1, Number(e.target.value) || 30) * 1000 })} />
+            </div >
+          </div >
+          <div className="field">
+            <label>执行后端</label>
+            <select value={config.backend || 'fetch'} onChange={(e) => onConfigUpdate({ backend: e.target.value })}>
+              <option value="fetch">fetch（Node 内置，默认）</option>
+              <option value="curl">curl（TLS 指纹不同，用于绕开 fetch 指纹风控）</option>
+            </select>
+            <div className="hint">目标站若对 Node fetch 的 TLS 指纹风控（如返回权限错误但浏览器/curl 正常），切换到 curl 后端。</div>
+          </div >
+          <div className="field">
+            <label>URL <span style={{ color: 'var(--muted)' }}>（支持 {`{{变量}}`}）</span ></label>
+            <input className="mono" value={config.url} onChange={(e) => onConfigUpdate({ url: e.target.value })} />
+          </div >
+          <div className="section-title">请求头</div >
+          {(config.headers || []).map((h, i) => (
+            <div className="kv-row" key={i}>
+              <input type="checkbox" checked={h.enabled !== false} title="启用"
+                onChange={(e) => {
+                  const hs = [...config.headers];
+                  hs[i] = { ...h, enabled: e.target.checked };
+                  onConfigUpdate({ headers: hs });
+                }} />
+              <input className="mono" placeholder="名称" value={h.name}
+                onChange={(e) => {
+                  const hs = [...config.headers];
+                  hs[i] = { ...h, name: e.target.value };
+                  onConfigUpdate({ headers: hs });
+                }} />
+              <input className="mono" placeholder="值 {{var}}" value={h.value}
+                onChange={(e) => {
+                  const hs = [...config.headers];
+                  hs[i] = { ...h, value: e.target.value };
+                  onConfigUpdate({ headers: hs });
+                }} />
+              <button className="small danger" style={{ padding: '2px 7px' }}
+                onClick={() => onConfigUpdate({ headers: config.headers.filter((_, j) => j !== i) })}>×</button>
+            </div >
+          ))}
+          <button className="small" style={{ width: '100%' }}
+            onClick={() => onConfigUpdate({ headers: [...(config.headers || []), { name: '', value: '', enabled: true }] })}>
+            + 添加请求头
+          </button>
+          {config.method !== 'GET' && config.method !== 'HEAD' && (
+            <>{/* Body */}
+              <div className="section-title">请求体</div >
+              <textarea className="mono" rows={4} value={config.body || ''}
+                onChange={(e) => onConfigUpdate({ body: e.target.value })} />
+            </>
+          )}
+          <div className="section-title">断言（全部通过才继续）</div >
+          {(config.asserts || []).map((a, i) => (
+            <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 8, marginBottom: 8 }}>
+              <div className="kv-row">
+                <select
+                  value={Array.isArray(a.res) ? 're' : 'expr'}
+                  onChange={(e) => {
+                    const as = [...config.asserts];
+                    as[i] = e.target.value === 're'
+                      ? { res: [''], from: 'content' }
+                      : { expr: '', expect: 'true' };
+                    onConfigUpdate({ asserts: as });
+                  }}
+                >
+                  <option value="expr">表达式</option>
+                  <option value="re">正则含</option>
+                  <option value="re" disabled={true} style={{ display: 'none' }}></option>
+                </select>
+                <button className="small danger" style={{ padding: '2px 7px' }}
+                  onClick={() => onConfigUpdate({ asserts: config.asserts.filter((_, j) => j !== i) })}>×</button>
+              </div >
+              {Array.isArray(a.res) ? (
+                <>{/* Regex assert */}
+                  <input className="mono" style={{ marginBottom: 4 }} placeholder='正则 如 "code":0'
+                    value={a.res.join('|')}
+                    onChange={(e) => {
+                      const as = [...config.asserts];
+                      as[i] = { ...a, res: e.target.value.split('|') };
+                      onConfigUpdate({ asserts: as });
+                    }} />
+                  <div className="field-inline">
+                    <div className="field">
+                      <select value={a.from || 'content'} onChange={(e) => { const as = [...config.asserts]; as[i] = { ...a, from: e.target.value }; onConfigUpdate({ asserts: as }); }}>
+                        <option value="content">响应体含</option>
+                        <option value="status">状态码含</option>
+                      </select>
+                    </div >
+                    <div className="field">
+                      <label className="switch" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input type="checkbox" checked={!!a.negate}
+                          onChange={(e) => { const as = [...config.asserts]; as[i] = { ...a, negate: e.target.checked }; onConfigUpdate({ asserts: as }); }} />
+                        <span className="track" />
+                        <span style={{ fontSize: 12, color: 'var(--muted)' }}>取反</span >
+                      </label>
+                    </div >
+                  </div >
+                </>
+              ) : (
+                <>{/* Expr assert */}
+                  <input className="mono" style={{ marginBottom: 4 }} placeholder='jexl 表达式 如 last.json.code == 0'
+                    value={a.expr}
+                    onChange={(e) => { const as = [...config.asserts]; as[i] = { ...a, expr: e.target.value }; onConfigUpdate({ asserts: as }); }} />
+                  <input className="mono" placeholder='期望值 如 true（留空=真值判断）'
+                    value={a.expect ?? ''}
+                    onChange={(e) => { const as = [...config.asserts]; as[i] = { ...a, expect: e.target.value }; onConfigUpdate({ asserts: as }); }} />
+                </>
+              )}
+            </div >
+          ))}
+          <button className="small" style={{ width: '100%' }}
+            onClick={() => onConfigUpdate({ asserts: [...(config.asserts || []), { expr: '', expect: 'true' }] })}>
+            + 添加断言
+          </button>
+        </>
+      )}
+
+      {type === 'condition' && (
+        <div className="field">
+          <label>判定表达式 <span style={{ color: 'var(--muted)' }}>(jexl)</span ></label>
+          <input className="mono" placeholder="last.json.code == 0" value={config.expr || ''}
+            onChange={(e) => onConfigUpdate({ expr: e.target.value })} />
+          <div className="hint">
+            last = 上一个响应；vars.xxx = 流程变量<br />
+            真 → true 出口，假 → false 出口
+          </div >
+        </div >
+      )}
+
+      {type === 'set' && (
+        <>{/* Set node */}
+          <div className="field">
+            <label>变量名</label>
+            <input value={config.name || ''} onChange={(e) => onUpdate({ name: e.target.value })} />
+          </div >
+          <div className="field">
+            <label>值 <span style={{ color: 'var(--muted)' }}>（用 = 开头进行表达式求值）</span ></label>
+            <input className="mono" placeholder="文本 {{var}} 或 =last.json.token" value={config.value ?? ''}
+              onChange={(e) => onConfigUpdate({ value: e.target.value })} />
+            <div className="hint">
+              直接渲染模板 {`{{xxx}}`}；以 = 开头按表达式求值<br />
+              例: =last.json.loginDevice == 'macOS' ? vars.ua_mac : vars.ua_win
+            </div >
+          </div >
+        </>
+      )}
+
+      {type === 'extract' && (
+        <>{/* Extract node */}
+          <div className="field">
+            <label>提取来源</label>
+            <select value={config.from || 'last.text'} onChange={(e) => onConfigUpdate({ from: e.target.value })}>
+              <option value="last.text">响应原文 (last.text)</option>
+              <option value="last.json">响应JSON (last.json)</option>
+              <option value="last.status">状态码 (last.status)</option>
+              <option value="vars">流程变量 (vars)</option>
+            </select>
+          </div >
+          <div className="field">
+            <label>正则 <span style={{ color: 'var(--muted)' }}>（第1个捕获组）</span ></label>
+            <input className="mono" placeholder='\"message\":\"(.*?)\"' value={config.re || ''}
+              onChange={(e) => onConfigUpdate({ re: e.target.value })} />
+          </div >
+          <div className="field-inline">
+            <div className="field">
+              <label>存入变量名</label>
+              <input value={config.name || ''} onChange={(e) => onConfigUpdate({ name: e.target.value })} />
+            </div >
+            <div className="field" style={{ flex: '0 0 auto', display: 'flex', alignItems: 'flex-end' }}>
+              <label className="switch" style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input type="checkbox" checked={config.optional !== false}
+                  onChange={(e) => onConfigUpdate({ optional: e.target.checked })} />
+                <span className="track" />
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>未命中不失败</span >
+              </label>
+            </div >
+          </div >
+        </>
+      )}
+
+      {type === 'delay' && (
+        <div className="field">
+          <label>等待秒数</label>
+          <input type="number" min="0" max="300" value={config.seconds ?? 1}
+            onChange={(e) => onConfigUpdate({ seconds: Number(e.target.value) })} />
+        </div >
+      )}
+
+      {type === 'log' && (
+        <div className="field">
+          <label>输出文本 <span style={{ color: 'var(--muted)' }}>（支持 {`{{变量}}`}）</span ></label>
+          <textarea rows={3} value={config.text || ''} onChange={(e) => onConfigUpdate({ text: e.target.value })} />
+        </div >
+      )}
+
+      {type === 'notify' && (
+        <>{/* Notify node */}
+          <div className="field">
+            <label>通知文本</label>
+            <textarea rows={2} value={config.text || ''} onChange={(e) => onConfigUpdate({ text: e.target.value })} />
+          </div >
+          <div className="field">
+            <label>Telegram Bot Token</label>
+            <input className="mono" value={config.tgToken || ''} onChange={(e) => onConfigUpdate({ tgToken: e.target.value })} />
+          </div >
+          <div className="field">
+            <label>Telegram Chat ID</label>
+            <input className="mono" value={config.tgChat || ''} onChange={(e) => onConfigUpdate({ tgChat: e.target.value })} />
+          </div >
+          <div className="field">
+            <label>Bark URL</label>
+            <input className="mono" placeholder="https://api.day.app/xxx" value={config.barkUrl || ''}
+              onChange={(e) => onConfigUpdate({ barkUrl: e.target.value })} />
+          </div >
+          <div className="field">
+            <label>Webhook URL</label>
+            <input className="mono" value={config.webhookUrl || ''} onChange={(e) => onConfigUpdate({ webhookUrl: e.target.value })} />
+          </div >
+        </>
+      )}
+
+      <div className="section-title" style={{ marginTop: 24 }}>操作</div >
+      <button className="danger" style={{ width: '100%' }} onClick={onDelete}>删除此节点</button>
+    </div >
+  );
+}

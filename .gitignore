@@ -1,0 +1,24 @@
+# deps
+node_modules/
+server/node_modules/
+web/node_modules/
+
+# build
+web/dist/
+dist/
+
+# runtime data (含真实 cookie，严禁入库)
+data/
+server/data/
+*.db
+*.sqlite
+
+# env
+.env
+.env.*
+
+# misc
+*.log
+.DS_Store
+.DS_*
+server/public

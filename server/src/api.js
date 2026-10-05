@@ -17,7 +17,6 @@ import { Store, hashPwd, verifyPwd } from './store.js';
 import { Engine } from './engine.js';
 import { validateFlow } from './model.js';
 import { importHar } from './har-import.js';
-import { TEMPLATES } from './templates.js';
 import { Scheduler } from './scheduler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -28,7 +27,7 @@ export function buildServer({ dataDir, port }) {
   const sessions = new Map(); // qsid -> expiry
 
   const runner = {
-    async runFlow(flow, trigger) {
+    async runFlow(flow, trigger, { debugStopId } = {}) {
       const runId = crypto.randomUUID();
       const run = {
         id: runId, flowId: flow.id, flowName: flow.name, trigger,
@@ -36,7 +35,7 @@ export function buildServer({ dataDir, port }) {
       };
       try {
         const engine = new Engine(flow);
-        const result = await engine.run({ trigger, runId });
+        const result = await engine.run({ trigger, runId, debugStopId });
         run.status = result.ok ? 'success' : 'failed';
         run.logs = result.logs;
         run.finalMessage = result.finalMessage || (result.ok ? '' : '执行失败');
@@ -117,12 +116,57 @@ export function buildServer({ dataDir, port }) {
 
   // ---- flows ----
   app.get('/api/flows', async () => store.listFlows());
-  app.get('/api/templates', async () => TEMPLATES.map(({ id, name, desc }) => ({ id, name, desc })));
 
-  app.post('/api/flows/from-template/:tplId', async (req, reply) => {
-    const tpl = TEMPLATES.find((t) => t.id === req.params.tplId);
-    if (!tpl) return reply.code(404).send({ error: '模板不存在' });
-    return store.createFlow(tpl.flow);
+  // ---- templates (user-created, stored in DB) ----
+  // 从现有流程"另存为模板"
+  app.post('/api/templates/from-flow/:flowId', async (req, reply) => {
+    const f = store.getFlow(req.params.flowId);
+    if (!f) return reply.code(404).send({ error: '流程不存在' });
+    const { name, desc } = req.body || {};
+    const tpl = store.createTemplate({
+      name: name || f.name.replace(/\s*·\s*\d+$/, '') + ' 模板',
+      desc: desc || `来自流程「${f.name}」`,
+      vars: f.vars || {},
+      nodes: f.nodes,
+      edges: f.edges,
+    }, 'flow');
+    return { id: tpl.id, name: tpl.name };
+  });
+
+  app.get('/api/templates', async () => store.listTemplates());
+
+  app.post('/api/templates', async (req, reply) => {
+    const { name, desc, vars, nodes, edges } = req.body || {};
+    const errors = validateFlow({ name, nodes, edges, vars });
+    if (errors.length) return reply.code(400).send({ error: errors.join('; ') });
+    const tpl = store.createTemplate({ name, desc, vars, nodes, edges }, 'import');
+    return { id: tpl.id, name: tpl.name };
+  });
+
+  app.put('/api/templates/:id', async (req, reply) => {
+    const t = store.updateTemplate(req.params.id, req.body || {});
+    if (!t) return reply.code(404).send({ error: 'not found' });
+    return t;
+  });
+
+  app.delete('/api/templates/:id', async (req, reply) => {
+    const ok = store.deleteTemplate(req.params.id);
+    return ok ? { ok: true } : reply.code(404).send({ error: 'not found' });
+  });
+
+  // 模板 → 生成任务实例（变量差异化）
+  app.post('/api/templates/:id/instantiate', async (req, reply) => {
+    const { name, vars, note } = req.body || {};
+    const flow = store.instantiateTemplate(req.params.id, { name, vars, note });
+    if (!flow) return reply.code(404).send({ error: '模板不存在' });
+    return flow;
+  });
+
+  // 模板详情（编辑用）
+  app.get('/api/templates/:id', async (req, reply) => {
+    const t = store.getTemplate(req.params.id);
+    if (!t) return reply.code(404).send({ error: 'not found' });
+    return t;
   });
 
   app.post('/api/flows', async (req, reply) => {
@@ -158,7 +202,8 @@ export function buildServer({ dataDir, port }) {
   app.post('/api/flows/:id/run', async (req, reply) => {
     const f = store.getFlow(req.params.id);
     if (!f) return reply.code(404).send({ error: 'not found' });
-    const run = await runner.runFlow(f, 'manual');
+    const debugStopId = (req.body || {}).debugStopId || null;
+    const run = await runner.runFlow(f, debugStopId ? 'debug' : 'manual', { debugStopId });
     return run; // 完整 run 对象（含 logs），前端直接渲染
   });
 

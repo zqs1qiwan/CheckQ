@@ -112,6 +112,17 @@ input.mono, textarea.mono { font-family: var(--mono); }
 .switch input:checked + .track { background: var(--accent); border-color: var(--accent); }
 .switch input:checked + .track::after { left: 16px; background: #fff; }
 
+/* ---- template cards ---- */
+.tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-bottom: 8px; }
+.tpl-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.tpl-card .tpl-name { font-weight: 600; margin-bottom: 4px; }
+.tpl-card .tpl-desc { color: var(--muted); font-size: 12px; margin-bottom: 8px; min-height: 17px; }
+.tpl-card .tpl-meta { color: var(--muted); font-size: 11px; margin-bottom: 10px; }
+.tpl-card .tpl-actions { display: flex; gap: 6px; }
+.tpl-empty { background: var(--panel); border: 1px dashed var(--border); border-radius: 12px; padding: 18px 20px; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+
+.result-logs { max-height: 45vh; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; padding: 8px; background: var(--panel2); }
+
 /* ---- editor ---- */
 .editor {
   display: grid;

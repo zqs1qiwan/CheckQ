@@ -1,7 +1,7 @@
 import React from 'react';
 import { STEP_TYPES } from '../stepTypes.js';
 
-export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete }) {
+export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, onDebugTo }) {
   if (!node) {
     return (
       <div className="config-panel">
@@ -257,6 +257,13 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete }
       )}
 
       <div className="section-title" style={{ marginTop: 24 }}>操作</div >
+      {onDebugTo && (
+        <button
+          style={{ width: '100%', marginBottom: 8 }}
+          onClick={() => onDebugTo(node.id)}
+          title="从头运行流程，执行到这个节点为止（含），不会继续后面的步骤"
+        >▶ 调试到此为止</button>
+      )}
       <button className="danger" style={{ width: '100%' }} onClick={onDelete}>删除此节点</button>
     </div >
   );

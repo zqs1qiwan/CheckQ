@@ -33,8 +33,8 @@ export class Engine {
     return list.length ? list[0].target : null;
   }
 
-  /** 执行整个流程。returns { ok, logs, vars, finalMessage } */
-  async run({ trigger = 'manual', runId, logSink } = {}) {
+  /** 执行流程。debugStopId: 调试模式，跑到该节点（含）即止。returns { ok, logs, vars, finalMessage } */
+  async run({ trigger = 'manual', runId, logSink, debugStopId } = {}) {
     const flow = this.flow;
     const vars = { ...(flow.vars || {}) };
     const state = { vars, last: null, steps: {} };
@@ -73,6 +73,11 @@ export class Engine {
         if (missing.size) {
           stepLog.missing = [...missing];
           missing.clear();
+        }
+        // 调试模式：到达指定节点（含）即停
+        if (debugStopId && node.id === debugStopId) {
+          finalMessage = finalMessage || `调试运行：已执行到「${stepLog.name}」，共 ${stepCount} 步`;
+          break;
         }
         if (!outcome) {
           failed = true;

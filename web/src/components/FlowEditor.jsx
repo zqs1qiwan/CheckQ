@@ -167,6 +167,31 @@ function FlowEditorInner({ flowId, onBack }) {
     }
   }, [dirty, save, flow?.id]);
 
+  const saveAsTemplate = async () => {
+    if (dirty) await save();
+    const name = prompt('模板名称：', flow.name.replace(/\s*·\s*\d+$/, '') + ' 模板');
+    if (name === null) return;
+    try {
+      const t = await api.saveFlowAsTemplate(flow.id, name);
+      showToast(`已存为模板「${t.name}」，可在首页基于它创建多个任务`, 'ok');
+    } catch (e) {
+      showToast(`保存模板失败: ${e.message}`);
+    }
+  };
+
+  const debugTo = useCallback(async (nodeId) => {
+    if (dirty) await save();
+    const node = stateRef.current.nodes.find((n) => n.id === nodeId);
+    setDrawerOpen(true);
+    setRunResult({ id: 'pending', status: 'running', logs: [] });
+    try {
+      const r = await api.runFlow(flow.id, nodeId);
+      setRunResult(r);
+    } catch (e) {
+      setRunResult({ id: 'err', status: 'failed', logs: [], finalMessage: e.message, durationMs: 0 });
+    }
+  }, [dirty, save, flow?.id]);
+
   const toggleEnabled = async () => {
     const f = await api.updateFlow(flow.id, { enabled: !flow.enabled });
     setFlow(f);
@@ -208,7 +233,8 @@ function FlowEditorInner({ flowId, onBack }) {
         </label>
         <span className="spacer" />
         {saving ? <span style={{ color: 'var(--muted)', fontSize: 12 }}>保存中…</span> : dirty ? <span style={{ color: 'var(--warn)', fontSize: 12 }}>未保存</span> : null}
-        <button className="primary" onClick={runNow}>▶ 运行</button>
+        <button onClick={saveAsTemplate} title="把当前流程保存为模板，之后可基于它批量创建任务">存为模板</button>
+        <button className="primary" onClick={runNow} title="从头执行整个流程">▶ 运行</button>
       </div>
 
       <div className="editor" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
@@ -268,6 +294,7 @@ function FlowEditorInner({ flowId, onBack }) {
           onUpdate={(patch) => updateNode(selectedId, patch)}
           onConfigUpdate={(p) => updateConfig(selectedId, p)}
           onDelete={() => deleteNode(selectedId)}
+          onDebugTo={debugTo}
         />
       </div>
 

@@ -16,8 +16,10 @@ export class Store {
     this.flowsFile = path.join(dataDir, 'flows.json');
     this.runsFile = path.join(dataDir, 'runs.json');
     this.metaFile = path.join(dataDir, 'meta.json');
+    this.templatesFile = path.join(dataDir, 'templates.json');
     this.flows = this.#load(this.flowsFile, []);
     this.runs = this.#load(this.runsFile, []);
+    this.templates = this.#load(this.templatesFile, []);
     this.meta = this.#load(this.metaFile, {});
     if (!this.meta.passwordHash) {
       const pwd = process.env.ADMIN_PASSWORD || crypto.randomBytes(9).toString('base64url');
@@ -52,6 +54,7 @@ export class Store {
       try {
         this.#save(this.flowsFile, this.flows);
         this.#save(this.runsFile, this.runs);
+        this.#save(this.templatesFile, this.templates);
       } catch (err) {
         console.error('[CheckQ] persist failed:', err.message);
       }
@@ -68,7 +71,7 @@ export class Store {
       return {
         id: f.id, name: f.name, note: f.note, cron: f.cron, timezone: f.timezone,
         enabled: f.enabled, varsCount: Object.keys(f.vars || {}).length,
-        nodesCount: (f.nodes || []).length,
+        nodesCount: (f.nodes || []).length, tplId: f.tplId || null,
         lastRun,
       };
     });
@@ -90,6 +93,7 @@ export class Store {
       nodes: data.nodes || [],
       edges: data.edges || [],
       notify: data.notify || {},
+      tplId: data.tplId || null,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -119,6 +123,72 @@ export class Store {
       return true;
     }
     return false;
+  }
+
+  // ---- templates ----
+  listTemplates() {
+    return this.templates.map((t) => ({
+      id: t.id, name: t.name, desc: t.desc, source: t.source,
+      varNames: t.varNames || [],
+      nodesCount: (t.nodes || []).length,
+      taskCount: this.flows.filter((f) => f.tplId === t.id).length,
+    }));
+  }
+
+  getTemplate(id) {
+    return this.templates.find((t) => t.id === id) || null;
+  }
+
+  createTemplate(data, source = 'flow') {
+    const tpl = {
+      id: crypto.randomUUID(),
+      name: data.name || '未命名模板',
+      desc: data.desc || '',
+      source,
+      varNames: data.varNames || Object.keys(data.vars || {}),
+      vars: data.vars || {},      // 默认变量值（生成任务时预填）
+      nodes: data.nodes || [],
+      edges: data.edges || [],
+      createdAt: Date.now(),
+    };
+    this.templates.push(tpl);
+    this.#persist();
+    return tpl;
+  }
+
+  updateTemplate(id, patch) {
+    const t = this.getTemplate(id);
+    if (!t) return null;
+    for (const k of ['name', 'desc', 'vars', 'varNames']) {
+      if (patch[k] !== undefined) t[k] = patch[k];
+    }
+    this.#persist();
+    return t;
+  }
+
+  deleteTemplate(id) {
+    const i = this.templates.findIndex((t) => t.id === id);
+    if (i < 0) return false;
+    this.templates.splice(i, 1);
+    this.#persist();
+    return true;
+  }
+
+  /** 从模板生成任务实例：克隆节点图 + 可选覆盖变量。默认名 = 模板名 · 序号 */
+  instantiateTemplate(tplId, { name, vars, note } = {}) {
+    const tpl = this.getTemplate(tplId);
+    if (!tpl) return null;
+    // 模板删除后生成的新任务仍独立可用（克隆而非引用）
+    const mergedVars = { ...(tpl.vars || {}), ...(vars || {}) };
+    const seq = this.flows.filter((f) => f.tplId === tplId).length + 1;
+    return this.createFlow({
+      name: name || `${tpl.name} · ${seq}`,
+      note: note !== undefined ? note : `来自模板「${tpl.name}」`,
+      vars: mergedVars,
+      nodes: tpl.nodes,
+      edges: tpl.edges,
+      tplId,
+    });
   }
 
   // ---- runs ----

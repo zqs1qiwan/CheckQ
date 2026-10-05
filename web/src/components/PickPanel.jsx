@@ -7,44 +7,12 @@
  * 产物全部是标准节点 config（前端只是代码生成器，PRD §4.0.4 确定性原则）。
  */
 import React, { useMemo, useState } from 'react';
+import { generalizeSelection, textExtractRegex } from '../../../server/src/text-regex.js';
 
 let genSeq = 0;
 export function genId(prefix = 'pick') {
   genSeq += 1;
   return `${prefix}-${Date.now().toString(36)}-${genSeq}`;
-}
-
-/** 文本划选 → 自动泛化正则（PRD §4.0.3）：数字→\d+、空白→\s*、其余转义 */
-export function generalizeSelection(text) {
-  let out = '';
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (/[0-9]/.test(ch)) {
-      let j = i;
-      while (j < text.length && /[0-9]/.test(text[j])) j++;
-      out += '(\\d+)';
-      i = j - 1;
-    } else if (/\s/.test(ch)) {
-      let j = i;
-      while (j < text.length && /\s/.test(text[j])) j++;
-      out += '\\s*';
-      i = j - 1;
-    } else {
-      out += ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }
-  }
-  return out;
-}
-
-/** 全半角冒号兼容 */
-function normalizePunct(regex) {
-  return regex.replace(/:/g, '[:：]').replace(/：/g, '[:：]');
-}
-
-export function textExtractRegex(selected) {
-  let regex = normalizePunct(generalizeSelection(selected));
-  if (!regex.includes('(')) regex = `(${regex})`;
-  return regex;
 }
 
 /** 猜变量名：英文键名 / 中文小词表 / 退化为 varN */

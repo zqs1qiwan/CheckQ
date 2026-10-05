@@ -34,7 +34,7 @@ export function buildServer({ dataDir, port }) {
   const sessions = new Map(); // qsid -> expiry
 
   const runner = {
-    async runFlow(flow, trigger, { debugStopId } = {}) {
+    async runFlow(flow, trigger, { debugStopId, onLog } = {}) {
       const runId = crypto.randomUUID();
       const run = {
         id: runId, flowId: flow.id, flowName: flow.name, trigger,
@@ -42,7 +42,7 @@ export function buildServer({ dataDir, port }) {
       };
       try {
         const engine = new Engine(flow);
-        const result = await engine.run({ trigger, runId, debugStopId });
+        const result = await engine.run({ trigger, runId, debugStopId, logSink: onLog });
         run.status = result.ok ? 'success' : 'failed';
         run.logs = result.logs;
         run.finalMessage = result.finalMessage || (result.ok ? '' : '执行失败');
@@ -303,6 +303,28 @@ export function buildServer({ dataDir, port }) {
     const f = store.getFlow(req.params.id);
     if (!f) return reply.code(404).send({ error: 'not found' });
     const debugStopId = (req.body || {}).debugStopId || null;
+    const stream = (req.body || {}).stream === true;
+
+    // SSE 模式（PRD §4.7.3 实时推送）：边执行边推送日志，结束事件携带完整 run
+    if (stream) {
+      reply.raw.writeHead(200, {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+        connection: 'keep-alive',
+      });
+      const push = (event, data) => {
+        reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      };
+      push('start', { flowId: f.id, flowName: f.name });
+      const run = await runner.runFlow(f, debugStopId ? 'debug' : 'manual', {
+        debugStopId,
+        onLog: (log) => push('log', log),
+      });
+      push('done', run);
+      reply.raw.end();
+      return reply;
+    }
+
     const run = await runner.runFlow(f, debugStopId ? 'debug' : 'manual', { debugStopId });
     return run; // 完整 run 对象（含 logs），前端直接渲染
   });

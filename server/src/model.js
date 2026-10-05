@@ -47,6 +47,11 @@ export const STEP_TYPES = {
     color: '#64748b',
     outputs: ['next'],
   },
+  'random-delay': {
+    label: '随机延迟',
+    color: '#94a3b8',
+    outputs: ['next'],
+  },
   log: {
     label: '日志',
     color: '#0ea5e9',

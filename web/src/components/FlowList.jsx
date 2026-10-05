@@ -100,6 +100,7 @@ export default function FlowList({ onOpen, onLogout }) {
       <div className="topbar">
         <span className="logo">Check<em>Q</em></span>
         <span className="spacer" />
+        <button onClick={() => setModal('curl')} disabled={importBusy}>导入 cURL</button>
         <button onClick={() => setModal('import')} disabled={importBusy}>导入 HAR / 模板 JSON</button>
         <button className="primary" onClick={() => setModal('new')}>+ 新建任务</button>
         <button onClick={onLogout}>退出</button>
@@ -126,7 +127,21 @@ export default function FlowList({ onOpen, onLogout }) {
                 </div>
                 <div className="tpl-actions">
                   <button className="small primary" onClick={() => setModal({ type: 'instantiate', tpl: t })}>+ 创建任务</button>
+                  <button className="small" onClick={() => setModal({ type: 'csv', tpl: t })}>批量</button>
                   <button className="small" onClick={() => setModal({ type: 'template-editor', tpl: t })}>管理</button>
+                  <button className="small" onClick={async () => {
+                    try {
+                      const data = await api.exportTemplate(t.id);
+                      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                      const a = document.createElement('a');
+                      a.href = URL.createObjectURL(blob);
+                      a.download = `${t.name.replace(/[\\/:*?"<>|]/g, '_')}.json`;
+                      a.click();
+                      URL.revokeObjectURL(a.href);
+                    } catch (e) {
+                      setToast({ kind: 'fail', text: `导出失败: ${e.message}` });
+                    }
+                  }}>导出</button>
                   <button className="small danger" onClick={async () => {
                     if (!confirm(`删除模板「${t.name}」？已创建的任务不受影响。`)) return;
                     await api.deleteTemplate(t.id);
@@ -201,6 +216,10 @@ export default function FlowList({ onOpen, onLogout }) {
         </div>
       )}
 
+      {modal === 'curl' && (
+        <CurlImportModal onClose={() => setModal(null)} onCreated={(f) => { setModal(null); onOpen(f.id); }} />
+      )}
+
       {modal === 'import' && (
         <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && setModal(null)}>
           <div className="modal">
@@ -213,6 +232,10 @@ export default function FlowList({ onOpen, onLogout }) {
             <button onClick={() => setModal(null)}>取消</button>
           </div>
         </div>
+      )}
+
+      {modal?.type === 'csv' && (
+        <CsvImportModal tpl={modal.tpl} onClose={() => setModal(null)} onDone={(n) => { setModal(null); setToast({ kind: 'ok', text: `已创建 ${n} 个任务` }); load(); }} />
       )}
 
       {modal?.type === 'instantiate' && (
@@ -332,6 +355,125 @@ function ResultModal({ run, flowId, onClose }) {
         <div style={{ marginTop: 14 }}>
           <button onClick={onClose}>关闭</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** cURL 导入 → 新任务 */
+function CurlImportModal({ onClose, onCreated }) {
+  const [cmd, setCmd] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [preview, setPreview] = useState(null);
+
+  const parse = async () => {
+    setErr(''); setPreview(null);
+    if (!cmd.trim()) return;
+    setBusy(true);
+    try {
+      const { config } = await api.importCurl(cmd);
+      setPreview(config);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const create = async () => {
+    setBusy(true); setErr('');
+    try {
+      const f = await api.createFlow({
+        name: `cURL · ${new URL(preview.url).hostname}`,
+        nodes: [{ id: 'n0', type: 'http', name: '请求', x: 0, y: 0, config: preview }],
+        edges: [], vars: {}, cron: '', enabled: false,
+      });
+      onCreated(f);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ width: 640 }}>
+        <h3>导入 cURL 命令</h3>
+        <p style={{ color: 'var(--muted)', fontSize: 12 }}>粘贴浏览器 "Copy as cURL" 的完整命令，自动解析为 HTTP 请求节点。</p>
+        <textarea
+          className="mono" rows={5}
+          placeholder={`curl 'https://example.com/api' \\\n  -H 'cookie: sess=...' \\\n  --data-raw '{"a":1}'`}
+          value={cmd}
+          onChange={(e) => setCmd(e.target.value)}
+        />
+        <div style={{ marginTop: 8 }}>
+          <button className="primary" disabled={busy || !cmd.trim()} onClick={parse}>解析预览</button>
+          {' '}
+          <button onClick={onClose}>取消</button>
+        </div>
+        {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
+        {preview && (
+          <div style={{ marginTop: 10, border: '1px solid var(--border)', borderRadius: 8, padding: 10, fontSize: 12 }}>
+            <div><b>{preview.method}</b> <span className="mono">{preview.url}</span></div>
+            {preview.headers.length > 0 && (
+              <div style={{ color: 'var(--muted)', marginTop: 4 }}>
+                {preview.headers.map((h) => `${h.name}: ${h.value.length > 40 ? h.value.slice(0, 40) + '…' : h.value}`).join(' | ')}
+              </div>
+            )}
+            {preview.body && <div className="mono" style={{ marginTop: 4, wordBreak: 'break-all' }}>body: {preview.body.slice(0, 120)}</div>}
+            <button className="primary" style={{ marginTop: 8 }} disabled={busy} onClick={create}>创建任务</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** CSV 批量建任务：首行=变量名（可含 name 列），每行一条任务 */
+function CsvImportModal({ tpl, onClose, onDone }) {
+  const [csv, setCsv] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [result, setResult] = useState(null);
+
+  const submit = async () => {
+    setBusy(true); setErr(''); setResult(null);
+    try {
+      const r = await api.instantiateCsv(tpl.id, csv);
+      setResult(r);
+      if (r.created > 0) onDone(r.created);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ width: 640 }}>
+        <h3>批量创建任务：{tpl.name}</h3>
+        <p style={{ color: 'var(--muted)', fontSize: 12 }}>
+          首行为变量名（如 <code className="mono">name,cookie</code>，name 列可选作任务名），每行一条任务。
+          {tpl.varNames.length > 0 && <> 模板变量：{tpl.varNames.join(', ')}</>}
+        </p>
+        <textarea
+          className="mono" rows={6}
+          placeholder={`name,cookie\n主号,sess=xxx\n备用,sess=yyy`}
+          value={csv}
+          onChange={(e) => setCsv(e.target.value)}
+        />
+        {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
+        {result && (
+          <p style={{ color: 'var(--ok)', fontSize: 12 }}>
+            已创建 {result.created} 个任务{result.errors?.length ? `，${result.errors.length} 行失败` : ''}
+          </p>
+        )}
+        <button className="primary" disabled={busy || !csv.trim()} onClick={submit}>{busy ? '创建中…' : '批量创建'}</button>
+        {' '}
+        <button onClick={onClose}>关闭</button>
       </div>
     </div>
   );

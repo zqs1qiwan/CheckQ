@@ -244,3 +244,17 @@ span.json-toggle { cursor: default; }
 
 .empty { text-align: center; color: var(--muted); padding: 80px 0; }
 .empty .big { font-size: 40px; margin-bottom: 12px; }
+
+/* ---- 运行回显(画布节点状态) ---- */
+.node.run-running { border-color: #60a5fa; box-shadow: 0 0 0 2px rgba(96, 165, 250, .3); animation: pulse 1.2s ease-in-out infinite; }
+.node.run-ok { border-color: var(--ok); }
+.node.run-failed { border-color: var(--fail); box-shadow: 0 0 0 2px rgba(248, 113, 113, .25); }
+@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 2px rgba(96, 165, 250, .3); } 50% { box-shadow: 0 0 0 5px rgba(96, 165, 250, .12); } }
+.node .run-badge {
+  position: absolute; top: 8px; right: 10px; width: 16px; height: 16px;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 10px; line-height: 1; color: #fff;
+}
+.node .run-badge.running { background: #60a5fa; animation: pulse 1.2s ease-in-out infinite; }
+.node .run-badge.ok { background: var(--ok); }
+.node .run-badge.failed { background: var(--fail); }

@@ -18,11 +18,15 @@ function fmtTime(ts) {
 
 function StepNode({ id, data, selected }) {
   const meta = STEP_TYPES[data.type] || { color: '#666', outputs: ['next'] };
+  const rs = data.runStatus; // 'running' | 'ok' | 'failed' | undefined
   return (
-    <div className={`node ${selected ? 'selected' : ''}`} style={{ minWidth: 170 }}>
+    <div className={`node ${selected ? 'selected' : ''} ${rs ? `run-${rs}` : ''}`} style={{ minWidth: 170 }}>
       <div className="node-bar" style={{ background: meta.color }} />
       <div className="node-title">{data.name || meta.label}</div>
       <div className="node-type">{meta.label}</div>
+      {rs === 'running' && <span className="run-badge running" title="运行中">●</span>}
+      {rs === 'ok' && <span className="run-badge ok" title="成功">✓</span>}
+      {rs === 'failed' && <span className="run-badge failed" title="失败">✗</span>}
       <Handle type="target" position={Position.Left} />
       {meta.outputs.map((out, i) => (
         <React.Fragment key={out}>
@@ -149,6 +153,14 @@ function FlowEditorInner({ flowId, onBack }) {
     markDirty();
   }, [screenToFlowPosition, setNodes, markDirty]);
 
+  // 运行回显: 通过 data.runStatus 驱动节点样式(蓝=运行中/绿=成功/红=失败)
+  const setRunStatus = useCallback((nodeId, status) => {
+    setNodes((ns) => ns.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, runStatus: status } } : n)));
+  }, [setNodes]);
+  const setRunStatusAll = useCallback((status) => {
+    setNodes((ns) => ns.map((n) => ({ ...n, data: { ...n.data, runStatus: status } })));
+  }, [setNodes]);
+
   const deleteNode = useCallback((id) => {
     setNodes((ns) => ns.filter((n) => n.id !== id));
     setEdges((es) => es.filter((e) => e.source !== id && e.target !== id));
@@ -162,10 +174,22 @@ function FlowEditorInner({ flowId, onBack }) {
     setRunResult({ id: 'pending', status: 'running', logs: [] });
     try {
       const r = await api.runFlowStream(flow.id, {
-        onStart: () => setRunResult({ id: 'pending', status: 'running', logs: [] }),
-        onLog: (log) => setRunResult((cur) => ({ ...cur, status: 'running', logs: [...(cur.logs || []), log] })),
+        onStart: () => {
+          setRunResult({ id: 'pending', status: 'running', logs: [] });
+          setRunStatusAll(null);
+        },
+        onLog: (log) => {
+          setRunResult((cur) => ({ ...cur, status: 'running', logs: [...(cur.logs || []), log] }));
+          setRunStatus(log.stepId, log.ok === false ? 'failed' : 'running');
+        },
       });
       setRunResult(r);
+      // 最终状态回显: running → ok/failed
+      for (const log of r.logs || []) {
+        if (log.ok === false) setRunStatus(log.stepId, 'failed');
+        else setRunStatus(log.stepId, 'ok');
+      }
+      // 完成后保留最终态(成功绿/失败红), 下次运行 onStart 时清除
     } catch (e) {
       setRunResult({ id: 'err', status: 'failed', logs: [], finalMessage: e.message, durationMs: 0 });
     }
@@ -191,10 +215,20 @@ function FlowEditorInner({ flowId, onBack }) {
     try {
       const r = await api.runFlowStream(flow.id, {
         debugStopId: nodeId,
-        onStart: () => setRunResult({ id: 'pending', status: 'running', logs: [] }),
-        onLog: (log) => setRunResult((cur) => ({ ...cur, status: 'running', logs: [...(cur.logs || []), log] })),
+        onStart: () => {
+          setRunResult({ id: 'pending', status: 'running', logs: [] });
+          setRunStatusAll(null);
+        },
+        onLog: (log) => {
+          setRunResult((cur) => ({ ...cur, status: 'running', logs: [...(cur.logs || []), log] }));
+          setRunStatus(log.stepId, log.ok === false ? 'failed' : 'running');
+        },
       });
       setRunResult(r);
+      for (const log of r.logs || []) {
+        if (log.ok === false) setRunStatus(log.stepId, 'failed');
+        else setRunStatus(log.stepId, 'ok');
+      }
     } catch (e) {
       setRunResult({ id: 'err', status: 'failed', logs: [], finalMessage: e.message, durationMs: 0 });
     }

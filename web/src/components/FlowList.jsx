@@ -374,7 +374,10 @@ function ResultModal({ run, flowId, onClose }) {
                   )}
                   {log.type === 'http' && log.detail?.response && (
                     <>
-                      <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 6 }}>响应 (HTTP {log.detail.response.status})</div>
+                      <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span>响应 (HTTP {log.detail.response.status})</span>
+                        <span style={{ color: 'var(--muted)', fontSize: 10 }}>编辑器内可用「点选生成逻辑」</span>
+                      </div>
                       <pre>{log.detail.response.body}</pre>
                     </>
                   )}

@@ -94,6 +94,7 @@ function FlowEditorInner({ flowId, onBack }) {
           id: n.id, type: n.data.type, name: n.data.name,
           x: Math.round(n.position.x), y: Math.round(n.position.y),
           config: n.data.config,
+          genBy: n.data.genBy,
         })),
         edges: es.map((e) => ({
           id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle,
@@ -202,15 +203,34 @@ function FlowEditorInner({ flowId, onBack }) {
     const { nodes: ns, edges: es, flow: f } = stateRef.current;
     if (!f) return;
 
-    // 1. 新增节点：接到产生该响应的 http 节点（沿 success 边）
+    // 1. 新增节点：接到产生该响应的 http 节点的下游链尾（引擎是单链执行器，
+    //    同一出口多条边只走第一条，所以必须接在链尾而非另开分支）
     if (picked.nodes && picked.nodes.length) {
       const sourceId = log.stepId;
       const added = [];
       const edgesToAdd = [];
-      let prevId = sourceId;
+
+      // 沿默认出口（http:success / condition:true / 其他:next）找到链尾节点
+      const defaultOut = (t) => (t === 'http' ? 'success' : t === 'condition' ? 'true' : 'next');
+      let tailId = sourceId;
+      const seen = new Set([sourceId]);
+      for (;;) {
+        const outEdges = es.filter((e) => e.source === tailId && (e.sourceHandle || '') === defaultOut(ns.find((n) => n.id === tailId)?.data?.type));
+        const nextE = outEdges[0];
+        if (!nextE || seen.has(nextE.target)) break;
+        seen.add(nextE.target);
+        tailId = nextE.target;
+      }
+
+      let prevId = tailId;
       for (const def of picked.nodes) {
         const id = `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
         const srcNode = ns.find((n) => n.id === prevId);
+        // sourceHandle 取决于源节点的出口类型：http/condition 是分支出口，其余是 next
+        const srcType = srcNode?.data?.type;
+        const outHandle = (srcType === 'http' || srcType === 'condition')
+          ? (srcType === 'http' ? 'success' : 'true')
+          : 'next';
         added.push({
           id, type: 'step',
           position: { x: (srcNode?.position.x ?? 0) + 220, y: (srcNode?.position.y ?? 0) + (added.length) * 90 - 30 },
@@ -219,7 +239,7 @@ function FlowEditorInner({ flowId, onBack }) {
         edgesToAdd.push({
           id: `e${id}`,
           source: prevId, target: id,
-          sourceHandle: def.type === 'extract' || def.type === 'notify' ? 'next' : 'success',
+          sourceHandle: outHandle,
         });
         prevId = id;
       }

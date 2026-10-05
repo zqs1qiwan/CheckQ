@@ -20,13 +20,13 @@ Fastify 单进程 (server/src/index.js → api.js:260)
 
 | 组件 | 当前值 |
 |---|---|
-| 版本 | v0.1.x + 模板系统（git aab53a3，已推送 GitHub） |
+| 版本 | v0.2（git 6813a9e，已推送 GitHub） |
 | 生产实例 | 路由器 `http://192.168.2.1:18888`（容器 checkq，数据 `/mnt/nvme0n1-4/checkq/data`） |
 | 生产数据 | 18 个 QD 迁移任务已实测 |
-| 测试 | `cd server && node test/engine.test.js` → 4/4 |
+| 测试 | `cd server && for f in test/*.test.js; do node $f; done` → 32/32（engine 4 + engine-v02 10 + curl-import 12 + logging 6） |
 | 本地开发端口 | dev server 用 `PORT=xxxx DATA_DIR=/tmp/xxx ADMIN_PASSWORD=xxx node src/index.js`，勿占 8889/18888 |
-| 模板系统 | 已实现：存为模板 / 模板列表(varNames+taskCount) / 实例化(克隆图+变量合并) / CRUD / debugStopId |
-| 未实现 | PRD §8 v0.2 P0：retry/proxy/charset/Set-Cookie/random-delay、cURL 导入、模板导出、CSV 批量、Pick Panel、日志系统、列表搜索筛选 |
+| 已实现 v0.2 P0 | 重试/代理/GBK/Set-Cookie/random-delay、cURL 导入、模板导出、CSV 批量、Pick Panel（端到端实测）、日志系统（keywords+三档+脱敏）、列表搜索筛选+下次运行时间 |
+| 待办 | PRD §8 v0.3 P1、P2 |
 
 ## 快速排查步骤
 
@@ -59,6 +59,8 @@ Fastify 单进程 (server/src/index.js → api.js:260)
 | 无入口节点 | 成环 / 所有节点有入边 | validateFlow 报错 + 运行时 500 步上限兜底 |
 | 敏感日志 | cookie/authorization 头 | 自动脱敏保留前 12 字符；新日志字段必须走同一脱敏层 |
 | 端口冲突 | dev 误占生产端口 | 生产 18888（容器内 8888），宿主开发实例勿用 8889/18888 |
+| **引擎是单链执行器** | `nextNodeId` 同一 handle 只走第一条边 | 不能在同一出口拉多条分支（分支会被忽略）；Pick Panel 生成节点必须接到链尾而非另开分支 |
+| Pick Panel 验证 | browser_click 无法触发 React 事件 | 用 CDP `Runtime.evaluate` + `element.click()`，React 状态更新需另一次查询才能看到 |
 
 ## 关联文件
 

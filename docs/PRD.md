@@ -1,6 +1,6 @@
 # CheckQ PRD — 可视化 HTTP 自动化流程引擎
 
-版本: 0.3 (PRD) | 基线代码: v0.1.0 | 状态: 待评审
+版本: 0.3 (PRD) | 基线代码: v0.2.0 | 状态: v0.2 P0 已全部实现并推送 GitHub (6813a9e)
 定位一句话: **像搭积木一样搭建"自动签到/打卡/监控"类 HTTP 流程，一个模板派生多份任务，全程可视化、可调试、可告警。**
 
 ---
@@ -103,16 +103,16 @@ Run = { id, flowId, trigger: manual|cron|debug|api, status, logs[], vars, finalM
 **部署** ✅ Dockerfile + docker-compose（prod 映射 18888）；测试 4 项全过
 
 **已知短板（本 PRD 要解决的）**
-1. 无每节点自动重试/退避（当前靠流程图手工连"failed→改UA→再试"）
-2. 无代理支持（qiandao 有）
-3. 无 GBK/charset 处理（中文 PT 站乱码）
-4. 无法从响应捕获 Set-Cookie（签到场景高频需求）
-5. 无循环/遍历节点（翻页、批量元素）
-6. 编辑器无 undo/redo、无运行状态回显到画布、无复制节点
-7. 模板默认变量不可编辑、无导出 JSON、无 CSV 批量建任务
-8. 无 cURL 命令导入、无"复制为 curl"
-9. 登录无防爆破；无备份/恢复；无运行统计
-10. 列表无搜索/筛选/分组、无下次运行时间显示
+1. 无每节点自动重试/退避（当前靠流程图手工连"failed→改UA→再试"）✅ v0.2 已实现（retry 配置 + 指数退避）
+2. 无代理支持（qiandao 有）✅ v0.2 已实现（http config.proxy，fetch/curl 双后端）
+3. 无 GBK/charset 处理（中文 PT 站乱码）✅ v0.2 已实现（charset 字段，TextDecoder/iconv）
+4. 无法从响应捕获 Set-Cookie（签到场景高频需求）✅ v0.2 已实现（getSetCookie/头文件解析）
+5. 无循环/遍历节点（翻页、批量元素）⬜ v0.3 P1
+6. 编辑器无 undo/redo、无运行状态回显到画布、无复制节点 ⬜ P1/P2
+7. 模板默认变量不可编辑、无导出 JSON、无 CSV 批量建任务 ✅ v0.2 已实现（导出脱敏 + CSV 批量；默认变量编辑 ⬜）
+8. 无 cURL 命令导入、无"复制为 curl" ✅ v0.2 已实现（cURL 导入；"复制为 curl" ⬜ P1）
+9. 登录无防爆破；无备份/恢复；无运行统计 ⬜ P1/P2
+10. 列表无搜索/筛选/分组、无下次运行时间显示 ✅ v0.2 已实现（搜索 + 筛选 + nextRunAt）
 
 ---
 
@@ -136,25 +136,25 @@ Run = { id, flowId, trigger: manual|cron|debug|api, status, logs[], vars, finalM
 - 整个流程在前端以「试运行 → 点选 → 生长」循环流式组装，画布实时生长，没有"先写完再跑"模式。
 - 试运行响应通过 SSE 流式到达（复用 §4.7 实时日志通道），长响应边到边渲染。
 
-#### 4.0.2 Pick Panel（点选面板）
+#### 4.0.2 Pick Panel（点选面板）✅ v0.2（JSON 树 + 四用途；文本划选/HTML 渲染 ⬜ v0.3）
 
 试运行结果 / 运行日志详情中的响应体，按内容类型智能渲染成三种可点选视图：
 
 | 视图 | 触发条件 | 交互 | 生成物 |
 |---|---|---|---|
-| **JSON 树** | 响应可解析为 JSON | 树形展开，点击任意叶子值 | 路径 `last.json.data.token`（数组含下标） |
-| **文本选择** | 纯文本 / HTML 源码 | 划选一段文字 | 自动泛化正则（见 4.0.3） |
-| **渲染 HTML** | HTML 响应 | 沙箱 iframe 渲染，点击元素 | CSS 选择器（v0.3）/ 可见文本正则（v0.2） |
+| **JSON 树** | 响应可解析为 JSON | 树形展开，点击任意叶子值 | 路径 `last.json.data.token`（数组含下标）✅ |
+| **文本选择** | 纯文本 / HTML 源码 | 划选一段文字 | 自动泛化正则（见 4.0.3）⬜ v0.3 |
+| **渲染 HTML** | HTML 响应 | 沙箱 iframe 渲染，点击元素 | CSS 选择器（v0.3）/ 可见文本正则（v0.2）⬜ v0.3 |
 
 点选后弹出**用途选择器**（popover，五选一）：
 
 | 用途 | 生成的后端逻辑 | 说明 |
 |---|---|---|
-| 存为变量 | `extract` 节点（json 路径 / 正则），变量名自动起名可改 | 自动插入到产出请求节点之后（沿 success 边） |
-| 断言成功 | 合并进该 http 节点的 asserts：点选值 → `last.json.status == 'success'` 或正则命中 | 表达式可编辑；多值场景生成 `res[]` 多模式 |
-| 记录到日志 | flow.log.keywords 追加规则：`{name, regex, from:'response', into:'summary'}` | 点选时顺带起规则名（默认点选文本前几字）；在 §4.7.4 日志配置面板可改 into 与正则 |
-| 加进通知 | extract 存变量 + 流末 notify 节点文本 `积分 {{points}}` | 已有 notify 节点则追加变量；没有则自动创建 |
-| 是列表/多项 | 提议 `foreach` 节点（v0.3）：点选数组 → 循环体子流程向导 | 翻页/批量场景 |
+| 存为变量 | `extract` 节点（json 路径 / 正则），变量名自动起名可改 | 自动插入到产出请求节点之后（沿 success 边）✅ v0.2（接入链尾） |
+| 断言成功 | 合并进该 http 节点的 asserts：点选值 → `last.json.status == 'success'` 或正则命中 | 表达式可编辑；多值场景生成 `res[]` 多模式 ✅ v0.2 |
+| 记录到日志 | flow.log.keywords 追加规则：`{name, regex, from:'response', into:'summary'}` | 点选时顺带起规则名（默认点选文本前几字）；在 §4.7.4 日志配置面板可改 into 与正则 ✅ v0.2 |
+| 加进通知 | extract 存变量 + 流末 notify 节点文本 `积分 {{points}}` | 已有 notify 节点则追加变量；没有则自动创建 ✅ v0.2 |
+| 是列表/多项 | 提议 `foreach` 节点（v0.3）：点选数组 → 循环体子流程向导 | 翻页/批量场景 ⬜ v0.3 |
 
 #### 4.0.3 自动泛化规则（文本点选 → 正则）
 
@@ -244,14 +244,14 @@ Run = { id, flowId, trigger: manual|cron|debug|api, status, logs[], vars, finalM
 | 组 | 节点 | 状态 | 说明 |
 |---|---|---|---|
 | 请求 | http | ✅ | method/url/headers/body/timeout/redirect/backend/asserts |
-| 请求 | http-retry | 🔶→⬜ | http 节点内置重试配置（见 4.2），不新增节点类型 |
+| 请求 | http-retry | ✅ v0.2 | http 节点内置重试配置（见 4.2），不新增节点类型 |
 | 逻辑 | condition | ✅ | jexl 表达式 → true/false 双出口 |
 | 逻辑 | foreach | ⬜ | 遍历数组（来自 last.json.xxx 或 vars），循环体=子流程段；出口: next(完) / each(体) |
 | 逻辑 | loop | ⬜ | 计数循环 n 次 + 间隔（防检测随机间隔） |
-| 逻辑 | random-delay | ⬜ | 在 [min,max] 秒间随机等待（反风控核心件） |
+| 逻辑 | random-delay | ✅ v0.2 | 在 [min,max] 秒间随机等待（反风控核心件） |
 | 逻辑 | script | ⬜ | 受限 JS 沙箱（无 require/网络/fs，超时 1s），复杂逻辑兜底 |
 | 数据 | set | ✅ | 变量赋值（模板串或 `=`表达式） |
-| 数据 | extract | 🔶 | 现支持 last.text/json/status/vars；**新增来源: last.headers / last.setCookie** |
+| 数据 | extract | ✅ v0.2 | last.text/json/status/vars/headers/setCookie + mode:json(dot-path)/regex/header/setCookie |
 | 数据 | log | ✅ | 输出文本到运行日志 |
 | 通知 | notify | ✅ | webhook/telegram/bark |
 | 高级 | proxy-mark | ⬜ | 不作为独立节点；http 节点 config 增 proxy 字段（见 4.2） |
@@ -276,11 +276,11 @@ script 沙箱细则:
 
 | 能力 | 设计 | 优先级 |
 |---|---|---|
-| 每节点重试 | config 增 `retry: { times: 0-5, backoffMs: 500-30000, retryOn: 'error'|'assert'|'both' }`；重试期间重渲染模板（UA 轮换场景可用 `{{ua|rotate}}`） | P0 |
-| UA 轮换过滤器 | 渲染层新增 `|rotate`：每次重试从 vars.uaList（逗号分隔）取下一个 | P1 |
-| 代理 | http config 增 `proxy: { url }`（http/https/socks5h）；fetch 后端用 undici ProxyAgent，curl 后端映射 `--proxy`；值支持 `{{proxyVar}}` | P0 |
-| charset | http config 增 `charset`（默认 utf-8，可选 gbk/gb2312/big5）；fetch 路径: ArrayBuffer → TextDecoder；curl 路径: 管道 iconv | P0 |
-| Set-Cookie 捕获 | fetch: `getSetCookie()`；curl: 头文件解析，支持 `-c cookieJar`（可选） | P0 |
+| 每节点重试 | config 增 `retry: { times: 0-5, backoffMs: 500-30000, retryOn: 'error'|'assert'|'both' }`；重试期间重渲染模板（UA 轮换场景可用 `{{ua|rotate}}`） | ✅ v0.2（\|rotate P1） |
+| UA 轮换过滤器 | 渲染层新增 `|rotate`：每次重试从 vars.uaList（逗号分隔）取下一个 | ⬜ P1 |
+| 代理 | http config 增 `proxy: { url }`（http/https/socks5h）；fetch 后端用 undici ProxyAgent，curl 后端映射 `--proxy`；值支持 `{{proxyVar}}` | ✅ v0.2 |
+| charset | http config 增 `charset`（默认 utf-8，可选 gbk/gb2312/big5）；fetch 路径: ArrayBuffer → TextDecoder；curl 路径: 管道 iconv | ✅ v0.2 |
+| Set-Cookie 捕获 | fetch: `getSetCookie()`；curl: 头文件解析，支持 `-c cookieJar`（可选） | ✅ v0.2 |
 | HTTP/2 | curl 后端 config 增 `http2: true` → `--http2`（TLS 指纹场景常配套） | P1 |
 | 失败即停 vs 继续 | http 节点 failed 出口未连线时默认停（现状）；新增流级开关 `onError: stop|continue`（continue 时记录失败继续走入口下一个可走节点，用于"多签到并行"图） | P2 |
 | 流级超时 | 流级 `maxDurationMs`（默认 120s），超时 kill 并落日志 | P1 |
@@ -298,9 +298,9 @@ script 沙箱细则:
 |---|---|---|
 | 存为模板 | 流程编辑器一键存（现 prompt 输入名字）→ 改为小弹窗：名字 + 描述 + **勾选哪些变量作为"模板变量"**（未勾选的保留在流程里不抽离） | 🔶 |
 | 默认变量编辑 | 模板管理弹窗可编辑每个 varName 的默认值（textarea），实例化时预填 | ⬜ P0 |
-| 导出 | 模板卡片"导出 JSON"（下载 .json，含 name/desc/vars/nodes/edges，**不含任何真实凭证——导出前将敏感默认值置空**） | ⬜ P0 |
+| 导出 | 模板卡片"导出 JSON"（下载 .json，含 name/desc/vars/nodes/edges，**不含任何真实凭证——导出前将敏感默认值置空**） | ✅ v0.2 |
 | 导入 | 现有 JSON 导入直接进模板库（现进流程 ⬜ 需改）；格式校验 + 报错定位 | 🔶 |
-| CSV 批量建任务 | 模板卡片"批量创建"：粘贴 CSV（首行=变量名，一列可映射到任务名），预览表格 → 确认生成 N 个任务 | ⬜ P0 |
+| CSV 批量建任务 | 模板卡片"批量创建"：粘贴 CSV（首行=变量名，一列可映射到任务名），预览表格 → 确认生成 N 个任务 | ✅ v0.2 |
 | 模板市场 | 框架内置"从 URL 导入"和"粘贴 JSON"；市场本体是独立仓库/站点（框架不内置业务），提供市场索引 JSON 规范：`{name, desc, url, vars, sha256}`，一键拉取校验后入库 | ⬜ P1 |
 | 版本与同步 | 模板更新后已有任务**不自动变**（克隆语义）；提供"检查模板更新"→ diff 视图（节点/变量差异）→ 手动应用 | ⬜ P2 |
 | 删除保护 | 模板删除时若有关联任务，弹窗提示数量；任务不受影响（现语义保持） | ✅ |
@@ -336,11 +336,11 @@ Template = {
 | 功能 | 设计 | 状态 |
 |---|---|---|
 | 列表 | 现有列 + **下次运行时间**（croner 支持 nextRun）+ 来源模板名 + 标签/分组 | 🔶 |
-| 搜索/筛选 | 顶部搜索框（名称/备注）；筛选: 按模板、按状态（最近失败）、按调度开关 | ⬜ P0 |
+| 搜索/筛选 | 顶部搜索框（名称/备注）；筛选: 按模板、按状态（最近失败）、按调度开关 | ✅ v0.2（搜索 + 全部/已启用调度/最近失败；按模板筛选 ⬜） |
 | 批量操作 | 多选 → 批量运行 / 批量启停 / 批量删除 | ⬜ P1 |
 | 立即运行 | ✅ 已有；运行中显示"运行中…"+ 行内 spinner | ✅ |
 | 运行排队 | 并发保护开启后，手动点击进入队列，列表状态显示"排队中 #n" | ⬜ P1 |
-| 变量查看/编辑 | 任务行"变量"按钮 → 弹窗查看+编辑 vars（敏感值默认打码，点眼睛显示，改后需保存） | ⬜ P0 |
+| 变量查看/编辑 | 任务行"变量"按钮 → 弹窗查看+编辑 vars（敏感值默认打码，点眼睛显示，改后需保存） | ✅ v0.2（编辑器内 VarsEditor；首页任务行"变量"按钮 ⬜） |
 | 克隆任务 | 行内"复制"→ 复制为新任务（名字 + ` · 副本`） | ⬜ P1 |
 | 删除确认 | ✅ confirm 弹窗（保持） | ✅ |
 
@@ -415,7 +415,7 @@ ConfigPanel 改进:
 | 功能 | 设计 | 状态 |
 |---|---|---|
 | 画布 ↔ 时间轴双向 | 时间轴点击步骤 → 画布高亮对应节点并居中；画布点击节点 → 时间轴滚动到该步 | ⬜ P0 |
-| 失败重修 | 失败步骤详情「⟳ 重新点选」→ 载入真实响应进 Pick Panel → 原位替换该节点 config（§4.0.5） | ⬜ P0 |
+| 失败重修 | 失败步骤详情「⟳ 重新点选」→ 载入真实响应进 Pick Panel → 原位替换该节点 config（§4.0.5） | ⬜ P0（日志侧 Pick 入口已具备：运行日志每步可"点选生成逻辑"并接入链尾；"原位替换"模式 ⬜） |
 | 复制为 curl | 请求 Tab 一键复制完整 curl（敏感值完整还原，仅本机调试用） | ⬜ P0 |
 | 重跑 | 运行详情「重跑」按钮（同 vars 再执行） | ⬜ P1 |
 | 导出 | 单次运行导出 HAR（默认脱敏） | ⬜ P2 |
@@ -426,7 +426,7 @@ ConfigPanel 改进:
 |---|---|---|
 | 运行历史页 | 任务详情：运行列表（时间/触发/状态/耗时/最终消息），筛选触发方式 | 🔶 |
 | 日志详情 | 每步请求(脱敏)/body/响应(截断 2k)/断言结果/耗时 | ✅ |
-| 敏感脱敏 | 头部 cookie/authorization 前 12 字符（现有）；**扩展：所有值中命中敏感变量名（cookie/token/password/secret/key）的片段替换 `***`；vars 快照同样脱敏** | ⬜ P0 |
+| 敏感脱敏 | 头部 cookie/authorization 前 12 字符（现有）；**扩展：所有值中命中敏感变量名（cookie/token/password/secret/key）的片段替换 `***`；vars 快照同样脱敏** | ✅ v0.2 |
 | 错误分类 | 每步错误标注类型：`network`（网络/超时）/ `assert`（断言）/ `engine`（配置/脚本），Timeline 过滤器按类筛 | ⬜ P1 |
 | 保留策略 | 每 flow 500 条（现有）；runs.json > 50MB 提示清理 | 🔶 |
 | 实时推送 | SSE `GET /api/runs/:id/stream`；引擎 logSink → SSE；断线自动重连补拉 | ⬜ P1 |
@@ -470,7 +470,7 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 - 正则非法：编辑器即时红框提示（复用 ConfigPanel 校验）；运行时非法规则跳过并记 warning
 - **创建方式三种**：① Pick Panel 划选文字→"记录到日志"（自动生成规则，同 §4.0.3 泛化）；② 日志详情查看响应时点选→补规则；③ 编辑器"日志配置"面板手填 regex
 
-**日志配置面板（编辑器）**
+**日志配置面板（编辑器）** ✅ v0.2
 
 - 编辑器顶栏"日志"按钮 → 抽屉：level 三档选择 + include 四开关 + resBodyLimit + 关键字规则表格（name/regex/from/into 增删改，regex 输入框旁"测试"按钮贴样例即时验证）
 - 该面板配置属于流程（模板携带），任务实例化后可各自微调
@@ -498,8 +498,8 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 |---|---|---|
 | HAR 导入 | ✅（进流程） | ✅ |
 | QD 模板导入 | ✅ 脚本（SKIP 过滤、init_env→vars）→ 目标改为直接产模板+可选批量任务 | 🔶 |
-| cURL 导入 | 粘贴 curl 命令 → 自动解析 method/url/headers/body 生成 http 节点（覆盖 -H/--data/-b/--compressed/--http2） | ⬜ P0 |
-| 流程导出 | 任务 JSON 导出（含 vars 时警告含敏感信息） | ⬜ P1 |
+| cURL 导入 | 粘贴 curl 命令 → 自动解析 method/url/headers/body 生成 http 节点（覆盖 -H/--data/-b/--compressed/--http2） | ✅ v0.2（12 项单测） |
+| 流程导出 | 任务 JSON 导出（含 vars 时警告含敏感信息） | 🔶 v0.2（模板导出已有，任务导出 ⬜） |
 | 全量备份 | 设置页"导出全部"（flows/runs/templates/meta 打包 JSON）；"导入恢复"；建议 cron 外部备份 data 目录 | ⬜ P1 |
 | 从其他 CheckQ 迁移 | 备份 JSON 互相导入即完成 | 同上 |
 

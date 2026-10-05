@@ -226,6 +226,16 @@ export default function FlowList({ onOpen, onLogout }) {
                     {' '}
                     <button className="small" onClick={() => onOpen(f.id)}>编辑</button>
                     {' '}
+                    <button className="small" onClick={async () => {
+                      try {
+                        await api.cloneFlow(f.id);
+                        setToast({ kind: 'ok', text: '已克隆为副本（调度暂停）' });
+                        load();
+                      } catch (e) {
+                        setToast({ kind: 'fail', text: e.message });
+                      }
+                    }}>复制</button>
+                    {' '}
                     <button className="small danger" onClick={() => del(f)}>删除</button>
                   </td>
                 </tr>

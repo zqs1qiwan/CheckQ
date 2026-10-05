@@ -22,6 +22,12 @@ import { Scheduler } from './scheduler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+/** POSIX shell 单引号包裹（curl 生成用） */
+function shellQuote(s) {
+  if (s === '' || s === undefined || s === null) return "''";
+  return `'${String(s).replace(/'/g, `'\\''`)}'`;
+}
+
 export function buildServer({ dataDir, port }) {
   const store = new Store(dataDir);
   const app = Fastify({ logger: false, bodyLimit: 32 * 1024 * 1024 });
@@ -299,6 +305,53 @@ export function buildServer({ dataDir, port }) {
     const debugStopId = (req.body || {}).debugStopId || null;
     const run = await runner.runFlow(f, debugStopId ? 'debug' : 'manual', { debugStopId });
     return run; // 完整 run 对象（含 logs），前端直接渲染
+  });
+
+  // 克隆任务：复制为新任务（PRD §4.4）
+  app.post('/api/flows/:id/clone', async (req, reply) => {
+    const f = store.getFlow(req.params.id);
+    if (!f) return reply.code(404).send({ error: 'not found' });
+    const seq = store.flows.filter((x) => x.name.startsWith(f.name)).length + 1;
+    const clone = store.createFlow({
+      name: `${f.name} · 副本${seq > 1 ? ' ' + seq : ''}`,
+      note: f.note,
+      cron: f.cron,
+      timezone: f.timezone,
+      enabled: false, // 克隆任务默认暂停，避免立即重复执行
+      vars: f.vars,
+      nodes: f.nodes,
+      edges: f.edges,
+      notify: f.notify,
+      log: f.log,
+    });
+    return clone;
+  });
+
+  // 复制为 curl（PRD §4.7.2）：从节点配置生成等价 curl 命令
+  app.post('/api/flows/:id/curl', async (req, reply) => {
+    const f = store.getFlow(req.params.id);
+    if (!f) return reply.code(404).send({ error: 'not found' });
+    const { nodeId, vars } = req.body || {};
+    const node = (f.nodes || []).find((n) => n.id === nodeId);
+    if (!node || node.type !== 'http') return reply.code(400).send({ error: 'node not found or not http' });
+    const c = node.config || {};
+    const method = (c.method || 'GET').toUpperCase();
+    const url = (c.url || '').replace(/\{\{(\w+(?:\.\w+)*)\}\}/g, (_, p) => {
+      const v = (vars || {})[p];
+      return v === undefined ? `{{${p}}}` : String(v);
+    });
+    const parts = [`curl -X ${method}`];
+    for (const h of c.headers || []) {
+      if (h.enabled === false) continue;
+      const value = String(h.value || '').replace(/\{\{(\w+(?:\.\w+)*)\}\}/g, (_, p) => {
+        const v = (vars || {})[p];
+        return v === undefined ? `{{${p}}}` : String(v);
+      });
+      parts.push(`-H ${shellQuote(`${h.name}: ${value}`)}`);
+    }
+    if (c.body) parts.push(`--data ${shellQuote(String(c.body))}`);
+    parts.push(shellQuote(url));
+    return { curl: parts.join(' \\\n  ') };
   });
 
   // ---- runs ----

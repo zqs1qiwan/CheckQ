@@ -371,6 +371,8 @@ function FlowEditorInner({ flowId, onBack }) {
           onConfigUpdate={(p) => updateConfig(selectedId, p)}
           onDelete={() => deleteNode(selectedId)}
           onDebugTo={debugTo}
+          flowId={flow?.id}
+          flowVars={flow?.vars || {}}
         />
       </div>
 

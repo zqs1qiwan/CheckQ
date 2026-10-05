@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import PickPanel from './PickPanel.jsx';
 
 function fmtTime(ts) {
   const d = new Date(ts);
@@ -7,16 +8,18 @@ function fmtTime(ts) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-export default function RunDrawer({ run, flowId, onClose }) {
+export default function RunDrawer({ run, flowId, onClose, onPickResponse }) {
   const [tab, setTab] = useState('logs');
   const [hist, setHist] = useState(null);
   const [expanded, setExpanded] = useState(null); // log index
   const [override, setOverride] = useState(null); // 历史点开的完整 run
+  const [pickFor, setPickFor] = useState(null); // {stepId, body} 当前点选的响应
 
   useEffect(() => {
     setOverride(null);
     setTab('logs');
     setHist(null);
+    setPickFor(null);
   }, [run?.id]);
 
   useEffect(() => {
@@ -83,8 +86,24 @@ export default function RunDrawer({ run, flowId, onClose }) {
                       )}
                       {log.type === 'http' && log.detail?.response && (
                         <>
-                          <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 6 }}>响应 (HTTP {log.detail.response.status}, {log.detail.response.ms}ms)</div>
-                          <pre>{log.detail.response.body}</pre>
+                          <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span>响应 (HTTP {log.detail.response.status}, {log.detail.response.ms}ms)</span>
+                            {onPickResponse && (
+                              <button className="small" style={{ padding: '2px 8px' }}
+                                onClick={() => setPickFor({ stepId: log.stepId, body: log.detail.response.body })}>
+                                ✦ 点选生成逻辑
+                              </button>
+                            )}
+                          </div>
+                          {pickFor && pickFor.stepId === log.stepId ? (
+                            <PickPanel
+                              responseBody={pickFor.body}
+                              onClose={() => setPickFor(null)}
+                              onApply={(result) => { setPickFor(null); onPickResponse && onPickResponse(result, log); }}
+                            />
+                          ) : (
+                            <pre>{log.detail.response.body}</pre>
+                          )}
                         </>
                       )}
                       {log.asserts?.length > 0 && (

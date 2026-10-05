@@ -93,6 +93,7 @@ export class Store {
       nodes: data.nodes || [],
       edges: data.edges || [],
       notify: data.notify || {},
+      log: data.log || null,
       tplId: data.tplId || null,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -105,7 +106,7 @@ export class Store {
   updateFlow(id, patch) {
     const f = this.getFlow(id);
     if (!f) return null;
-    const allowed = ['name', 'note', 'cron', 'timezone', 'enabled', 'vars', 'nodes', 'edges', 'notify'];
+    const allowed = ['name', 'note', 'cron', 'timezone', 'enabled', 'vars', 'nodes', 'edges', 'notify', 'log'];
     for (const k of allowed) {
       if (patch[k] !== undefined) f[k] = patch[k];
     }

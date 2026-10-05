@@ -197,6 +197,62 @@ function FlowEditorInner({ flowId, onBack }) {
     setFlow(f);
   };
 
+  /** 点选结果 → 画布流式生长（PRD §4.0.1） */
+  const handlePickResponse = useCallback(async (picked, log) => {
+    const { nodes: ns, edges: es, flow: f } = stateRef.current;
+    if (!f) return;
+
+    // 1. 新增节点：接到产生该响应的 http 节点（沿 success 边）
+    if (picked.nodes && picked.nodes.length) {
+      const sourceId = log.stepId;
+      const added = [];
+      const edgesToAdd = [];
+      let prevId = sourceId;
+      for (const def of picked.nodes) {
+        const id = `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+        const srcNode = ns.find((n) => n.id === prevId);
+        added.push({
+          id, type: 'step',
+          position: { x: (srcNode?.position.x ?? 0) + 220, y: (srcNode?.position.y ?? 0) + (added.length) * 90 - 30 },
+          data: { id, type: def.type, name: def.name, config: def.config, genBy: 'pick' },
+        });
+        edgesToAdd.push({
+          id: `e${id}`,
+          source: prevId, target: id,
+          sourceHandle: def.type === 'extract' || def.type === 'notify' ? 'next' : 'success',
+        });
+        prevId = id;
+      }
+      setNodes((cur) => [...cur, ...added]);
+      setEdges((cur) => [...cur, ...edgesToAdd.map((e) => decorateEdge(e))]);
+      markDirty();
+      showToast(`已生成 ${added.length} 个节点（沿响应节点 success 边连接）`, 'ok');
+      return;
+    }
+
+    // 2. 断言：合并进产生该响应的 http 节点
+    if (picked.assert) {
+      const nodeId = log.stepId;
+      const node = ns.find((n) => n.id === nodeId);
+      if (node) {
+        const asserts = [...(node.data.config?.asserts || []), picked.assert];
+        updateConfig(nodeId, { asserts });
+        showToast('已合并断言到该请求节点（可编辑）', 'ok');
+      }
+      return;
+    }
+
+    // 3. 关键字规则：合并进 flow.log.keywords
+    if (picked.keyword) {
+      const logCfg = f.log && typeof f.log === 'object' ? f.log : { level: 'all', include: {}, keywords: [] };
+      const keywords = [...(logCfg.keywords || []), picked.keyword];
+      const newLog = { ...logCfg, keywords };
+      const nf = await api.updateFlow(f.id, { log: newLog });
+      setFlow(nf);
+      showToast(`已添加关键字规则「${picked.keyword.name}」`, 'ok');
+    }
+  }, [setNodes, setEdges, markDirty, updateConfig]);
+
   if (!flow) return <div className="boot">加载流程…</div>;
 
   return (
@@ -285,7 +341,7 @@ function FlowEditorInner({ flowId, onBack }) {
           </ReactFlow>
 
           {drawerOpen && (
-            <RunDrawer run={runResult} flowId={flow.id} onClose={() => setDrawerOpen(false)} />
+            <RunDrawer run={runResult} flowId={flow.id} onClose={() => setDrawerOpen(false)} onPickResponse={handlePickResponse} />
           )}
         </div>
 

@@ -17,6 +17,7 @@ import { Store, hashPwd, verifyPwd } from './store.js';
 import { Engine } from './engine.js';
 import { validateFlow } from './model.js';
 import { importHar } from './har-import.js';
+import { parseCurl } from './curl-import.js';
 import { Scheduler } from './scheduler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -167,6 +168,97 @@ export function buildServer({ dataDir, port }) {
     const t = store.getTemplate(req.params.id);
     if (!t) return reply.code(404).send({ error: 'not found' });
     return t;
+  });
+
+  // 模板导出（4.3）：脱敏 —— 敏感变量默认值置空，样本不导出
+  app.get('/api/templates/:id/export', async (req, reply) => {
+    const t = store.getTemplate(req.params.id);
+    if (!t) return reply.code(404).send({ error: 'not found' });
+    const safeVars = {};
+    for (const [k, v] of Object.entries(t.vars || {})) {
+      safeVars[k] = /cookie|token|password|secret|key/i.test(k) ? '' : v;
+    }
+    return {
+      name: t.name, desc: t.desc,
+      varNames: t.varNames || Object.keys(safeVars),
+      vars: safeVars,
+      nodes: t.nodes, edges: t.edges,
+      samplesIncluded: false,
+    };
+  });
+
+  // CSV 批量建任务（4.3）
+  app.post('/api/templates/:id/instantiate-csv', async (req, reply) => {
+    const { csv } = req.body || {};
+    if (!csv || typeof csv !== 'string') return reply.code(400).send({ error: '缺少 csv 内容' });
+    const tpl = store.getTemplate(req.params.id);
+    if (!tpl) return reply.code(404).send({ error: '模板不存在' });
+
+    // 极简 CSV 解析（支持双引号转义）
+    const parseCsvLine = (line) => {
+      const cells = [];
+      let cur = '', inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (inQ) {
+          if (ch === '"') {
+            if (line[i + 1] === '"') { cur += '"'; i++; }
+            else inQ = false;
+          } else cur += ch;
+        } else if (ch === '"') inQ = true;
+        else if (ch === ',') { cells.push(cur); cur = ''; }
+        else cur += ch;
+      }
+      cells.push(cur);
+      return cells.map((c) => c.trim());
+    };
+
+    const lines = csv.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length < 2) return reply.code(400).send({ error: 'CSV 需要表头行 + 至少一行数据' });
+    const header = parseCsvLine(lines[0]).map((h) => h.trim());
+    const varNames = new Set(tpl.varNames && tpl.varNames.length ? tpl.varNames : Object.keys(tpl.vars || {}));
+    const unknownCols = header.filter((h) => h !== 'name' && h !== 'note' && !varNames.has(h));
+    if (unknownCols.length) return reply.code(400).send({ error: `未知列: ${unknownCols.join(', ')}（可用列: name, note, ${[...varNames].join(', ')}）` });
+
+    const created = [];
+    const skipped = [];
+    const defaults = tpl.vars || {};
+    for (let i = 1; i < lines.length; i++) {
+      const cells = parseCsvLine(lines[i]);
+      const row = {};
+      header.forEach((h, j) => { row[h] = cells[j] ?? ''; });
+      const name = (row.name || '').trim();
+      if (row._skip === '1') { skipped.push(i); continue; }
+      if (!name && !Object.keys(row).some((k) => varNames.has(k) && row[k])) { skipped.push(i); continue; }
+      const vars = {};
+      for (const vn of varNames) {
+        const v = (row[vn] ?? '').trim();
+        vars[vn] = v || defaults[vn] || '';
+      }
+      try {
+        const flow = store.instantiateTemplate(tpl.id, {
+          name: name || undefined,
+          vars,
+          note: (row.note || '').trim() || undefined,
+        });
+        created.push({ id: flow.id, name: flow.name });
+      } catch (err) {
+        skipped.push(i);
+      }
+    }
+    return { created, skipped: skipped.length, total: lines.length - 1 };
+  });
+
+  // cURL 导入（4.9）：静态解析，返回 http 节点 config
+  app.post('/api/import/curl', async (req, reply) => {
+    const { command } = req.body || {};
+    if (!command || typeof command !== 'string') return reply.code(400).send({ error: '缺少 command' });
+    try {
+      const config = parseCurl(command);
+      return { config };
+    } catch (err) {
+      return reply.code(400).send({ error: err.message });
+    }
   });
 
   app.post('/api/flows', async (req, reply) => {

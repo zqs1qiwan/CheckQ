@@ -45,5 +45,8 @@ export const api = {
   updateTemplate: (id, patch) => req('PUT', `/api/templates/${id}`, patch),
   deleteTemplate: (id) => req('DELETE', `/api/templates/${id}`),
   instantiate: (tplId, body) => req('POST', `/api/templates/${tplId}/instantiate`, body),
+  exportTemplate: (tplId) => req('GET', `/api/templates/${tplId}/export`),
+  instantiateCsv: (tplId, csv) => req('POST', `/api/templates/${tplId}/instantiate-csv`, { csv }),
+  importCurl: (command) => req('POST', '/api/import/curl', { command }),
   importHar: (formData) => req('POST', '/api/import/har', formData, true),
 };

@@ -14,7 +14,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 import { Store, hashPwd, verifyPwd } from './store.js';
-import { Engine } from './engine.js';
+import { Engine, redactVars } from './engine.js';
 import { validateFlow } from './model.js';
 import { importHar } from './har-import.js';
 import { parseCurl } from './curl-import.js';
@@ -40,7 +40,8 @@ export function buildServer({ dataDir, port }) {
         run.status = result.ok ? 'success' : 'failed';
         run.logs = result.logs;
         run.finalMessage = result.finalMessage || (result.ok ? '' : '执行失败');
-        run.vars = result.vars;
+        run.summary = result.summary || ''; // keywords 提取摘要（PRD §4.7.4）
+        run.vars = redactVars(result.vars); // 变量快照脱敏（敏感名值打码）
         run.durationMs = Date.now() - run.startedAt;
       } catch (err) {
         run.status = 'failed';

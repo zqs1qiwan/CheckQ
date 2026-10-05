@@ -42,6 +42,11 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse }) {
           <div style={{ fontSize: 12, color: failLog ? 'var(--fail)' : 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {shown.finalMessage || fmtTime(shown.startedAt)}
           </div>
+          {shown.summary && (
+            <div style={{ fontSize: 12, color: 'var(--ok)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={shown.summary}>
+              📌 {shown.summary}
+            </div>
+          )}
         </div>
         <div className="run-tabs">
           <button className={tab === 'logs' ? 'active' : ''} onClick={() => setTab('logs')}>步骤日志</button>

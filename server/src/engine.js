@@ -53,6 +53,12 @@ export class Engine {
     const logs = [];
     const missing = new Set();
 
+    // 日志配置（PRD §4.7.4）：level 三档 + keywords 关键字规则
+    const logCfg = (flow.log && typeof flow.log === 'object') ? flow.log : null;
+    const logLevel = logCfg?.level || 'all';
+    const keywords = Array.isArray(logCfg?.keywords) ? logCfg.keywords.filter((k) => k && k.regex) : [];
+    const keywordResults = []; // {name, values[]} 汇总
+
     const entry = this.findEntryNode();
     if (!entry) {
       logs.push({ stepId: null, index: 1, name: '流程', type: 'error', ok: false, message: '找不到入口节点', detail: null, ms: 0 });
@@ -86,6 +92,38 @@ export class Engine {
           stepLog.missing = [...missing];
           missing.clear();
         }
+
+        // 关键字规则提取（PRD §4.7.4）：对每步 HTTP 响应尝试 keywords
+        if (keywords.length && stepLog.type === 'http' && state.last) {
+          for (const kw of keywords) {
+            if (kw.stepId && kw.stepId !== node.id) continue;
+            try {
+              const source = kw.from === 'headers'
+                ? JSON.stringify(state.last.headers || {})
+                : kw.from === 'status'
+                  ? String(state.last.status ?? '')
+                  : String(state.last.text ?? '');
+              const re = new RegExp(kw.regex, 'g');
+              const values = [];
+              let m;
+              while ((m = re.exec(source)) !== null) {
+                values.push(m.length > 1 ? m[1] : m[0]);
+                if (values.length >= 20) break; // 防失控
+                if (m.index === re.lastIndex) re.lastIndex++;
+              }
+              if (values.length) {
+                stepLog.keywords = stepLog.keywords || [];
+                stepLog.keywords.push({ name: kw.name, values });
+                const agg = keywordResults.find((r) => r.name === kw.name);
+                if (agg) agg.values.push(...values);
+                else keywordResults.push({ name: kw.name, values });
+              }
+            } catch { /* 非法正则：跳过（编辑器已即时校验） */ }
+          }
+        }
+
+        // level 三档：运行结束后统一裁剪（在 run 末尾处理，此处保留完整数据供提取）
+
         // 调试模式：到达指定节点（含）即停
         if (debugStopId && node.id === debugStopId) {
           finalMessage = finalMessage || `调试运行：已执行到「${stepLog.name}」，共 ${stepCount} 步`;
@@ -125,7 +163,28 @@ export class Engine {
       finalMessage = `流程超过 ${MAX_STEPS} 步，疑似成环`;
     }
 
-    return { ok: !failed, logs, vars, finalMessage };
+    // level 三档日志裁剪（PRD §4.7.4）：all=完整 / failure=仅失败完整 / summary=仅标题行
+    let trimmedLogs = logs;
+    if (logLevel !== 'all') {
+      trimmedLogs = logs.map((l) => {
+        const keepFull = logLevel === 'failure' ? !l.ok : false;
+        if (keepFull) return l;
+        // 只保留标题信息
+        return {
+          stepId: l.stepId, index: l.index, name: l.name, type: l.type,
+          ok: l.ok, message: l.message, ms: l.ms,
+          keywords: l.keywords, // 关键字提取结果永远保留
+          asserts: l.asserts,
+        };
+      });
+    }
+
+    // 运行摘要：关键字提取结果汇总（PRD：每次运行关心什么值，一眼可见）
+    const summary = keywordResults.length
+      ? keywordResults.map((r) => `${r.name}: ${r.values.join(', ')}`).join('； ')
+      : '';
+
+    return { ok: !failed, logs: trimmedLogs, vars, finalMessage, summary };
   }
 
   findEntryNode() {
@@ -537,4 +596,15 @@ function redactSetCookies(list) {
     const i = pair.indexOf('=');
     return i > 0 ? `${pair.slice(0, i)}=${pair.slice(i + 1, i + 5)}…` : `${pair.slice(0, 12)}…`;
   });
+}
+
+/** 通用脱敏（PRD §4.7.3 扩展）：变量快照等场景，敏感名变量的值打码 */
+export function redactVars(vars) {
+  const out = {};
+  for (const [k, v] of Object.entries(vars || {})) {
+    out[k] = /cookie|token|password|secret|key/i.test(k)
+      ? String(v).slice(0, 12) + '…'
+      : v;
+  }
+  return out;
 }

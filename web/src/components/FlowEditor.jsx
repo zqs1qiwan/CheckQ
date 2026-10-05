@@ -161,7 +161,10 @@ function FlowEditorInner({ flowId, onBack }) {
     setDrawerOpen(true);
     setRunResult({ id: 'pending', status: 'running', logs: [] });
     try {
-      const r = await api.runFlow(flow.id);
+      const r = await api.runFlowStream(flow.id, {
+        onStart: () => setRunResult({ id: 'pending', status: 'running', logs: [] }),
+        onLog: (log) => setRunResult((cur) => ({ ...cur, status: 'running', logs: [...(cur.logs || []), log] })),
+      });
       setRunResult(r);
     } catch (e) {
       setRunResult({ id: 'err', status: 'failed', logs: [], finalMessage: e.message, durationMs: 0 });
@@ -186,7 +189,11 @@ function FlowEditorInner({ flowId, onBack }) {
     setDrawerOpen(true);
     setRunResult({ id: 'pending', status: 'running', logs: [] });
     try {
-      const r = await api.runFlow(flow.id, nodeId);
+      const r = await api.runFlowStream(flow.id, {
+        debugStopId: nodeId,
+        onStart: () => setRunResult({ id: 'pending', status: 'running', logs: [] }),
+        onLog: (log) => setRunResult((cur) => ({ ...cur, status: 'running', logs: [...(cur.logs || []), log] })),
+      });
       setRunResult(r);
     } catch (e) {
       setRunResult({ id: 'err', status: 'failed', logs: [], finalMessage: e.message, durationMs: 0 });

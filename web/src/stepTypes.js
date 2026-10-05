@@ -6,6 +6,7 @@ export const STEP_TYPES = {
   set: { label: '赋值', color: '#10b981', outputs: ['next'] },
   extract: { label: '提取', color: '#8b5cf6', outputs: ['next'] },
   delay: { label: '延迟', color: '#64748b', outputs: ['next'] },
+  'random-delay': { label: '随机延迟', color: '#94a3b8', outputs: ['next'] },
   log: { label: '日志', color: '#0ea5e9', outputs: ['next'] },
   notify: { label: '通知', color: '#ec4899', outputs: ['next'] },
 };
@@ -24,6 +25,8 @@ export function defaultConfig(type) {
       return { name: 'var1', value: '' };
     case 'extract':
       return { from: 'last.text', re: '(.*)', name: 'extracted', optional: true };
+    case 'random-delay':
+      return { min: 1, max: 5 };
     case 'delay':
       return { seconds: 5 };
     case 'log':

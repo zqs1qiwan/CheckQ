@@ -9,9 +9,21 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { ProxyAgent } from 'undici';
 
 const MAX_STEPS = 500;
 const HTTP_TIMEOUT = 30000;
+const MAX_RESP_BYTES = 2 * 1024 * 1024; // 响应体上限 2MB（预留，当前文本阶段仅记录截断）
+
+const proxyAgents = new Map(); // proxyUrl -> ProxyAgent（复用连接池）
+function getProxyAgent(proxyUrl) {
+  let a = proxyAgents.get(proxyUrl);
+  if (!a) {
+    a = new ProxyAgent(proxyUrl);
+    proxyAgents.set(proxyUrl, a);
+  }
+  return a;
+}
 
 export class Engine {
   constructor(flow) {
@@ -66,7 +78,7 @@ export class Engine {
         ms: 0,
       };
       try {
-        const outcome = await this.execNode(node, state, stepLog, missing, logs);
+        const outcome = await this.execNode(node, state, stepLog, missing, logs, logSink);
         stepLog.ms = Date.now() - started;
         logs.push(stepLog);
         if (logSink) logSink(stepLog);
@@ -124,112 +136,158 @@ export class Engine {
     return noIn.sort((a, b) => a.x - b.x)[0];
   }
 
+  /** HTTP 节点执行体（由 execNode 的重试循环调用）。返回 {ok, errorKind, message} */
+  async execHttp(node, c, state, stepLog, missing, attempt) {
+    const vars = state.vars;
+    const url = renderTemplate(c.url, vars, missing);
+    const method = (c.method || 'GET').toUpperCase();
+    const headers = {};
+    for (const h of c.headers || []) {
+      if (h && h.enabled !== false && h.name) {
+        // QD 模板常见尾部换行残留，一律 trim（cookie 值带 \n 直接被判无效）
+        const v = renderTemplate(h.value, vars, missing);
+        headers[String(h.name).trim().toLowerCase()] = typeof v === 'string' ? v.trim() : v;
+      }
+    }
+    let body = null;
+    if (c.body && method !== 'GET' && method !== 'HEAD') {
+      const b = renderTemplate(c.body, vars, missing);
+      body = typeof b === 'string' ? b.trim() : b;
+    }
+    // 代理（4.2）：值支持 {{proxyVar}}，运行时渲染
+    let proxyUrl = '';
+    if (c.proxy && c.proxy.url) {
+      proxyUrl = String(renderTemplate(c.proxy.url, vars, missing)).trim();
+    }
+    stepLog.detail = { method, url, headers: redact(headers), body, attempt, proxy: proxyUrl || undefined };
+
+    const t0 = Date.now();
+    let status, statusText, text, respHeaders, setCookies;
+    try {
+      if ((c.backend || 'fetch') === 'curl') {
+        ({ status, statusText, headers: respHeaders, text, setCookies } = await httpViaCurl(
+          url, method, headers, body, c.timeout || HTTP_TIMEOUT, (c.redirect || 'follow') !== 'manual', proxyUrl));
+      } else {
+        const dispatcher = proxyUrl ? getProxyAgent(proxyUrl) : undefined;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), c.timeout || HTTP_TIMEOUT);
+        const resp = await fetch(url, {
+          method,
+          headers,
+          body,
+          redirect: c.redirect || 'follow',
+          signal: controller.signal,
+          dispatcher,
+        });
+        clearTimeout(timer);
+        status = resp.status;
+        statusText = resp.statusText || '';
+        // charset（4.2）：默认按响应 content-type；强制 c.charset 覆盖
+        const ctype = resp.headers.get('content-type') || '';
+        let encoding = (ctype.match(/charset=([\w-]+)/i) || [])[1] || 'utf-8';
+        if (c.charset && c.charset !== 'auto') encoding = c.charset;
+        if (/utf-?8/i.test(encoding)) {
+          text = await resp.text();
+        } else {
+          const buf = await resp.arrayBuffer();
+          try {
+            text = new TextDecoder(encoding).decode(buf);
+          } catch {
+            text = new TextDecoder('utf-8').decode(buf); // 不认识的编码回退 utf-8
+          }
+        }
+        respHeaders = Object.fromEntries(resp.headers.entries());
+        setCookies = resp.headers.getSetCookie ? resp.headers.getSetCookie() : [];
+      }
+    } catch (err) {
+      return { ok: false, errorKind: 'network', message: `请求失败: ${err.message}${err.cause ? ` (${err.cause.code || err.cause.message || ''})` : ''}` };
+    }
+
+    let json = null;
+    try {
+      json = JSON.parse(text);
+    } catch {}
+
+    const duration = Date.now() - t0;
+    state.last = { status, statusText, headers: respHeaders, text, json, ms: duration, setCookies: setCookies || [] };
+    state.steps[node.id] = state.last;
+    stepLog.detail.response = {
+      status,
+      headers: respHeaders,
+      setCookie: (setCookies || []).length ? redactSetCookies(setCookies) : undefined,
+      body: text.length > 2000 ? text.slice(0, 2000) + `… (${text.length} bytes)` : text,
+      ms: duration,
+    };
+
+    // 断言两种形态:
+    //   {expr, expect}  jexl 表达式
+    //   {res: [regex], from: 'content'|'status', negate}  QD 原生正则（任一命中）
+    let assertOk = true;
+    const assertResults = [];
+    const ctx = { vars, last: state.last, steps: state.steps };
+    for (const a of c.asserts || []) {
+      if (Array.isArray(a.res)) {
+        const text0 = a.from === 'status' ? String(state.last.status) : String(state.last.text ?? '');
+        let hit = false;
+        for (const re of a.res) {
+          try {
+            if (new RegExp(re).test(text0)) { hit = true; break; }
+          } catch {}
+        }
+        const pass = a.negate ? !hit : hit;
+        assertResults.push({ label: `${a.negate ? '不含' : '含'} /${a.res.join('|')}/ (${a.from || 'content'})`, pass });
+        if (!pass) assertOk = false;
+      } else {
+        try {
+          const v = await evalExpr(a.expr, ctx);
+          const pass = a.expect === undefined ? Boolean(v) : String(v) === String(a.expect);
+          assertResults.push({ expr: a.expr, expect: a.expect, actual: v, pass });
+          if (!pass) assertOk = false;
+        } catch (err) {
+          assertResults.push({ expr: a.expr, expect: a.expect, error: err.message, pass: false });
+          assertOk = false;
+        }
+      }
+    }
+    if (assertResults.length) stepLog.asserts = assertResults;
+    if (!assertOk) {
+      const failedOnes = assertResults.filter((r) => !r.pass);
+      return { ok: false, errorKind: 'assert', message: `断言失败: ${failedOnes
+        .map((r) => r.label || `${r.expr} → ${JSON.stringify(r.actual ?? r.error)} (期望 ${JSON.stringify(r.expect)})`)
+        .join('; ')}` };
+    }
+    stepLog.message = `${status} ${statusText} (${duration}ms)`.trim() + (attempt > 0 ? ` · 第${attempt + 1}次` : '');
+    return { ok: true };
+  }
+
   /** 执行单个节点。returns { handle } 或 null(失败) */
-  async execNode(node, state, stepLog, missing, logs) {
+  async execNode(node, state, stepLog, missing, logs, logSink) {
     const vars = state.vars;
     switch (node.type) {
       case 'http': {
         const c = node.config || {};
-        const url = renderTemplate(c.url, vars, missing);
-        const method = (c.method || 'GET').toUpperCase();
-        const headers = {};
-        for (const h of c.headers || []) {
-          if (h && h.enabled !== false && h.name) {
-            // QD 模板常见尾部换行残留，一律 trim（cookie 值带 \n 直接被判无效）
-            const v = renderTemplate(h.value, vars, missing);
-            headers[String(h.name).trim().toLowerCase()] = typeof v === 'string' ? v.trim() : v;
+        // 每节点重试（4.2）：网络错误/超时，或断言失败且 retryOn 含 assert
+        const retry = c.retry && c.retry.times > 0 ? { times: c.retry.times, backoffMs: Math.max(500, c.retry.backoffMs || 1000), retryOn: c.retry.retryOn || 'error' } : null;
+        let attempt = 0;
+        let result = null;
+        for (;;) {
+          result = await this.execHttp(node, c, state, stepLog, missing, attempt);
+          if (result.ok) break;
+          const isNetworkError = result.errorKind === 'network';
+          const isAssertFail = result.errorKind === 'assert';
+          if (retry && attempt < retry.times && (isNetworkError || (isAssertFail && retry.retryOn !== 'error'))) {
+            attempt++;
+            const wait = retry.backoffMs * attempt; // 线性退避
+            stepLog.message = `${result.message} → 重试 ${attempt}/${retry.times}（${wait}ms 后）`;
+            logs.push({ ...stepLog, ok: true }); // 重试过程记录为中间日志
+            if (logSink) logSink(logs[logs.length - 1]);
+            await new Promise((r) => setTimeout(r, wait));
+            continue;
           }
-        }
-        let body = null;
-        if (c.body && method !== 'GET' && method !== 'HEAD') {
-          const b = renderTemplate(c.body, vars, missing);
-          body = typeof b === 'string' ? b.trim() : b;
-        }
-        stepLog.detail = { method, url, headers: redact(headers), body };
-
-        const t0 = Date.now();
-        let status, statusText, text, respHeaders;
-        try {
-          if ((c.backend || 'fetch') === 'curl') {
-            ({ status, statusText, headers: respHeaders, text } = await httpViaCurl(
-              url, method, headers, body, c.timeout || HTTP_TIMEOUT, (c.redirect || 'follow') !== 'manual'));
-          } else {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), c.timeout || HTTP_TIMEOUT);
-            const resp = await fetch(url, {
-              method,
-              headers,
-              body,
-              redirect: c.redirect || 'follow',
-              signal: controller.signal,
-            });
-            clearTimeout(timer);
-            status = resp.status;
-            statusText = resp.statusText || '';
-            text = await resp.text();
-            respHeaders = Object.fromEntries(resp.headers.entries());
-          }
-        } catch (err) {
           stepLog.ok = false;
-          stepLog.message = `请求失败: ${err.message}${err.cause ? ` (${err.cause.code || err.cause.message || ''})` : ''}`;
+          stepLog.message = result.message;
           return null;
         }
-
-        let json = null;
-        try {
-          json = JSON.parse(text);
-        } catch {}
-
-        const duration = Date.now() - t0;
-        state.last = { status, statusText, headers: respHeaders, text, json, ms: duration };
-        state.steps[node.id] = state.last;
-        stepLog.detail.response = {
-          status,
-          headers: respHeaders,
-          body: text.length > 2000 ? text.slice(0, 2000) + `… (${text.length} bytes)` : text,
-          ms: duration,
-        };
-
-        // 断言两种形态:
-        //   {expr, expect}  jexl 表达式
-        //   {res: [regex], from: 'content'|'status', negate}  QD 原生正则（任一命中）
-        let assertOk = true;
-        const assertResults = [];
-        const ctx = { vars, last: state.last, steps: state.steps };
-        for (const a of c.asserts || []) {
-          if (Array.isArray(a.res)) {
-            const text0 = a.from === 'status' ? String(state.last.status) : String(state.last.text ?? '');
-            let hit = false;
-            for (const re of a.res) {
-              try {
-                if (new RegExp(re).test(text0)) { hit = true; break; }
-              } catch {}
-            }
-            const pass = a.negate ? !hit : hit;
-            assertResults.push({ label: `${a.negate ? '不含' : '含'} /${a.res.join('|')}/ (${a.from || 'content'})`, pass });
-            if (!pass) assertOk = false;
-          } else {
-            try {
-              const v = await evalExpr(a.expr, ctx);
-              const pass = a.expect === undefined ? Boolean(v) : String(v) === String(a.expect);
-              assertResults.push({ expr: a.expr, expect: a.expect, actual: v, pass });
-              if (!pass) assertOk = false;
-            } catch (err) {
-              assertResults.push({ expr: a.expr, expect: a.expect, error: err.message, pass: false });
-              assertOk = false;
-            }
-          }
-        }
-        if (assertResults.length) stepLog.asserts = assertResults;
-        if (!assertOk) {
-          const failedOnes = assertResults.filter((r) => !r.pass);
-          stepLog.ok = false;
-          stepLog.message = `断言失败: ${failedOnes
-            .map((r) => r.label || `${r.expr} → ${JSON.stringify(r.actual ?? r.error)} (期望 ${JSON.stringify(r.expect)})`)
-            .join('; ')}`;
-          return null;
-        }
-        stepLog.message = `${status} ${statusText} (${duration}ms)`.trim();
         return { handle: 'success' };
       }
 
@@ -263,6 +321,57 @@ export class Engine {
 
       case 'extract': {
         const c = node.config || {};
+        // 提取模式（4.1）：mode=json 按点路径取值；mode=header/setCookie 取响应头（4.2 Set-Cookie 捕获）
+        if (c.mode === 'json') {
+          const pathStr = String(c.path || '').trim();
+          let cur = state.last && state.last.json;
+          for (const key of pathStr ? pathStr.split('.') : []) {
+            cur = cur == null ? undefined : cur[key];
+          }
+          if (cur === undefined || cur === null) {
+            stepLog.message = `JSON 路径未命中: ${pathStr || '(空)'}`;
+            if (c.optional === false) { stepLog.ok = false; return null; }
+          } else {
+            const val = typeof cur === 'object' ? JSON.stringify(cur) : String(cur);
+            vars[c.name] = val;
+            stepLog.message = `${c.name} = ${val.slice(0, 120)}`;
+          }
+          return { handle: 'next' };
+        }
+        if (c.mode === 'header' || c.mode === 'setCookie') {
+          const h = (state.last && state.last.headers) || {};
+          let val = '';
+          if (c.mode === 'setCookie') {
+            // 优先用引擎保存的多值 Set-Cookie 数组，缺省时回落 headers['set-cookie']
+            const list = (state.last && state.last.setCookies && state.last.setCookies.length)
+              ? state.last.setCookies
+              : (h['set-cookie'] ? (Array.isArray(h['set-cookie']) ? h['set-cookie'] : [h['set-cookie']]) : []);
+            let pairs = list.map((sc) => sc.split(';')[0].trim()).filter(Boolean);
+            if (c.cookieFilter) {
+              try {
+                const re = new RegExp(c.cookieFilter);
+                pairs = pairs.filter((p) => re.test(p.split('=')[0]));
+              } catch (err) {
+                stepLog.ok = false;
+                stepLog.message = `cookie 过滤正则错误: ${err.message}`;
+                return null;
+              }
+            }
+            val = pairs.join('; ');
+          } else {
+            const hn = String(c.headerName || '').trim().toLowerCase();
+            val = hn ? String(h[hn] ?? '') : '';
+          }
+          if (val) {
+            vars[c.name] = val;
+            stepLog.message = `${c.name} = ${val.length > 120 ? val.slice(0, 120) + '…' : val}`;
+          } else {
+            stepLog.message = c.mode === 'setCookie' ? '响应无 Set-Cookie' : `响应头未命中: ${c.headerName}`;
+            if (c.optional === false) { stepLog.ok = false; return null; }
+          }
+          return { handle: 'next' };
+        }
+        // 默认正则模式（原有）
         const src = resolvePath(state, c.from, missing);
         const text = src === undefined || src === null ? '' : typeof src === 'object' ? JSON.stringify(src) : String(src);
         let m = null;
@@ -284,6 +393,19 @@ export class Engine {
             return null; // QD 语义：必填提取未命中 → 流程失败
           }
         }
+        return { handle: 'next' };
+      }
+
+      case 'random-delay': {
+        // 反风控核心件（4.1）：在 [min,max] 秒间随机等待
+        const c = node.config || {};
+        const min = Number(c.min ?? 1) || 0;
+        const max = Number(c.max ?? 5) || 0;
+        const lo = Math.min(min, max);
+        const hi = Math.max(min, max);
+        const sec = lo + Math.random() * (hi - lo);
+        await new Promise((r) => setTimeout(r, Math.min(sec, 300) * 1000));
+        stepLog.message = `随机等待 ${sec.toFixed(1)}s (${lo}-${hi}s)`;
         return { handle: 'next' };
       }
 
@@ -354,14 +476,16 @@ export class Engine {
 /**
  * curl 后端：出站 TLS 指纹为 curl 而非 Node fetch(undici)。
  * 用途: 目标站对 undici 指纹做风控时切换（节点 config.backend = 'curl'）。
- * 返回与 fetch 路径同构: { status, statusText, headers, text }
+ * 支持 proxyUrl（http/https/socks5h → --proxy）。
+ * 返回与 fetch 路径同构: { status, statusText, headers, text, setCookies }
  */
-async function httpViaCurl(url, method, headers, body, timeoutMs, follow) {
+async function httpViaCurl(url, method, headers, body, timeoutMs, follow, proxyUrl) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'checkq-'));
   const hdrFile = path.join(tmp, 'h.txt');
   const bodyFile = path.join(tmp, 'b.txt');
   const args = ['-sS', '--max-time', String(Math.ceil(timeoutMs / 1000)), '-X', method, '-D', hdrFile, '-o', bodyFile];
   if (follow) args.push('-L');
+  if (proxyUrl) args.push('--proxy', proxyUrl);
   args.push(url);
   for (const [k, v] of Object.entries(headers)) args.push('-H', `${k}: ${v}`);
   if (body && method !== 'GET' && method !== 'HEAD') args.push('--data-binary', body);
@@ -379,11 +503,17 @@ async function httpViaCurl(url, method, headers, body, timeoutMs, follow) {
     const lines = (blocks[blocks.length - 1] || '').split(/\r?\n/);
     const m = (lines[0] || '').match(/^HTTP\/[\d.]+\s+(\d+)/);
     const respHeaders = {};
+    const setCookies = [];
     for (const line of lines.slice(1)) {
       const i = line.indexOf(':');
-      if (i > 0) respHeaders[line.slice(0, i).trim().toLowerCase()] = line.slice(i + 1).trim();
+      if (i > 0) {
+        const k = line.slice(0, i).trim().toLowerCase();
+        const v = line.slice(i + 1).trim();
+        if (k === 'set-cookie') setCookies.push(v);
+        else respHeaders[k] = v;
+      }
     }
-    return { status: m ? Number(m[1]) : 0, statusText: '', headers: respHeaders, text };
+    return { status: m ? Number(m[1]) : 0, statusText: '', headers: respHeaders, text, setCookies };
   } finally {
     try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
   }
@@ -398,4 +528,13 @@ function redact(headers) {
     }
   }
   return out;
+}
+
+/** Set-Cookie 数组脱敏：每个 k=v 只留 k 和 v 的前 4 字符 */
+function redactSetCookies(list) {
+  return list.map((sc) => {
+    const pair = String(sc).split(';')[0] || '';
+    const i = pair.indexOf('=');
+    return i > 0 ? `${pair.slice(0, i)}=${pair.slice(i + 1, i + 5)}…` : `${pair.slice(0, 12)}…`;
+  });
 }

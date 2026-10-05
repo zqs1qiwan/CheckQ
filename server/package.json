@@ -9,11 +9,12 @@
     "start": "node src/index.js"
   },
   "dependencies": {
-    "fastify": "^5.2.0",
     "@fastify/cookie": "^11.0.1",
-    "@fastify/static": "^8.0.3",
     "@fastify/multipart": "^9.0.3",
+    "@fastify/static": "^8.0.3",
+    "croner": "^9.0.0",
+    "fastify": "^5.2.0",
     "jexl": "^2.3.0",
-    "croner": "^9.0.0"
+    "undici": "^8.11.2"
   }
 }

@@ -46,6 +46,46 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
             </select>
             <div className="hint">目标站若对 Node fetch 的 TLS 指纹风控（如返回权限错误但浏览器/curl 正常），切换到 curl 后端。</div>
           </div >
+          <div className="field-inline">
+            <div className="field">
+              <label>编码</label>
+              <select value={config.charset || 'auto'} onChange={(e) => onConfigUpdate({ charset: e.target.value === 'auto' ? undefined : e.target.value })}>
+                <option value="auto">自动（按响应头）</option>
+                <option value="utf-8">UTF-8</option>
+                <option value="gbk">GBK</option>
+                <option value="gb2312">GB2312</option>
+                <option value="big5">Big5</option>
+              </select>
+            </div >
+            <div className="field">
+              <label>代理 URL（可选）</label>
+              <input className="mono" placeholder="http://user:pass@host:port 或 {{proxyVar}}" value={config.proxy?.url || ''}
+                onChange={(e) => onConfigUpdate({ proxy: e.target.value.trim() ? { url: e.target.value } : undefined })} />
+            </div >
+          </div >
+          <div className="field-inline">
+            <div className="field">
+              <label>失败重试次数</label>
+              <input type="number" min="0" max="5" value={config.retry?.times ?? 0}
+                onChange={(e) => {
+                  const times = Math.max(0, Math.min(5, Number(e.target.value) || 0));
+                  onConfigUpdate({ retry: times > 0 ? { times, backms: config.retry?.backoffMs || 1000, retryOn: config.retry?.retryOn || 'both' } : undefined });
+                }} />
+            </div >
+            <div className="field">
+              <label>重试内容</label>
+              <select value={config.retry?.retryOn || 'both'} onChange={(e) => onConfigUpdate({ retry: { times: config.retry?.times ?? 0, backoffMs: config.retry?.backoffMs || 1000, retryOn: e.target.value } })}>
+                <option value="both">网络错误 + 断言失败</option>
+                <option value="error">仅网络错误</option>
+              </select>
+            </div >
+          </div >
+          <div className="field">
+            <label>重试间隔基数 (ms)</label>
+            <input type="number" min="500" max="30000" step="500" value={config.retry?.backoffMs ?? 1000}
+              onChange={(e) => onConfigUpdate({ retry: { times: config.retry?.times ?? 0, backoffMs: Math.max(500, Number(e.target.value) || 1000), retryOn: config.retry?.retryOn || 'both' } })} />
+            <div className="hint">线性退避：第 n 次重试等待 基数×n 毫秒。0 次重试时以上设置不生效。</div>
+          </div >
           <div className="field">
             <label>URL <span style={{ color: 'var(--muted)' }}>（支持 {`{{变量}}`}）</span ></label>
             <input className="mono" value={config.url} onChange={(e) => onConfigUpdate({ url: e.target.value })} />
@@ -185,33 +225,87 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
       {type === 'extract' && (
         <>{/* Extract node */}
           <div className="field">
-            <label>提取来源</label>
-            <select value={config.from || 'last.text'} onChange={(e) => onConfigUpdate({ from: e.target.value })}>
-              <option value="last.text">响应原文 (last.text)</option>
-              <option value="last.json">响应JSON (last.json)</option>
-              <option value="last.status">状态码 (last.status)</option>
-              <option value="vars">流程变量 (vars)</option>
+            <label>提取模式</label>
+            <select value={config.mode || 'regex'} onChange={(e) => {
+              const mode = e.target.value;
+              if (mode === 'regex') onConfigUpdate({ mode: undefined });
+              else if (mode === 'json') onConfigUpdate({ mode: 'json', path: config.path || '' });
+              else if (mode === 'header') onConfigUpdate({ mode: 'header', headerName: config.headerName || '' });
+              else if (mode === 'setCookie') onConfigUpdate({ mode: 'setCookie', cookieFilter: config.cookieFilter || '' });
+            }}>
+              <option value="regex">正则提取（响应体/状态码）</option>
+              <option value="json">JSON 路径（last.json）</option>
+              <option value="header">响应头</option>
+              <option value="setCookie">Set-Cookie 捕获</option>
             </select>
-          </div >
-          <div className="field">
-            <label>正则 <span style={{ color: 'var(--muted)' }}>（第1个捕获组）</span ></label>
-            <input className="mono" placeholder='\"message\":\"(.*?)\"' value={config.re || ''}
-              onChange={(e) => onConfigUpdate({ re: e.target.value })} />
-          </div >
+          </div>
+          {config.mode === 'json' && (
+            <div className="field">
+              <label>JSON 路径 <span style={{ color: 'var(--muted)' }}>（如 data.token，数组用下标 list.0）</span></label>
+              <input className="mono" placeholder="data.token" value={config.path || ''} onChange={(e) => onConfigUpdate({ path: e.target.value })} />
+            </div>
+          )}
+          {config.mode === 'header' && (
+            <div className="field">
+              <label>响应头名称</label>
+              <input className="mono" placeholder="location" value={config.headerName || ''} onChange={(e) => onConfigUpdate({ headerName: e.target.value })} />
+            </div>
+          )}
+          {config.mode === 'setCookie' && (
+            <div className="field">
+              <label>Cookie 名过滤 <span style={{ color: 'var(--muted)' }}>（正则，可选）</span></label>
+              <input className="mono" placeholder="只保留匹配的 cookie 名，如 sess" value={config.cookieFilter || ''} onChange={(e) => onConfigUpdate({ cookieFilter: e.target.value })} />
+              <div className="hint">捕获该响应全部 Set-Cookie 的 k=v 部分，用 「; 」 连接存入变量，供后续请求 Cookie 头使用。</div>
+            </div>
+          )}
+          {(!config.mode || config.mode === 'regex') && (
+            <>
+              <div className="field">
+                <label>提取来源</label>
+                <select value={config.from || 'last.text'} onChange={(e) => onConfigUpdate({ from: e.target.value })}>
+                  <option value="last.text">响应原文 (last.text)</option>
+                  <option value="last.json">响应JSON (last.json)</option>
+                  <option value="last.status">状态码 (last.status)</option>
+                  <option value="vars">流程变量 (vars)</option>
+                </select>
+              </div>
+              <div className="field">
+                <label>正则 <span style={{ color: 'var(--muted)' }}>（第1个捕获组）</span></label>
+                <input className="mono" placeholder='\\"message\\":\\"(.*?)\\"' value={config.re || ''}
+                  onChange={(e) => onConfigUpdate({ re: e.target.value })} />
+              </div>
+            </>
+          )}
           <div className="field-inline">
             <div className="field">
               <label>存入变量名</label>
               <input value={config.name || ''} onChange={(e) => onConfigUpdate({ name: e.target.value })} />
-            </div >
+            </div>
             <div className="field" style={{ flex: '0 0 auto', display: 'flex', alignItems: 'flex-end' }}>
               <label className="switch" style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
                 <input type="checkbox" checked={config.optional !== false}
                   onChange={(e) => onConfigUpdate({ optional: e.target.checked })} />
                 <span className="track" />
-                <span style={{ fontSize: 12, color: 'var(--muted)' }}>未命中不失败</span >
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>未命中不失败</span>
               </label>
-            </div >
-          </div >
+            </div>
+          </div>
+        </>
+      )}
+
+      {type === 'random-delay' && (
+        <>{/* Random delay node */}
+          <div className="field-inline">
+            <div className="field">
+              <label>最小等待 (秒)</label>
+              <input type="number" min="0" max="300" value={config.min ?? 1} onChange={(e) => onConfigUpdate({ min: Number(e.target.value) })} />
+            </div>
+            <div className="field">
+              <label>最大等待 (秒)</label>
+              <input type="number" min="0" max="300" value={config.max ?? 5} onChange={(e) => onConfigUpdate({ max: Number(e.target.value) })} />
+            </div>
+          </div>
+          <div className="hint">在 [最小, 最大] 秒之间随机等待，用于避开整点/固定间隔的反自动化风控。</div>
         </>
       )}
 

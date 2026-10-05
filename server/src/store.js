@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { Cron } from 'croner';
 
 export class Store {
   #persistTimer = null;
@@ -68,11 +69,22 @@ export class Store {
       const lastRun = last ? {
         id: last.id, status: last.status, startedAt: last.startedAt, finalMessage: last.finalMessage,
       } : null;
+      // 下次运行时间（croner nextRun，仅启用调度的任务）
+      let nextRunAt = null;
+      if (f.enabled && f.cron) {
+        try {
+          const job = new Cron(f.cron, { timezone: f.timezone || 'Asia/Shanghai' });
+          const next = job.nextRun();
+          nextRunAt = next ? next.getTime() : null;
+          job.stop();
+        } catch { /* 无效 cron 不显示 */ }
+      }
       return {
         id: f.id, name: f.name, note: f.note, cron: f.cron, timezone: f.timezone,
         enabled: f.enabled, varsCount: Object.keys(f.vars || {}).length,
         nodesCount: (f.nodes || []).length, tplId: f.tplId || null,
         lastRun,
+        nextRunAt,
       };
     });
   }

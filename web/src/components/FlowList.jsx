@@ -24,6 +24,8 @@ export default function FlowList({ onOpen, onLogout }) {
   const [modal, setModal] = useState(null); // 'new' | 'import' | 'template-editor' | {type:'instantiate', tpl} | {type:'result', run}
   const [importBusy, setImportBusy] = useState(false);
   const [running, setRunning] = useState(null); // flowId -> 'running'
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('all'); // all | scheduled | recent-failed
   const fileRef = useRef();
   const editTemplateRef = useRef(); // 模板编辑页回调刷新
 
@@ -33,6 +35,17 @@ export default function FlowList({ onOpen, onLogout }) {
   };
 
   useEffect(() => { load(); }, []);
+
+  // 搜索 + 筛选（PRD 4.4）
+  const visibleFlows = (flows || []).filter((f) => {
+    if (search) {
+      const q = search.toLowerCase();
+      if (!f.name.toLowerCase().includes(q) && !(f.note || '').toLowerCase().includes(q)) return false;
+    }
+    if (filter === 'scheduled' && !f.enabled) return false;
+    if (filter === 'recent-failed' && f.lastRun?.status !== 'failed') return false;
+    return true;
+  });
 
   const createEmpty = async () => {
     const f = await api.createFlow({
@@ -160,20 +173,35 @@ export default function FlowList({ onOpen, onLogout }) {
         <div className="page-head" style={{ marginTop: 28 }}>
           <h2>任务</h2>
           <span className="spacer" />
+          <input
+            style={{ width: 180, fontSize: 13, padding: '4px 8px' }}
+            placeholder="搜索名称/备注…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select
+            style={{ width: 110, fontSize: 13, padding: '4px 6px' }}
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          >
+            <option value="all">全部</option>
+            <option value="scheduled">已启用调度</option>
+            <option value="recent-failed">最近失败</option>
+          </select>
         </div>
 
-        {flows.length === 0 ? (
+        {visibleFlows.length === 0 ? (
           <div className="empty">
             <div className="big">🧩</div>
-            <p>还没有任务。从上方模板创建，或「+ 新建任务」从零开始搭建。</p>
+            <p>{(search || filter !== 'all') ? '没有匹配的任务。' : '还没有任务。从上方模板创建，或「+ 新建任务」从零开始搭建。'}</p>
           </div>
         ) : (
           <table className="flow-table">
             <thead>
-              <tr><th>名称</th><th>调度</th><th>状态</th><th>上次运行</th><th style={{ width: 240 }}>操作</th></tr>
+              <tr><th>名称</th><th>调度</th><th>下次运行</th><th>状态</th><th>上次运行</th><th style={{ width: 240 }}>操作</th></tr>
             </thead>
             <tbody>
-              {flows.map((f) => (
+              {visibleFlows.map((f) => (
                 <tr key={f.id}>
                   <td>
                     <a className="flow-name" href="#" onClick={(e) => { e.preventDefault(); onOpen(f.id); }}>{f.name}</a>
@@ -181,6 +209,9 @@ export default function FlowList({ onOpen, onLogout }) {
                   </td>
                   <td>
                     {f.cron ? <span className="cron-code">{f.cron}</span> : <span style={{ color: 'var(--muted)' }}>手动</span>}
+                  </td>
+                  <td>
+                    {f.nextRunAt ? <span style={{ fontSize: 12, color: 'var(--muted)' }}>{fmtTime(f.nextRunAt)}</span> : <span style={{ color: 'var(--muted)', fontSize: 12 }}>—</span>}
                   </td>
                   <td>
                     <label className="switch" title={f.enabled ? '点击停用调度' : '点击启用调度'}>

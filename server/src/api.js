@@ -131,6 +131,7 @@ export function buildServer({ dataDir, port }) {
       vars: f.vars || {},
       nodes: f.nodes,
       edges: f.edges,
+      log: f.log,
     }, 'flow');
     return { id: tpl.id, name: tpl.name };
   });

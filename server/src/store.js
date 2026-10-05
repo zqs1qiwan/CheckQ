@@ -200,6 +200,7 @@ export class Store {
       vars: mergedVars,
       nodes: tpl.nodes,
       edges: tpl.edges,
+      log: tpl.log,
       tplId,
     });
   }

@@ -1,7 +1,8 @@
 import React from 'react';
 import { STEP_TYPES } from '../stepTypes.js';
+import { api } from '../api.js';
 
-export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, onDebugTo }) {
+export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, onDebugTo, flowId, flowVars }) {
   if (!node) {
     return (
       <div className="config-panel">
@@ -36,6 +37,18 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
               <label>超时 (秒)</label>
               <input type="number" value={(config.timeout || 30000) / 1000}
                 onChange={(e) => onConfigUpdate({ timeout: Math.max(1, Number(e.target.value) || 30) * 1000 })} />
+            </div >
+            <div className="field" style={{ alignSelf: 'flex-end' }}>
+              <button className="small" title="生成等价 curl 命令（变量以当前值代入，敏感值完整还原，仅本机调试用）"
+                onClick={async () => {
+                  try {
+                    const { curl } = await api.curlFor(flowId, node.id, flowVars || {});
+                    await navigator.clipboard.writeText(curl);
+                    alert('已复制到剪贴板：\n\n' + curl);
+                  } catch (e) {
+                    alert('生成失败: ' + e.message);
+                  }
+                }}>复制为 curl</button>
             </div >
           </div >
           <div className="field">

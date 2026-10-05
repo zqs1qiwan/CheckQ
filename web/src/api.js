@@ -35,6 +35,8 @@ export const api = {
   updateFlow: (id, patch) => req('PUT', `/api/flows/${id}`, patch),
   deleteFlow: (id) => req('DELETE', `/api/flows/${id}`),
   runFlow: (id, debugStopId) => req('POST', `/api/flows/${id}/run`, debugStopId ? { debugStopId } : {}),
+  cloneFlow: (id) => req('POST', `/api/flows/${id}/clone`, {}),
+  curlFor: (id, nodeId, vars) => req('POST', `/api/flows/${id}/curl`, { nodeId, vars }),
   runs: (flowId, limit = 30) => req('GET', `/api/runs?flowId=${flowId || ''}&limit=${limit}`),
   run: (id) => req('GET', `/api/runs/${id}`),
   // templates

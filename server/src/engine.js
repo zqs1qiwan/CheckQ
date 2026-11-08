@@ -5,6 +5,7 @@
  */
 
 import { renderTemplate, resolvePath, evalExpr } from './render.js';
+import { CookieJar, mergeCookieHeader } from './cookiejar.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -49,7 +50,7 @@ export class Engine {
   async run({ trigger = 'manual', runId, logSink, debugStopId } = {}) {
     const flow = this.flow;
     const vars = { ...(flow.vars || {}) };
-    const state = { vars, last: null, steps: {} };
+    const state = { vars, last: null, steps: {}, cookieJar: new CookieJar() };
     const logs = [];
     const missing = new Set();
 
@@ -208,6 +209,17 @@ export class Engine {
         headers[String(h.name).trim().toLowerCase()] = typeof v === 'string' ? v.trim() : v;
       }
     }
+    // run 级 cookie 罐（QD 兼容 GAP-C1）：罐内 cookie 自动补入请求头，显式 cookie 同名键优先
+    const useJar = c.cookieJar !== false;
+    let jarUsed = 0;
+    if (useJar && state.cookieJar) {
+      const jarLine = state.cookieJar.headerFor(url);
+      if (jarLine) {
+        const before = headers.cookie || '';
+        headers.cookie = mergeCookieHeader(jarLine, headers.cookie);
+        if (headers.cookie !== before) jarUsed = 1;
+      }
+    }
     let body = null;
     if (c.body && method !== 'GET' && method !== 'HEAD') {
       const b = renderTemplate(c.body, vars, missing);
@@ -218,7 +230,7 @@ export class Engine {
     if (c.proxy && c.proxy.url) {
       proxyUrl = String(renderTemplate(c.proxy.url, vars, missing)).trim();
     }
-    stepLog.detail = { method, url, headers: redact(headers), body, attempt, proxy: proxyUrl || undefined };
+    stepLog.detail = { method, url, headers: redact(headers), body, attempt, proxy: proxyUrl || undefined, jar: jarUsed || undefined };
 
     const t0 = Date.now();
     let status, statusText, text, respHeaders, setCookies;
@@ -266,6 +278,9 @@ export class Engine {
     try {
       json = JSON.parse(text);
     } catch {}
+
+    // 响应 Set-Cookie 入罐（后续同域请求自动携带）
+    if (useJar && state.cookieJar) state.cookieJar.setFrom(url, setCookies);
 
     const duration = Date.now() - t0;
     state.last = { status, statusText, headers: respHeaders, text, json, ms: duration, setCookies: setCookies || [] };

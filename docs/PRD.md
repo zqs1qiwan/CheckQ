@@ -1,7 +1,9 @@
 # CheckQ PRD — 可视化 HTTP 自动化流程引擎
 
-版本: 0.3 (PRD) | 基线代码: v0.2.0 | 状态: v0.2 P0 已全部实现并推送 GitHub (6813a9e)
+版本: 0.3 (PRD) | 基线代码: v0.3.0 | 状态: v0.2 P0 已全部实现；QD 兼容层 GAP-C1~C4 已落地（2026-11-08）
 定位一句话: **像搭积木一样搭建"自动签到/打卡/监控"类 HTTP 流程，一个模板派生多份任务，全程可视化、可调试、可告警。**
+
+> **续建判断依据（2026-11-08 评审）**：本仓库并非空仓——已有 v0.2 可运行基线（DAG 引擎、8 类节点、Pick Panel、模板系统、SSE 日志、cURL/HAR/QD 导入、103 项单测、路由器实测实例）。产品目标（拖拽流程化、条件分支、自定义请求、日志推送、Docker 部署）与现状同向，重建只会丢弃已验证资产。决策：**续建**。缺口用实测数据驱动收敛——现网 QD 采样（39 任务/13 模板，见 docs/QIANDAO-COMPAT.md）定位出 4 个真实阻塞点（cookie 罐/util 转换/表达式层/变量 URL），本轮已全部闭环，QD 任务运行级兼容 ≥ 12/13。
 
 ---
 
@@ -113,6 +115,9 @@ Run = { id, flowId, trigger: manual|cron|debug|api, status, logs[], vars, finalM
 8. 无 cURL 命令导入、无"复制为 curl" ✅ v0.2 已实现（cURL 导入；"复制为 curl" ⬜ P1）
 9. 登录无防爆破；无备份/恢复；无运行统计 ⬜ P1/P2
 10. 列表无搜索/筛选/分组、无下次运行时间显示 ✅ v0.2 已实现（搜索 + 筛选 + nextRunAt）
+11. 无 run 级 cookie 罐（登录→签到链断裂）✅ v0.3 已实现（GAP-C1，cookiejar.js，显式头同名优先，节点可 `cookieJar:false` 退出）
+12. 模板表达式层弱于 QD jinja（md5 拼接签名/default/striptags 不可用）✅ v0.3 已实现（GAP-C3，白名单函数式求值，无 eval）
+13. QD 导入丢弃 api://util/* 步骤、`data` 请求体丢失、变量 URL 被拒 ✅ v0.3 已实现（GAP-C2/C4/C5）
 
 ---
 
@@ -281,6 +286,8 @@ script 沙箱细则:
 | 代理 | http config 增 `proxy: { url }`（http/https/socks5h）；fetch 后端用 undici ProxyAgent，curl 后端映射 `--proxy`；值支持 `{{proxyVar}}` | ✅ v0.2 |
 | charset | http config 增 `charset`（默认 utf-8，可选 gbk/gb2312/big5）；fetch 路径: ArrayBuffer → TextDecoder；curl 路径: 管道 iconv | ✅ v0.2 |
 | Set-Cookie 捕获 | fetch: `getSetCookie()`；curl: 头文件解析，支持 `-c cookieJar`（可选） | ✅ v0.2 |
+| run 级 Cookie 罐 | 一次运行内 http 节点共享：Set-Cookie 自动入罐（Domain 子域共享/空值删除），后续同域请求自动携带；显式 cookie 头同名键优先；节点 `cookieJar:false` 退出；命中落 stepLog `detail.jar` | ✅ v0.3（GAP-C1） |
+| 函数式模板表达式 | `{{md5("a"+var+"b")\|upper}}` 白名单函数求值（md5/sha*/multiply/divide/add/sub/int/float/str/timestamp('float')/urlencode/quote_chinese/b64*/upper/lower + 拼接/字面量）；过滤器增 `default()`/`int`/`float`/`striptags`；管道切分尊重引号 | ✅ v0.3（GAP-C3） |
 | HTTP/2 | curl 后端 config 增 `http2: true` → `--http2`（TLS 指纹场景常配套） | P1 |
 | 失败即停 vs 继续 | http 节点 failed 出口未连线时默认停（现状）；新增流级开关 `onError: stop|continue`（continue 时记录失败继续走入口下一个可走节点，用于"多签到并行"图） | P2 |
 | 流级超时 | 流级 `maxDurationMs`（默认 120s），超时 kill 并落日志 | P1 |
@@ -497,7 +504,7 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 | 功能 | 设计 | 状态 |
 |---|---|---|
 | HAR 导入 | ✅（进流程） | ✅ |
-| QD 模板导入 | ✅ 脚本（SKIP 过滤、init_env→vars）→ 目标改为直接产模板+可选批量任务 | 🔶 |
+| QD 模板导入 | ✅（含 SKIP 过滤、init_env→vars、api://util/delay→delay 节点、util/unicode|urldecode→log 节点、data 字段→body、变量 URL 放行；兼容性实测见 docs/QIANDAO-COMPAT.md） | ✅ v0.3 |
 | cURL 导入 | 粘贴 curl 命令 → 自动解析 method/url/headers/body 生成 http 节点（覆盖 -H/--data/-b/--compressed/--http2） | ✅ v0.2（12 项单测） |
 | 流程导出 | 任务 JSON 导出（含 vars 时警告含敏感信息） | 🔶 v0.2（模板导出已有，任务导出 ⬜） |
 | 全量备份 | 设置页"导出全部"（flows/runs/templates/meta 打包 JSON）；"导入恢复"；建议 cron 外部备份 data 目录 | ⬜ P1 |
@@ -534,17 +541,17 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 |---|---|---|---|
 | JSON API 签到（cookie 头直接带） | http + 断言 code==0 | ✅ | — |
 | 表单登录后签到（两步请求） | http 登录 → extract 取 token → http 签到 | ✅ | — |
-| 需捕获下发的 cookie | 登录响应 Set-Cookie → 后续请求复用 | ⬜ | extract last.setCookie (P0) |
+| 需捕获下发的 cookie | 登录响应 Set-Cookie → 后续请求复用 | ✅ | extract last.setCookie (P0)；v0.3 起另有 run 级 cookie 罐自动携带（GAP-C1） |
 | 目标站对 Node TLS 指纹风控 | curl 后端 | ✅ | http2 配套 (P1) |
-| GBK 编码站点（老 PT 论坛） | charset 转码 | ⬜ | charset (P0) |
-| 需代理出口 | proxy | ⬜ | proxy (P0) |
-| 偶发失败需重试 | 节点级重试+退避 | ⬜ | retry (P0) |
-| 反自动化风控（整点高峰、固定间隔指纹） | 随机延迟 + cron 抖动 | ⬜ | random-delay 节点 + jitter (P0) |
+| GBK 编码站点（老 PT 论坛） | charset 转码 | ✅ v0.2 | — |
+| 需代理出口 | proxy | ✅ v0.2 | — |
+| 偶发失败需重试 | 节点级重试+退避 | ✅ v0.2 | — |
+| 反自动化风控（整点高峰、固定间隔指纹） | 随机延迟 + cron 抖动 | 🔶 | random-delay 节点 ✅ v0.2；cron jitter ⬜ (P1) |
 | 翻页/列表批量操作（如批量保种页面遍历） | foreach | ⬜ | foreach (P1) |
 | 多账号同站 | 模板 → CSV 批量建任务 | ✅(手动逐个) | CSV 批量 (P0) |
 | 签到结果通知 | TG/Bark/webhook | ✅ | 消息模板 (P1) |
 | 签到成功但页面文案变化（如"已签到"双态） | 正则断言多模式 res[] 任一命中 | ✅ | — |
-| 复杂签名/加密参数 | script 沙箱 | ⬜ | script (P1) |
+| 复杂签名/加密参数 | 函数式模板表达式（md5/sha* 拼接签名）✅ v0.3；script 沙箱兜底 | 🔶 | script (P1) |
 | 302 重定向中转 token | redirect: manual + extract Location | ✅ | — |
 
 ---

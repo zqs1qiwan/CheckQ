@@ -42,9 +42,34 @@ export function importHar(rawText) {
     if (entry.checked === false) return;
     const req = entry.request || {};
     const method = (req.method || 'GET').toUpperCase();
-    if (!/^https?:/i.test(req.url || '')) return;
-    const url = new URL(req.url);
-    if (shouldSkip(url, method)) return;
+    const rawUrl = String(req.url || '');
+
+    // QD api://util/delay/N → delay 节点（GAP-C2：QD 模板常用步骤间延时防风控）
+    const delayM = rawUrl.match(/^api:\/\/util\/delay\/(\d+)/i);
+    if (delayM) {
+      chain({ id: `n${i}`, type: 'delay', name: `延迟 ${delayM[1]}s`, x: 80, y: 60 + i * 130, config: { seconds: Number(delayM[1]) } }, 'next');
+      return;
+    }
+
+    // QD api://util/unicode|urldecode → log 节点（GAP-C2：QD 的日志中文转码 hack，本引擎响应已解码，直接输出模板）
+    if (/^api:\/\/util\/(unicode|urldecode)/i.test(rawUrl)) {
+      let text = '';
+      try { text = new URL(rawUrl).searchParams.get('content') || ''; } catch {}
+      if (!text) {
+        const bodyText = typeof req.data === 'string' ? req.data : (req.postData?.text || '');
+        text = bodyText.match(/(?:^|&)content=([^&]*)/)?.[1] || '';
+      }
+      text = decodeURIComponentSafe(text);
+      chain({ id: `n${i}`, type: 'log', name: '输出日志', x: 80, y: 60 + i * 130, config: { text } }, 'next');
+      return;
+    }
+
+    // 放行含 {{var}} 的变量 URL（GAP-C4：如 {{solver_url}} 代理解谜服务地址）
+    const hasVar = /\{\{[^}]+\}\}/.test(rawUrl);
+    if (!/^https?:/i.test(rawUrl) && !hasVar) return;
+    let url = null;
+    try { url = new URL(rawUrl); } catch { url = null; }
+    if (url && shouldSkip(url, method)) return;
 
     const rule = entry.rule || {};
     const qdSa = rule.success_asserts || entry.success_asserts || [];
@@ -52,7 +77,7 @@ export function importHar(rawText) {
     const qdEv = rule.extract_variables || entry.extract_variables || [];
 
     // ---- QD localhost string/replace __log__ hack → log 节点 ----
-    if (isQdLocalhostLog(url)) {
+    if (url && isQdLocalhostLog(url)) {
       // s 参数是渲染模板；QD 的 |urlencode→localhost 解码舞蹈在直渲下直接剥掉过滤器
       const raw = url.searchParams.get('s') || '';
       const text = raw.replace(/\|(?:urlencode|json)\}\}/g, '}}');
@@ -68,8 +93,10 @@ export function importHar(rawText) {
       if (h.checked === false) continue;
       headers.push({ name: h.name, value: h.value, enabled: true });
     }
+    // QD tpl 格式的请求体在 data 字段；浏览器 HAR 在 postData
     const postData = req.postData || {};
-    const body = typeof postData === 'string' ? postData : (postData.text || '');
+    const body = typeof req.data === 'string' ? req.data
+      : (typeof postData === 'string' ? postData : (postData.text || ''));
 
     const asserts = [];
     if (qdSa.length) asserts.push({ res: qdSa.map((a) => a.re), from: qdSa[0].from || 'content' });
@@ -78,10 +105,10 @@ export function importHar(rawText) {
     const node = {
       id: `n${i}`,
       type: 'http',
-      name: `${method} ${url.pathname.slice(0, 24)}`,
+      name: url ? `${method} ${url.pathname.slice(0, 24)}` : `${method} {{变量URL}}`,
       x: 80,
       y: 60 + i * 130,
-      config: { method, url: req.url, headers, body, asserts },
+      config: { method, url: rawUrl, headers, body, asserts },
     };
     chain(node, 'success');
 

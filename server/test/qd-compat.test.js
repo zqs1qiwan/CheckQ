@@ -86,6 +86,22 @@ check('空格管道 striptags', renderTemplate('{{ v | striptags }}', { v: '<b>O
   check('变量 URL 放行', flow.nodes.length, 1);
   check('变量 URL 保留', flow.nodes[0].config.url, '{{solver_url}}');
 }
+{
+  // util/unicode 回声计算 hack → set 节点（提取非 __log__ 变量时）
+  const qd = JSON.stringify({
+    tpl: [
+      { request: { method: 'POST', url: 'api://util/unicode', headers: [], data: 'content={{multiply(timestamp(\'float\'),1000)|int}}' },
+        rule: { extract_variables: [{ name: 'tsp', re: '"转换后": "(.*)"' }] } },
+      { request: { method: 'POST', url: 'api://util/unicode', headers: [], data: 'content=结果: {{msg0}}' },
+        rule: { extract_variables: [{ name: '__log__', re: '"转换后": "([\\s\\S]*?)"' }] } },
+    ],
+  });
+  const flow = importHar(qd);
+  check('回声计算 → set 节点', flow.nodes[0].type, 'set');
+  check('set 变量名', flow.nodes[0].config.name, 'tsp');
+  check('set 保留表达式', flow.nodes[0].config.value, "{{multiply(timestamp('float'),1000)|int}}");
+  check('__log__ 仍 → log 节点', flow.nodes[1].type, 'log');
+}
 
 // ---- 引擎级 cookie 罐（GAP-C1 集成）----
 const realFetch = globalThis.fetch;

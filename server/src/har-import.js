@@ -44,6 +44,11 @@ export function importHar(rawText) {
     const method = (req.method || 'GET').toUpperCase();
     const rawUrl = String(req.url || '');
 
+    const rule = entry.rule || {};
+    const qdSa = rule.success_asserts || entry.success_asserts || [];
+    const qdFa = rule.failed_asserts || entry.failed_asserts || [];
+    const qdEv = rule.extract_variables || entry.extract_variables || [];
+
     // QD api://util/delay/N → delay 节点（GAP-C2：QD 模板常用步骤间延时防风控）
     const delayM = rawUrl.match(/^api:\/\/util\/delay\/(\d+)/i);
     if (delayM) {
@@ -51,7 +56,9 @@ export function importHar(rawText) {
       return;
     }
 
-    // QD api://util/unicode|urldecode → log 节点（GAP-C2：QD 的日志中文转码 hack，本引擎响应已解码，直接输出模板）
+    // QD api://util/unicode|urldecode（GAP-C2）：
+    //  - 带 extract_variables 时 = 「回声计算」hack（如 tsp={{multiply(...)}} 再提取）→ 每个提取变量生成 set 节点直接渲染
+    //  - 否则/含 __log__ = 日志中文转码 → log 节点（本引擎响应已解码无需真转码）
     if (/^api:\/\/util\/(unicode|urldecode)/i.test(rawUrl)) {
       let text = '';
       try { text = new URL(rawUrl).searchParams.get('content') || ''; } catch {}
@@ -62,6 +69,13 @@ export function importHar(rawText) {
       text = decodeURIComponentSafe(text);
       // QD 的 |urlencode 是给 util/unicode 解码用的舞蹈；直渲下剥掉过滤器，避免日志残留 %2C
       text = text.replace(/\|(?:urlencode|json)\}\}/g, '}}');
+      const computeVars = qdEv.filter((ev) => ev.name && ev.name !== '__log__');
+      if (computeVars.length) {
+        computeVars.forEach((ev, j) => {
+          chain({ id: `n${i}s${j}`, type: 'set', name: `计算 ${ev.name}`, x: 260, y: 60 + i * 130 + j * 90, config: { name: ev.name, value: text } }, 'next');
+        });
+        if (!qdEv.some((ev) => ev.name === '__log__')) return;
+      }
       chain({ id: `n${i}`, type: 'log', name: '输出日志', x: 80, y: 60 + i * 130, config: { text } }, 'next');
       return;
     }
@@ -72,11 +86,6 @@ export function importHar(rawText) {
     let url = null;
     try { url = new URL(rawUrl); } catch { url = null; }
     if (url && shouldSkip(url, method)) return;
-
-    const rule = entry.rule || {};
-    const qdSa = rule.success_asserts || entry.success_asserts || [];
-    const qdFa = rule.failed_asserts || entry.failed_asserts || [];
-    const qdEv = rule.extract_variables || entry.extract_variables || [];
 
     // ---- QD localhost string/replace __log__ hack → log 节点 ----
     if (url && isQdLocalhostLog(url)) {

@@ -146,6 +146,7 @@ await ok('QD 模板导入 → 流程可执行', async () => {
   assert.strictEqual(flow.nodes[1].type, 'extract');
   assert.ok(flow.nodes[0].config.asserts.length >= 1, 'QD success_asserts 应转为断言');
   assert.strictEqual(flow.nodes[0].config.body, '{"token":"demo"}', 'postData.text 应保留');
+  assert.strictEqual(flow.nodes[0].config.backend, 'curl', 'QD 导入应默认 curl 后端（对齐 pycurl）');
   assert.strictEqual(flow.nodes[1].config.name, 'points', 'extract 节点应命名');
   assert.strictEqual(flow.nodes[1].config.optional, true, 'QD extract 语义为尽力提取');
 
@@ -153,6 +154,7 @@ await ok('QD 模板导入 → 流程可执行', async () => {
     { body: JSON.stringify({ code: 0, message: 'Checkin! Got 9 Points' }) },
   ]);
   flow.vars = { cookie: 'sess=fake; sig=fake' };
+  flow.nodes[0].config.backend = 'fetch'; // 测试用 fetch 以便 mock
   const eng = new Engine(flow);
   const res = await eng.run({});
   assert.strictEqual(res.ok, true, `应成功: ${JSON.stringify(res.logs.map((l) => `${l.type}:${l.ok}:${l.message.slice(0, 60)}`))}`);

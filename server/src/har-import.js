@@ -60,6 +60,8 @@ export function importHar(rawText) {
         text = bodyText.match(/(?:^|&)content=([^&]*)/)?.[1] || '';
       }
       text = decodeURIComponentSafe(text);
+      // QD 的 |urlencode 是给 util/unicode 解码用的舞蹈；直渲下剥掉过滤器，避免日志残留 %2C
+      text = text.replace(/\|(?:urlencode|json)\}\}/g, '}}');
       chain({ id: `n${i}`, type: 'log', name: '输出日志', x: 80, y: 60 + i * 130, config: { text } }, 'next');
       return;
     }
@@ -108,7 +110,8 @@ export function importHar(rawText) {
       name: url ? `${method} ${url.pathname.slice(0, 24)}` : `${method} {{变量URL}}`,
       x: 80,
       y: 60 + i * 130,
-      config: { method, url: rawUrl, headers, body, asserts },
+      // QD 模板统一 curl 后端（对齐 pycurl 行为：TLS 指纹 + POST 默认 form content-type）；浏览器 HAR 保持 fetch
+      config: { method, url: rawUrl, headers, body, asserts, ...(isQd ? { backend: 'curl' } : {}) },
     };
     chain(node, 'success');
 

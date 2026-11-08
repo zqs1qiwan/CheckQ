@@ -12,7 +12,12 @@ export function renderTemplate(tpl, vars, missing) {
   if (typeof tpl !== 'string') return tpl;
   return tpl.replace(/\{\{([^}]+)\}\}/g, (_, expr) => {
     const raw = expr.trim();
-    // jinja 风格 or fallback: {{ua or 'xxx'}} / {{ua or xxx}}
+    // 函数式/拼接表达式（含括号/引号/+）整体走表达式求值（内部支持 or/管道/拼接）
+    if (/[('"+]/.test(raw) && !/^\w+(\.\w+)*$/.test(raw)) {
+      const val = resolvePath(vars, raw, missing);
+      return val === undefined || val === null ? '' : stringify(val);
+    }
+    // jinja 风格 or fallback（简单形态）: {{ua or 'xxx'}} / {{ua or xxx}}
     if (/\s+or\s+/.test(raw)) {
       for (const alt of raw.split(/\s+or\s+/)) {
         const part = alt.trim();
@@ -34,8 +39,17 @@ function stringify(v) {
 
 /** 深路径取值: vars, 'user.email' → vars.user.email；带 |urlencode / |json / |base64 过滤器 */
 export function resolvePath(vars, path, missing) {
+  const str0 = String(path);
+  // 函数式/拼接表达式：整体求值（内部处理 or/拼接/后置管道），不做顶层管道切分
+  if (/[('"+]/.test(str0) && !/^\w+(\.\w+)*$/.test(str0)) {
+    try {
+      return evalTemplateExpr(str0, vars, missing);
+    } catch {
+      return '';
+    }
+  }
   // 伪函数路径: timestamp[:ms] / now[:fmt] — 不从 vars 取值。参数在冒号后(如 now:%Y%m%d),也可在管道首项
-  const [p0, ...filters0] = splitPipes(String(path));
+  const [p0, ...filters0] = splitPipes(str0);
   const pseudoArg = p0.includes(':') ? p0.slice(p0.indexOf(':') + 1) : undefined;
   const pseudoName = p0.includes(':') ? p0.slice(0, p0.indexOf(':')) : p0;
   if (pseudoName === 'timestamp' || pseudoName === 'now') {
@@ -86,11 +100,12 @@ export function resolvePath(vars, path, missing) {
   return cur;
 }
 
-/** 管道切分（尊重引号，`{{md5("a|b")}}` 不会在字面量内断） */
+/** 管道切分（尊重引号与括号嵌套，`{{md5("a|b")}}` / `{{f(x|upper)}}` 不会在内部误断） */
 function splitPipes(str) {
   const out = [];
   let cur = '';
   let quote = null;
+  let depth = 0;
   for (let i = 0; i < str.length; i++) {
     const ch = str[i];
     if (quote) {
@@ -99,7 +114,9 @@ function splitPipes(str) {
       continue;
     }
     if (ch === "'" || ch === '"') { quote = ch; cur += ch; continue; }
-    if (ch === '|') { out.push(cur.trim()); cur = ''; continue; }
+    if (ch === '(') depth++;
+    else if (ch === ')') depth = Math.max(0, depth - 1);
+    if (ch === '|' && depth === 0) { out.push(cur.trim()); cur = ''; continue; }
     cur += ch;
   }
   out.push(cur.trim());
@@ -121,11 +138,24 @@ function parseFilterSpec(f) {
     : { name: String(f).trim(), arg: undefined };
 }
 
-/** QD/jinja 风格函数式表达式求值（GAP-C3）。白名单函数 + 字符串拼接 + 字面量 + 变量路径，无 eval。 */
+/** QD/jinja 风格函数式表达式求值（GAP-C3）。白名单函数 + 字符串拼接 + or 兜底 + 字面量 + 变量路径 + 管道过滤器，无 eval。 */
 export function evalTemplateExpr(src, vars, missing) {
   const s = String(src);
   let i = 0;
   const skipWs = () => { while (i < s.length && /\s/.test(s[i])) i++; };
+  const truthy = (v) => !(v === undefined || v === null || v === '' || v === 0 || v === false || (typeof v === 'number' && isNaN(v)));
+  // expr := concat ('or' concat)* — jinja or：取第一个真值
+  function parseExpr() {
+    let val = parseConcat();
+    while (true) {
+      skipWs();
+      if (s.slice(i, i + 2) === 'or' && !/[\w.]/.test(s[i + 2] || '')) {
+        i += 2;
+        const rhs = parseConcat();
+        if (!truthy(val)) val = rhs;
+      } else return val;
+    }
+  }
   function parseConcat() {
     let val = parsePrimary();
     while (true) {
@@ -137,6 +167,7 @@ export function evalTemplateExpr(src, vars, missing) {
   function parsePrimary() {
     skipWs();
     const ch = s[i];
+    let val;
     if (ch === "'" || ch === '"') {
       const q = ch; i++;
       let out = '';
@@ -145,44 +176,67 @@ export function evalTemplateExpr(src, vars, missing) {
         else { out += s[i]; i++; }
       }
       i++; // 跳过闭引号
-      return out;
-    }
-    if (ch === '(') {
-      i++; const v = parseConcat(); skipWs(); if (s[i] === ')') i++; return v;
-    }
-    if (/\d/.test(ch) || (ch === '-' && /\d/.test(s[i + 1] || ''))) {
+      val = out;
+    } else if (ch === '(') {
+      i++; val = parseExpr(); skipWs(); if (s[i] === ')') i++;
+    } else if (/\d/.test(ch) || (ch === '-' && /\d/.test(s[i + 1] || ''))) {
       let j = i + 1;
       while (j < s.length && /[\d.]/.test(s[j])) j++;
-      const num = parseFloat(s.slice(i, j)); i = j; return num;
-    }
-    let j = i;
-    while (j < s.length && /[\w.]/.test(s[j])) j++;
-    const ident = s.slice(i, j);
-    if (!ident) throw new Error(`表达式解析失败: ${s}`);
-    i = j;
-    skipWs();
-    if (s[i] === '(') {
-      i++;
-      const args = [];
+      val = parseFloat(s.slice(i, j)); i = j;
+    } else {
+      let j = i;
+      while (j < s.length && /[\w.]/.test(s[j])) j++;
+      const ident = s.slice(i, j);
+      if (!ident) throw new Error(`表达式解析失败: ${s}`);
+      i = j;
       skipWs();
-      if (s[i] !== ')') {
-        args.push(parseConcat());
-        while (true) { skipWs(); if (s[i] === ',') { i++; args.push(parseConcat()); } else break; }
+      if (s[i] === '(') {
+        i++;
+        const args = [];
+        skipWs();
+        if (s[i] !== ')') {
+          args.push(parseExpr());
+          while (true) { skipWs(); if (s[i] === ',') { i++; args.push(parseExpr()); } else break; }
+        }
+        skipWs(); if (s[i] === ')') i++;
+        const fn = EXPR_FUNCS[ident];
+        if (!fn) throw new Error(`不支持的函数: ${ident}`);
+        val = fn(...args);
+      } else {
+        let cur = vars;
+        for (const k of ident.split('.')) {
+          if (cur == null) { if (missing) missing.add(ident); cur = undefined; break; }
+          cur = cur[k];
+        }
+        if (cur === undefined && missing) missing.add(ident);
+        val = cur;
       }
-      skipWs(); if (s[i] === ')') i++;
-      const fn = EXPR_FUNCS[ident];
-      if (!fn) throw new Error(`不支持的函数: ${ident}`);
-      return fn(...args);
     }
-    let cur = vars;
-    for (const k of ident.split('.')) {
-      if (cur == null) { if (missing) missing.add(ident); return undefined; }
-      cur = cur[k];
+    // 后置管道过滤器：ident|default('x') / f(...)|upper / (expr)|int
+    while (true) {
+      skipWs();
+      if (s[i] !== '|') return val;
+      i++;
+      let j = i;
+      while (j < s.length && /[\w]/.test(s[j])) j++;
+      const fname = s.slice(i, j);
+      i = j;
+      skipWs();
+      let arg;
+      if (s[i] === '(') {
+        i++;
+        const av = parseExpr();
+        skipWs(); if (s[i] === ')') i++;
+        arg = av;
+      } else if (s[i] === ':') {
+        i++;
+        const av = parsePrimary();
+        arg = av;
+      }
+      val = applyFilter(val, fname, arg);
     }
-    if (cur === undefined && missing) missing.add(ident);
-    return cur;
   }
-  const result = parseConcat();
+  const result = parseExpr();
   skipWs();
   if (i < s.length) throw new Error(`表达式尾部无法解析: ${s.slice(i)}`);
   return result;

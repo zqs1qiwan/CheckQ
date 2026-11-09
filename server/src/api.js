@@ -151,7 +151,7 @@ export function buildServer({ dataDir, port }) {
     return { ok: true };
   });
 
-  app.get('/api/health', async () => ({ ok: true, version: '0.3.4' }));
+  app.get('/api/health', async () => ({ ok: true, version: '0.3.5' }));
 
   // ---- flows ----
   app.get('/api/flows', async () => store.listFlows());
@@ -443,7 +443,7 @@ export function buildServer({ dataDir, port }) {
 
   // 备份/恢复：导出 flows/runs/templates（meta 密码不导出）；恢复以新 ID 导入避免覆盖
   app.get('/api/system/backup', async () => ({
-    version: '0.3.4',
+    version: '0.3.5',
     exportedAt: new Date().toISOString(),
     flows: store.flows,
     runs: store.runs,

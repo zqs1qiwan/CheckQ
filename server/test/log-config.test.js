@@ -105,20 +105,23 @@ await ok('默认 resBodyLimit=2000（无配置时行为不变）', async () => {
   assert.ok(l.detail.response.body.includes('3000 bytes'));
 });
 
-// ========== 模板边界 log 往返 ==========
-await ok('模板 log 配置经 createTemplate → instantiate 完整复制', async () => {
+// ========== 模板边界 log + notify 往返 ==========
+await ok('模板 log/notify 配置经 createTemplate → instantiate 完整复制', async () => {
   const { Store } = await import('../src/store.js');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cq-tpl-'));
   const s = new Store(dir);
   const logCfg = { level: 'failure', include: { reqHeaders: false }, resBodyLimit: 500, keywords: [{ name: '积分', regex: '积分(\\d+)', from: 'response', into: 'summary' }] };
+  const notifyCfg = { channels: [{ type: 'webhook', url: 'https://httpbin.org/post' }], onSuccess: true, template: 't {{status}}' };
   const tpl = s.createTemplate({
     name: 't1', vars: { a: '1' },
     nodes: [{ id: 'n1', type: 'log', name: 'x', x: 0, y: 0, config: { text: 'hi' } }],
-    edges: [], log: logCfg,
+    edges: [], log: logCfg, notify: notifyCfg,
   });
   assert.deepStrictEqual(tpl.log, logCfg);
+  assert.deepStrictEqual(tpl.notify, notifyCfg);
   const inst = s.instantiateTemplate(tpl.id, {});
   assert.deepStrictEqual(inst.log, logCfg);
+  assert.deepStrictEqual(inst.notify, notifyCfg);
   // updateTemplate 持久化 log + 默认变量编辑
   s.updateTemplate(tpl.id, { vars: { a: '2', b: '3' }, log: { level: 'summary' } });
   assert.deepStrictEqual(s.getTemplate(tpl.id).vars, { a: '2', b: '3' });

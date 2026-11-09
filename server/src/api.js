@@ -208,7 +208,8 @@ export function buildServer({ dataDir, port }) {
     for (const ch of channels || []) {
       try {
         if (ch.type === 'webhook') {
-          await fetch(ch.url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: text });
+          const res = await fetch(ch.url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: text });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
         } else if (ch.type === 'telegram') {
           const res = await fetch(`https://api.telegram.org/bot${ch.token}/sendMessage`, {
             method: 'POST', headers: { 'content-type': 'application/json' },
@@ -272,7 +273,7 @@ export function buildServer({ dataDir, port }) {
     return { ok: true };
   });
 
-  app.get('/api/health', async () => ({ ok: true, version: '0.3.15' }));
+  app.get('/api/health', async () => ({ ok: true, version: '0.3.16' }));
 
   // 设置：改密 / API Key（单用户）
   app.get('/api/system/settings', async () => ({ hasApiKey: !!store.meta.apiKey, apiKey: store.meta.apiKey ? store.meta.apiKey.slice(0, 8) + '…' : null }));
@@ -337,6 +338,7 @@ export function buildServer({ dataDir, port }) {
       nodes: f.nodes,
       edges: f.edges,
       log: f.log,
+      notify: f.notify || {},
     }, 'flow');
     return { id: tpl.id, name: tpl.name };
   });
@@ -344,10 +346,10 @@ export function buildServer({ dataDir, port }) {
   app.get('/api/templates', async () => store.listTemplates());
 
   app.post('/api/templates', async (req, reply) => {
-    const { name, desc, vars, varNames, nodes, edges, log } = req.body || {};
+    const { name, desc, vars, varNames, nodes, edges, log, notify } = req.body || {};
     const errors = validateFlow({ name, nodes, edges, vars });
     if (errors.length) return reply.code(400).send({ error: errors.join('; ') });
-    const tpl = store.createTemplate({ name, desc, vars, varNames, nodes, edges, log }, 'import');
+    const tpl = store.createTemplate({ name, desc, vars, varNames, nodes, edges, log, notify }, 'import');
     return { id: tpl.id, name: tpl.name };
   });
 
@@ -642,7 +644,7 @@ export function buildServer({ dataDir, port }) {
 
   // 备份/恢复：导出 flows/runs/templates（meta 密码不导出）；恢复以新 ID 导入避免覆盖
   app.get('/api/system/backup', async () => ({
-    version: '0.3.15',
+    version: '0.3.16',
     exportedAt: new Date().toISOString(),
     flows: store.flows,
     runs: store.runs,

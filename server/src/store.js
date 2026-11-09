@@ -184,6 +184,8 @@ export class Store {
       edges: data.edges || [],
       // 模板携带日志配置（PRD §4.3.1）：level/include/resBodyLimit/keywords 随模板复制
       log: data.log || null,
+      // 模板携带通知渠道（带通知的模板实例自动带上通知）：flow.notify 经模板边界不丢失
+      notify: data.notify || {},
       createdAt: Date.now(),
     };
     this.templates.push(tpl);
@@ -194,7 +196,7 @@ export class Store {
   updateTemplate(id, patch) {
     const t = this.getTemplate(id);
     if (!t) return null;
-    for (const k of ['name', 'desc', 'vars', 'varNames', 'log', 'nodes', 'edges']) {
+    for (const k of ['name', 'desc', 'vars', 'varNames', 'log', 'nodes', 'edges', 'notify']) {
       if (patch[k] !== undefined) t[k] = patch[k];
     }
     // varNames 与 vars 保持一致：显式传 varNames 时以它为准补齐 vars；只改 vars 时同步 varNames
@@ -229,6 +231,7 @@ export class Store {
       nodes: tpl.nodes,
       edges: tpl.edges,
       log: tpl.log,
+      notify: tpl.notify || {},
       tplId,
     });
   }

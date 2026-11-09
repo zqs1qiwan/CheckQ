@@ -311,7 +311,8 @@ function FlowEditorInner({ flowId, onBack }) {
       updateConfig(node.id, { ...node.data.config, ...picked.nodes[0].config, name: picked.varName || node.data.config.name });
       showToast('已原位替换提取配置，立即重跑验证', 'ok');
     } else if (picked.assert) {
-      const asserts = [...(node.data.config?.asserts || []), picked.assert];
+      // repick=原位替换整组断言，避免追加后旧错断言仍失败（PRD §4.0.5）
+      const asserts = [picked.assert];
       updateConfig(node.id, { asserts });
       showToast('已原位替换断言，立即重跑验证', 'ok');
     }

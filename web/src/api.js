@@ -93,4 +93,7 @@ export const api = {
   importCurl: (command) => req('POST', '/api/import/curl', { command }),
   importHar: (formData) => req('POST', '/api/import/har', formData, true),
   stats: () => req('GET', '/api/system/stats'),
+  batch: (ids, action) => req('POST', '/api/flows/batch', { ids, action }),
+  backup: () => req('GET', '/api/system/backup'),
+  restore: (body) => req('POST', '/api/system/restore', body),
 };

@@ -413,6 +413,72 @@ export function buildServer({ dataDir, port }) {
   // ---- runs ----
   app.get('/api/system/stats', async () => store.stats());
 
+  // 批量操作（青龙/千岛对标：多选批量运行/启停/删除）
+  app.post('/api/flows/batch', async (req, reply) => {
+    const { ids, action } = req.body || {};
+    if (!Array.isArray(ids) || !ids.length) return reply.code(400).send({ error: '缺少 ids' });
+    if (!['run', 'enable', 'disable', 'delete'].includes(action)) return reply.code(400).send({ error: '不支持的 action' });
+    if (ids.length > 200) return reply.code(400).send({ error: '单次最多 200 个' });
+    const results = [];
+    let changed = false;
+    for (const id of ids) {
+      const f = store.getFlow(id);
+      if (!f) { results.push({ id, ok: false, error: 'not found' }); continue; }
+      try {
+        if (action === 'enable') { store.updateFlow(id, { enabled: true }); changed = true; results.push({ id, ok: true }); }
+        else if (action === 'disable') { store.updateFlow(id, { enabled: false }); changed = true; results.push({ id, ok: true }); }
+        else if (action === 'delete') { store.deleteFlow(id); changed = true; results.push({ id, ok: true }); }
+        else if (action === 'run') {
+          const run = await runner.runFlow(f, 'manual');
+          results.push({ id, ok: run.status === 'success', runId: run.id, status: run.status });
+        }
+      } catch (e) {
+        results.push({ id, ok: false, error: e.message });
+      }
+    }
+    if (changed) scheduler.rebuild();
+    const okCount = results.filter((r) => r.ok).length;
+    return { action, total: ids.length, ok: okCount, failed: ids.length - okCount, results };
+  });
+
+  // 备份/恢复：导出 flows/runs/templates（meta 密码不导出）；恢复以新 ID 导入避免覆盖
+  app.get('/api/system/backup', async () => ({
+    version: '0.3.4',
+    exportedAt: new Date().toISOString(),
+    flows: store.flows,
+    runs: store.runs,
+    templates: store.templates,
+  }));
+
+  app.post('/api/system/restore', async (req, reply) => {
+    const b = req.body || {};
+    if (!Array.isArray(b.flows)) return reply.code(400).send({ error: '备份文件无效：缺少 flows 数组' });
+    const createdFlows = [];
+    for (const f of b.flows) {
+      if (!f?.name) continue;
+      const nf = store.createFlow({
+        name: `${f.name}（恢复）`,
+        note: f.note || '从备份恢复',
+        cron: f.cron || '', timezone: f.timezone, jitterMinutes: f.jitterMinutes || 0,
+        vars: f.vars || {}, nodes: f.nodes || [], edges: f.edges || [],
+        notify: f.notify || {}, log: f.log || null, tplId: null,
+      });
+      nf.enabled = false;
+      createdFlows.push({ id: nf.id, name: nf.name });
+    }
+    const createdTemplates = [];
+    if (Array.isArray(b.templates)) {
+      for (const t of b.templates) {
+        if (!t?.name) continue;
+        const nt = store.createTemplate({ name: `${t.name}（恢复）`, desc: t.desc, vars: t.vars || {}, varNames: t.varNames, nodes: t.nodes || [], edges: t.edges || [], log: t.log || null });
+        createdTemplates.push({ id: nt.id, name: nt.name });
+      }
+    }
+    scheduler.rebuild();
+    return { createdFlows, createdTemplates };
+  });
+
+
   app.get('/api/runs', async (req) => {
     const { flowId, limit } = req.query;
     return store.listRuns(flowId, Math.min(Number(limit) || 30, 200));

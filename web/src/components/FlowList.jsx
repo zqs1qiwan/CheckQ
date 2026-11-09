@@ -27,6 +27,8 @@ export default function FlowList({ onOpen, onLogout }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all'); // all | scheduled | recent-failed
   const [stats, setStats] = useState(null);
+  const [selected, setSelected] = useState(new Set());
+  const [batchBusy, setBatchBusy] = useState(false);
   const fileRef = useRef();
   const editTemplateRef = useRef(); // 模板编辑页回调刷新
 
@@ -34,6 +36,7 @@ export default function FlowList({ onOpen, onLogout }) {
     api.flows().then(setFlows).catch((e) => setToast({ kind: 'fail', text: e.message }));
     api.templates().then(setTemplates).catch(() => setTemplates([]));
     api.stats().then(setStats).catch(() => setStats(null));
+    setSelected(new Set());
   };
 
   useEffect(() => { load(); }, []);
@@ -85,6 +88,34 @@ export default function FlowList({ onOpen, onLogout }) {
   const toggle = async (f) => {
     await api.updateFlow(f.id, { enabled: !f.enabled });
     load();
+  };
+
+  const toggleSelect = (id) => setSelected((s) => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+  const selectedAll = visibleFlows.length > 0 && visibleFlows.every((f) => selected.has(f.id));
+  const toggleSelectAll = () => setSelected(selectedAll ? new Set() : new Set(visibleFlows.map((f) => f.id)));
+
+  const doBatch = async (action) => {
+    const ids = [...selected];
+    if (!ids.length) return;
+    if (action === 'delete' && !confirm(`删除选中的 ${ids.length} 个任务？不可恢复`)) return;
+    setBatchBusy(true);
+    try {
+      const r = await api.batch(ids, action);
+      setToast({ kind: r.failed ? 'fail' : 'ok', text: `批量${action === 'run' ? '运行' : action}：成功 ${r.ok} / 失败 ${r.failed}` });
+      if (action === 'run') {
+        const first = r.results.find((x) => x.runId);
+        if (first) setModal({ type: 'result', run: await api.run(first.runId), flowId: first.id });
+      }
+      load();
+    } catch (e) {
+      setToast({ kind: 'fail', text: `批量操作失败: ${e.message}` });
+    } finally {
+      setBatchBusy(false);
+    }
   };
 
   const del = async (f) => {
@@ -192,6 +223,29 @@ export default function FlowList({ onOpen, onLogout }) {
         <div className="page-head" style={{ marginTop: 28 }}>
           <h2>任务</h2>
           <span className="spacer" />
+          {selected.size > 0 && (
+            <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--accent)' }}>已选 {selected.size}</span>
+              <button className="small primary" disabled={batchBusy} onClick={() => doBatch('run')}>▶ 批量运行</button>
+              <button className="small" disabled={batchBusy} onClick={() => doBatch('enable')}>启用</button>
+              <button className="small" disabled={batchBusy} onClick={() => doBatch('disable')}>停用</button>
+              <button className="small danger" disabled={batchBusy} onClick={() => doBatch('delete')}>删除</button>
+              <button className="small" onClick={() => setSelected(new Set())}>取消</button>
+            </span>
+          )}
+          <button className="small" onClick={async () => {
+            try {
+              const data = await api.backup();
+              const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+              const a = document.createElement('a');
+              a.href = URL.createObjectURL(blob);
+              a.download = `checkq-backup-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`;
+              a.click();
+              URL.revokeObjectURL(a.href);
+              setToast({ kind: 'ok', text: '备份已下载（密码不含在内）' });
+            } catch (e) { setToast({ kind: 'fail', text: e.message }); }
+          }}>备份</button>
+          <button className="small" onClick={() => setModal('restore')}>恢复</button>
           <input
             style={{ width: 180, fontSize: 13, padding: '4px 8px' }}
             placeholder="搜索名称/备注…"
@@ -217,11 +271,14 @@ export default function FlowList({ onOpen, onLogout }) {
         ) : (
           <table className="flow-table">
             <thead>
-              <tr><th>名称</th><th>调度</th><th>下次运行</th><th>状态</th><th>上次运行</th><th style={{ width: 240 }}>操作</th></tr>
+              <tr>
+                <th style={{ width: 36 }}><input type="checkbox" checked={selectedAll} onChange={toggleSelectAll} title="全选" /></th>
+                <th>名称</th><th>调度</th><th>下次运行</th><th>状态</th><th>上次运行</th><th style={{ width: 240 }}>操作</th></tr>
             </thead>
             <tbody>
               {visibleFlows.map((f) => (
                 <tr key={f.id}>
+                  <td><input type="checkbox" checked={selected.has(f.id)} onChange={() => toggleSelect(f.id)} /></td>
                   <td>
                     <a className="flow-name" href="#" onClick={(e) => { e.preventDefault(); onOpen(f.id); }}>{f.name}</a>
                     {f.note ? <div style={{ color: 'var(--muted)', fontSize: 12 }}>{f.note}</div> : null}
@@ -308,6 +365,10 @@ export default function FlowList({ onOpen, onLogout }) {
 
       {modal?.type === 'template-editor' && (
         <TemplateEditorModal tpl={modal.tpl} onDone={() => { setModal(null); load(); }} />
+      )}
+
+      {modal === 'restore' && (
+        <RestoreModal onClose={() => setModal(null)} onDone={() => { setModal(null); load(); }} />
       )}
 
       <Toast toast={toast} onClose={() => setToast(null)} />
@@ -551,6 +612,36 @@ function CsvImportModal({ tpl, onClose, onDone }) {
   );
 }
 
+/** 恢复备份：JSON 文件 → 全部以新 ID 恢复（默认停用，不覆盖现有） */
+function RestoreModal({ onClose, onDone }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const submit = async () => {
+    setBusy(true); setErr('');
+    try {
+      const data = JSON.parse(text);
+      const r = await api.restore(data);
+      setDoneInfo(r);
+      setTimeout(onDone, 300);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+  const [doneInfo, setDoneInfo] = useState(null);
+  return (
+    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ width: 640 }}>
+        <h3>从备份恢复</h3>
+        <p style={{ color: 'var(--muted)', fontSize: 12 }}>粘贴备份 JSON（「备份」按钮下载的文件）。恢复任务带「（恢复）」后缀且默认停用，手动启用后运行。</p>
+        <textarea className="mono" rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder='{"flows": [...]}' />
+        {doneInfo && <p style={{ color: 'var(--ok)', fontSize: 12 }}>已恢复 {doneInfo.createdFlows?.length || 0} 个任务、{doneInfo.createdTemplates?.length || 0} 个模板</p>}
+        {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
+        <button className="primary" disabled={busy || !text.trim()} onClick={submit}>{busy ? '恢复中…' : '开始恢复'}</button>
+        {' '}
+        <button onClick={onClose}>取消</button>
+      </div>
+    </div>
+  );
+}
 /** 模板管理：改名/描述/默认变量编辑/节点数（PRD §4.3 默认变量编辑） */
 function TemplateEditorModal({ tpl, onDone }) {
   const [name, setName] = useState(tpl.name);

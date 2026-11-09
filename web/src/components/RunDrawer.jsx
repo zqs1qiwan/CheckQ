@@ -33,6 +33,8 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse }) {
 
   const statusLabel = shown.status === 'success' ? '✅ 执行成功' : shown.status === 'failed' ? '❌ 执行失败' : '⏳ 执行中';
   const failLog = shown.logs?.find((l) => !l.ok);
+  const [errFilter, setErrFilter] = useState('all'); // all | network | assert | engine
+  const visibleLogs = (shown.logs || []).filter((l) => errFilter === 'all' || l.errorType === errFilter || (errFilter === 'network' && l.errorType === 'network'));
 
   return (
     <div className="run-drawer">
@@ -52,6 +54,14 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse }) {
           <button className={tab === 'logs' ? 'active' : ''} onClick={() => setTab('logs')}>步骤日志</button>
           <button className={tab === 'vars' ? 'active' : ''} onClick={() => setTab('vars')}>变量快照</button>
           <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>历史记录</button>
+          {tab === 'logs' && (
+            <select value={errFilter} onChange={(e) => setErrFilter(e.target.value)} style={{ fontSize: 12, padding: '4px 6px' }} title="错误分类筛选">
+              <option value="all">全部步骤</option>
+              <option value="network">网络失败</option>
+              <option value="assert">断言失败</option>
+              <option value="engine">引擎/配置</option>
+            </select>
+          )}
         </div>
         <button className="small" onClick={onClose}>关闭</button>
       </div>
@@ -59,15 +69,15 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse }) {
       <div className="drawer-body" style={{ fontFamily: 'inherit' }}>
         {tab === 'logs' && (
           <>
-            {!shown.logs?.length ? (
+            {!visibleLogs?.length ? (
               <div className="empty" style={{ padding: 30 }}>暂无日志</div>
             ) : (
-              shown.logs.map((log, i) => (
+              visibleLogs.map((log, i) => (
                 <div key={i} className="step-row">
                   <div className="step-head" onClick={() => setExpanded(expanded === i ? null : i)}>
                     <span className="idx">{log.index}</span>
                     <span className="dot" style={{ background: log.ok ? 'var(--ok)' : 'var(--fail)', width: 8, height: 8, borderRadius: '50%', flex: 'none' }} />
-                    <span className="msg" title={log.message}>{log.name} — {log.message}</span>
+                    <span className="msg" title={log.message}>{log.name} — {log.message}{log.errorType ? ` [${log.errorType}]` : ''}</span>
                     <span style={{ color: 'var(--muted)', fontSize: 11, flex: 'none' }}>{log.ms}ms</span>
                     <span style={{ color: 'var(--muted)', fontSize: 10, flex: 'none' }}>{expanded === i ? '▲' : '▼'}</span>
                   </div>

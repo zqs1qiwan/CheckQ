@@ -55,8 +55,15 @@ export function buildServer({ dataDir, port }) {
     else loginFails.set(ip, { count: 1, firstAt: Date.now() });
   };
 
+  const runningFlows = new Set(); // 并发保护：同一 flow 同时只允许 1 个运行（PRD §4.2）
   const runner = {
     async runFlow(flow, trigger, { debugStopId, onLog } = {}) {
+      if (runningFlows.has(flow.id)) {
+        const err = new Error('该任务正在运行中，请稍候');
+        err.code = 409;
+        throw err;
+      }
+      runningFlows.add(flow.id);
       const runId = crypto.randomUUID();
       const run = {
         id: runId, flowId: flow.id, flowName: flow.name, trigger,
@@ -75,6 +82,8 @@ export function buildServer({ dataDir, port }) {
         run.status = 'failed';
         run.finalMessage = `引擎异常: ${err.message}`;
         run.durationMs = Date.now() - run.startedAt;
+      } finally {
+        runningFlows.delete(flow.id);
       }
       store.addRun(run);
       sendNotify(flow, run);
@@ -86,7 +95,15 @@ export function buildServer({ dataDir, port }) {
     const n = flow.notify || {};
     const fire = (run.status === 'success' && n.onSuccess) || (run.status === 'failed' && n.onFailure);
     if (!fire || !n.channels?.length) return;
-    const text = `[CheckQ] ${flow.name} ${run.status === 'success' ? '成功' : '失败'}\n${run.finalMessage || (run.logs.at(-1)?.message || '')}`;
+    // 消息模板（PRD §4.8）：变量 flow.name/status/message/duration/time；默认 `[CheckQ] {{flow.name}} {{status}}\n{{message}}`
+    const tpl = n.template || '[CheckQ] {{flow.name}} {{status}}\n{{message}}';
+    const text = tpl
+      .replace(/\{\{\s*flow\.name\s*\}\}/g, flow.name || '')
+      .replace(/\{\{\s*status\s*\}\}/g, run.status === 'success' ? '成功 ✅' : '失败 ❌')
+      .replace(/\{\{\s*message\s*\}\}/g, run.finalMessage || (run.logs.at(-1)?.message || ''))
+      .replace(/\{\{\s*duration\s*\}\}/g, `${((run.durationMs || 0) / 1000).toFixed(1)}s`)
+      .replace(/\{\{\s*time\s*\}\}/g, new Date(run.startedAt || Date.now()).toLocaleString('zh-CN'));
+    return text;
     for (const ch of n.channels) {
       try {
         if (ch.type === 'webhook') {
@@ -152,6 +169,25 @@ export function buildServer({ dataDir, port }) {
   });
 
   app.get('/api/health', async () => ({ ok: true, version: '0.3.5' }));
+
+  // 设置：改密 / API Key（单用户）
+  app.get('/api/system/settings', async () => ({ hasApiKey: !!store.meta.apiKey, apiKey: store.meta.apiKey ? store.meta.apiKey.slice(0, 8) + '…' : null }));
+  app.post('/api/system/password', async (req, reply) => {
+    const { oldPassword, newPassword } = req.body || {};
+    if (!verifyPwd(oldPassword || '', store.meta.passwordHash)) return reply.code(401).send({ error: '当前密码错误' });
+    if (!newPassword || String(newPassword).length < 8) return reply.code(400).send({ error: '新密码至少 8 位' });
+    store.meta.passwordHash = hashPwd(String(newPassword));
+    store.meta.generatedPassword = false;
+    store.flush();
+    sessions.clear();
+    return { ok: true };
+  });
+  app.post('/api/system/apikey', async () => {
+    const key = crypto.randomBytes(24).toString('base64url');
+    store.meta.apiKey = key;
+    store.flush();
+    return { apiKey: key };
+  });
 
   // ---- flows ----
   app.get('/api/flows', async () => store.listFlows());
@@ -334,6 +370,9 @@ export function buildServer({ dataDir, port }) {
   app.post('/api/flows/:id/run', async (req, reply) => {
     const f = store.getFlow(req.params.id);
     if (!f) return reply.code(404).send({ error: 'not found' });
+    if (runningFlows.has(f.id)) {
+      return reply.code(409).send({ error: '该任务正在运行中，请稍候' });
+    }
     const debugStopId = (req.body || {}).debugStopId || null;
     const stream = (req.body || {}).stream === true;
 
@@ -348,10 +387,20 @@ export function buildServer({ dataDir, port }) {
         reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       };
       push('start', { flowId: f.id, flowName: f.name });
-      const run = await runner.runFlow(f, debugStopId ? 'debug' : 'manual', {
-        debugStopId,
-        onLog: (log) => push('log', log),
-      });
+      let run;
+      try {
+        run = await runner.runFlow(f, debugStopId ? 'debug' : 'manual', {
+          debugStopId,
+          onLog: (log) => push('log', log),
+        });
+      } catch (err) {
+        if (err.code === 409) {
+          reply.raw.write(`event: done\ndata: ${JSON.stringify({ id: 'conflict', flowId: f.id, status: 'failed', finalMessage: err.message, logs: [] })}\n\n`);
+          reply.raw.end();
+          return reply;
+        }
+        throw err;
+      }
       push('done', run);
       reply.raw.end();
       return reply;

@@ -345,6 +345,30 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
         </div>
       )}
 
+      {type === 'foreach' && (
+        <>
+          <div className="field">
+            <label>遍历源表达式 <span style={{ color: 'var(--muted)' }}>（数组：last.json.items / vars.list 等）</span></label>
+            <input className="mono" value={config.source || ''} onChange={(e) => onConfigUpdate({ source: e.target.value })} />
+          </div>
+          <div className="field-inline">
+            <div className="field">
+              <label>当前项变量</label>
+              <input className="mono" value={config.itemVar || 'item'} onChange={(e) => onConfigUpdate({ itemVar: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>序号变量</label>
+              <input className="mono" value={config.indexVar || 'index'} onChange={(e) => onConfigUpdate({ indexVar: e.target.value })} />
+            </div>
+          </div>
+          <div className="field">
+            <div className="hint" style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.6 }}>
+              「循环体」出口（each）连每轮要执行的节点链（单链到链尾）；「下一步」出口（next）连遍历结束后继续的节点。每轮可用 {'{{' + (config.itemVar || 'item') + '}}'} 与 {'{{index}}'}。上限 50 轮。
+            </div>
+          </div>
+        </>
+      )}
+
       {type === 'notify' && (
         <>{/* Notify node */}
           <div className="field">

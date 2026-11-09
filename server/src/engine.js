@@ -388,6 +388,7 @@ export class Engine {
           }
           stepLog.ok = false;
           stepLog.message = result.message;
+          stepLog.errorType = result.errorKind === 'network' ? 'network' : result.errorKind === 'assert' ? 'assert' : 'engine';
           return null;
         }
         return { handle: 'success' };
@@ -401,6 +402,7 @@ export class Engine {
         } catch (err) {
           stepLog.ok = false;
           stepLog.message = `表达式异常: ${err.message}`;
+          stepLog.errorType = 'engine';
           return null;
         }
         stepLog.message = `${c.expr} → ${JSON.stringify(v)}`;
@@ -558,6 +560,80 @@ export class Engine {
         } else {
           stepLog.message = '脚本完成（无返回值）';
         }
+        return { handle: 'next' };
+      }
+
+      case 'foreach': {
+        // 遍历（PRD §4.1）：source 求值为数组；each 出口为循环体（单链到链尾），next 为完工后继。
+        // 执行模型：每项设 itemVar/index，沿循环体默认出口走完一轮，再下一轮；上限 50 轮，任一步失败则整体失败。
+        const c = node.config || {};
+        const sourceExpr = String(c.source || '').trim();
+        let arr;
+        try {
+          if (/^(last|vars|steps)\./.test(sourceExpr)) {
+            arr = resolvePath({ vars, last: state.last, steps: state.steps }, sourceExpr, null);
+          } else {
+            arr = await evalExpr(sourceExpr, { vars, last: state.last, steps: state.steps });
+          }
+        } catch (err) {
+          stepLog.ok = false;
+          stepLog.message = `遍历源表达式异常: ${err.message}`;
+          return null;
+        }
+        if (!Array.isArray(arr)) {
+          stepLog.ok = false;
+          stepLog.message = `遍历源不是数组: ${sourceExpr} → ${arr === undefined ? 'undefined' : typeof arr}`;
+          return null;
+        }
+        const itemVar = String(c.itemVar || 'item').trim() || 'item';
+        const indexVar = String(c.indexVar || 'index').trim() || 'index';
+        const bodyTargetId = this.nextNodeId(node.id, 'each');
+        if (!bodyTargetId) {
+          stepLog.ok = false;
+          stepLog.message = 'foreach 未连线循环体（each 出口）';
+          return null;
+        }
+        const maxIter = Math.min(50, arr.length);
+        let doneCount = 0;
+        for (let i = 0; i < maxIter; i++) {
+          vars[itemVar] = arr[i];
+          vars[indexVar] = String(i);
+          let cursor = this.nodeById.get(bodyTargetId);
+          let guard = 0;
+          while (cursor && guard < 100) {
+            guard++;
+            const started = Date.now();
+            const bodyLog = { stepId: cursor.id, index: logs.length + 1, name: `${cursor.name || cursor.type} #${i + 1}`, type: cursor.type, ok: true, message: '', detail: null, ms: 0 };
+            let outcome;
+            try {
+              outcome = await this.execNode(cursor, state, bodyLog, missing, logs, logSink);
+            } catch (err) {
+              bodyLog.ok = false;
+              bodyLog.message = `步骤异常: ${err.message}`;
+              bodyLog.ms = Date.now() - started;
+              logs.push(bodyLog);
+              if (logSink) logSink(bodyLog);
+              stepLog.ok = false;
+              stepLog.message = `遍历第 ${i + 1} 轮失败: ${bodyLog.message}`;
+              return null;
+            }
+            bodyLog.ms = Date.now() - started;
+            logs.push(bodyLog);
+            if (logSink) logSink(bodyLog);
+            if (!outcome) {
+              stepLog.ok = false;
+              stepLog.message = `遍历第 ${i + 1} 轮失败: ${bodyLog.message}`;
+              return null;
+            }
+            const nxt = this.nextNodeId(cursor.id, outcome.handle);
+            if (!nxt) break;
+            // 循环体到达 next 的后继时停止本轮（避免与主流程 nxt 重叠执行）
+            if (this.nextNodeId(node.id, 'next') === nxt) break;
+            cursor = this.nodeById.get(nxt);
+          }
+          doneCount++;
+        }
+        stepLog.message = `遍历完成 ${doneCount}/${arr.length} 项（上限 50）`;
         return { handle: 'next' };
       }
 

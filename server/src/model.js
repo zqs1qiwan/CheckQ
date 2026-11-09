@@ -67,6 +67,11 @@ export const STEP_TYPES = {
     color: '#f97316',
     outputs: ['next'],
   },
+  foreach: {
+    label: '遍历（foreach）',
+    color: '#a855f7',
+    outputs: ['each', 'next'],
+  },
 };
 
 export function validateFlow(flow, { allowEmptyDraft = true } = {}) {
@@ -78,7 +83,8 @@ export function validateFlow(flow, { allowEmptyDraft = true } = {}) {
   for (const e of flow.edges || []) {
     if (!byId.has(e.source) || !byId.has(e.target)) errors.push(`连线 ${e.id} 引用了不存在的节点`);
   }
-  const starts = nodes.filter((n) => !(flow.edges || []).some((e) => e.target === n.id));
+  // 循环体回边的终点除外允许（foreach 回路）：`foreach` 节点允许被回边指向
+  const starts = nodes.filter((n) => !(flow.edges || []).some((e) => e.target === n.id && byId.get(e.source)?.type !== 'foreach' || e.target === n.id && e.source === n.id));
   if (nodes.length && !starts.length) errors.push('没有起点（所有节点都有入线，流程成环）');
   return errors;
 }

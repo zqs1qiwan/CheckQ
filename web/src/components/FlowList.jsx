@@ -159,6 +159,7 @@ export default function FlowList({ onOpen, onLogout }) {
         <button onClick={() => setModal('curl')} disabled={importBusy}>导入 cURL</button>
         <button onClick={() => setModal('import')} disabled={importBusy}>导入 HAR / 模板 JSON</button>
         <button className="primary" onClick={() => setModal('new')}>+ 新建任务</button>
+        <button onClick={() => setModal('settings')}>设置</button>
         <button onClick={onLogout}>退出</button>
         <input
           ref={fileRef} type="file" accept=".har,.json" style={{ display: 'none' }}
@@ -369,6 +370,10 @@ export default function FlowList({ onOpen, onLogout }) {
 
       {modal === 'restore' && (
         <RestoreModal onClose={() => setModal(null)} onDone={() => { setModal(null); load(); }} />
+      )}
+
+      {modal === 'settings' && (
+        <SettingsModal onClose={() => setModal(null)} />
       )}
 
       <Toast toast={toast} onClose={() => setToast(null)} />
@@ -606,6 +611,51 @@ function CsvImportModal({ tpl, onClose, onDone }) {
         )}
         <button className="primary" disabled={busy || !csv.trim()} onClick={submit}>{busy ? '创建中…' : '批量创建'}</button>
         {' '}
+        <button onClick={onClose}>关闭</button>
+      </div>
+    </div>
+  );
+}
+
+/** 系统设置：改密 + API Key */
+function SettingsModal({ onClose }) {
+  const [oldPw, setOldPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+  const [key, setKey] = useState('');
+  const [hasKey, setHasKey] = useState(false);
+  useEffect(() => { api.systemSettings().then((s) => setHasKey(s.hasApiKey)).catch(() => {}); }, []);
+  const changePw = async () => {
+    setErr(''); setMsg('');
+    try { await api.changePassword(oldPw, newPw); setMsg('密码已改，请重新登录'); setOldPw(''); setNewPw(''); }
+    catch (e) { setErr(e.message); }
+  };
+  const genKey = async () => {
+    try { const r = await api.genApiKey(); setKey(r.apiKey); setHasKey(true); }
+    catch (e) { setErr(e.message); }
+  };
+  return (
+    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <h3>设置</h3>
+        <div className="field">
+          <label>当前密码</label>
+          <input type="password" autoComplete="off" value={oldPw} onChange={(e) => setOldPw(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>新密码（至少 8 位）</label>
+          <input type="password" autoComplete="off" value={newPw} onChange={(e) => setNewPw(e.target.value)} />
+        </div>
+        <button className="primary" onClick={changePw}>改密</button>
+        <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '16px 0' }} />
+        <div className="field">
+          <label>API Key（{hasKey ? '已生成' : '未生成'}）</label>
+          {key && <pre className="mono" style={{ wordBreak: 'break-all', fontSize: 12 }}>{key}</pre>}
+          <button className="small" onClick={genKey}>{hasKey ? '重新生成' : '生成 API Key'}</button>
+        </div>
+        {msg && <p style={{ color: 'var(--ok)', fontSize: 12 }}>{msg}</p>}
+        {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
         <button onClick={onClose}>关闭</button>
       </div>
     </div>

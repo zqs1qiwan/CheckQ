@@ -10,6 +10,7 @@ export const STEP_TYPES = {
   log: { label: '日志', color: '#0ea5e9', outputs: ['next'] },
   notify: { label: '通知', color: '#ec4899', outputs: ['next'] },
   script: { label: '脚本（JS沙箱）', color: '#f97316', outputs: ['next'] },
+  foreach: { label: '遍历（foreach）', color: '#a855f7', outputs: ['each', 'next'] },
 };
 
 export const OUTPUT_LABELS = {
@@ -36,6 +37,8 @@ export function defaultConfig(type) {
       return { text: '', channels: [] };
     case 'script':
       return { code: '// vars / last / steps 只读可用；return { 新变量: 值 } 合并回 vars\nreturn { out: "" };' };
+    case 'foreach':
+      return { source: 'last.json.items', itemVar: 'item', indexVar: 'index' };
     default:
       return {};
   }

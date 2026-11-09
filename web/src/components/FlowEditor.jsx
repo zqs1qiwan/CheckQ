@@ -741,6 +741,16 @@ function VarsEditor({ flow, onVars }) {
     onVars(next);
   };
   const change = (k, v) => setVars({ ...vars, [k]: v });
+  const [missing, setMissing] = useState(null);
+  useEffect(() => {
+    api.runs(flow.id, 5).then((runs) => {
+      const set = new Set();
+      for (const r of runs) for (const l of r.logs || []) for (const m of l.missing || []) set.add(m);
+      setMissing([...set]);
+    }).catch(() => setMissing([]));
+  }, [flow.id]);
+
+  const isSensitive = (k) => /cookie|token|password|secret|key/i.test(k);
 
   return (
     <div>
@@ -749,22 +759,37 @@ function VarsEditor({ flow, onVars }) {
           暂无变量。在请求里写 {'{{cookie}}'} 即可，运行时会自动替换；敏感值（cookie/token）请在这里填。
         </p>
       )}
-      {Object.entries(vars).map(([k, v]) => (
-        <div key={k} style={{ marginBottom: 8 }}>
-          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-            <input className="mono" style={{ fontSize: 11, padding: '4px 6px' }} value={k} disabled />
-            <button className="small danger" style={{ padding: '2px 7px' }} onClick={() => remove(k)}>×</button>
-          </div>
-          <textarea
-            className="mono"
-            style={{ fontSize: 11, padding: '4px 6px', marginTop: 3 }}
-            rows={Math.min(3, String(v).length / 60 + 1)}
-            value={v}
-            onChange={(e) => change(k, e.target.value)}
-            onBlur={() => onVars(vars)}
-          />
+      {missing && missing.length > 0 && (
+        <div style={{ border: '1px solid var(--warn)', borderRadius: 8, padding: 8, marginBottom: 8, fontSize: 11 }}>
+          ⚠ 运行日志里出现过未定义的变量：{missing.join('、 ')}
+          <div style={{ color: 'var(--muted)' }}>在下面「变量名」输入同名后填值（顺序随便），重跑即自动替换。</div>
         </div>
-      ))}
+      )}
+      {Object.entries(vars).map(([k, v]) => {
+        const sensitive = isSensitive(k);
+        const [open, setOpen] = useState(!sensitive);
+        return (
+          <div key={k} style={{ marginBottom: 8 }}>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <input className="mono" style={{ fontSize: 11, padding: '4px 6px' }} value={k} disabled />
+              <button className="small" style={{ padding: '2px 7px' }} title={open ? '隐藏值' : '显示值'} onClick={() => setOpen(!open)}>{open ? '🙈' : '👁'}</button>
+              <button className="small danger" style={{ padding: '2px 7px' }} onClick={() => remove(k)}>×</button>
+            </div>
+            {open ? (
+              <textarea
+                className="mono"
+                style={{ fontSize: 11, padding: '4px 6px', marginTop: 3 }}
+                rows={Math.min(3, String(v).length / 60 + 1)}
+                value={v}
+                onChange={(e) => change(k, e.target.value)}
+                onBlur={() => onVars(vars)}
+              />
+            ) : (
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>•••••••• <button className="small" onClick={() => setOpen(true)}>显示</button></div>
+            )}
+          </div>
+        );
+      })}
       <input style={{ fontSize: 11, padding: '4px 6px', marginBottom: 4 }} placeholder="变量名" value={nk} onChange={(e) => setNk(e.target.value)} />
       <input style={{ fontSize: 11, padding: '4px 6px', marginBottom: 4 }} placeholder="值" value={nv} onChange={(e) => setNv(e.target.value)} />
       <button className="small" style={{ width: '100%' }} onClick={add}>+ 添加变量</button>

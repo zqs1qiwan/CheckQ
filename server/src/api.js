@@ -272,7 +272,7 @@ export function buildServer({ dataDir, port }) {
     return { ok: true };
   });
 
-  app.get('/api/health', async () => ({ ok: true, version: '0.3.14' }));
+  app.get('/api/health', async () => ({ ok: true, version: '0.3.15' }));
 
   // 设置：改密 / API Key（单用户）
   app.get('/api/system/settings', async () => ({ hasApiKey: !!store.meta.apiKey, apiKey: store.meta.apiKey ? store.meta.apiKey.slice(0, 8) + '…' : null }));
@@ -642,7 +642,7 @@ export function buildServer({ dataDir, port }) {
 
   // 备份/恢复：导出 flows/runs/templates（meta 密码不导出）；恢复以新 ID 导入避免覆盖
   app.get('/api/system/backup', async () => ({
-    version: '0.3.14',
+    version: '0.3.15',
     exportedAt: new Date().toISOString(),
     flows: store.flows,
     runs: store.runs,

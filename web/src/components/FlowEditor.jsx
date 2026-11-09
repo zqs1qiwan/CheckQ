@@ -60,6 +60,9 @@ function FlowEditorInner({ flowId, onBack }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [cookieOpen, setCookieOpen] = useState(false);
+  const [tplOpen, setTplOpen] = useState(false);
+  const [tplName, setTplName] = useState('');
+  const [tplErr, setTplErr] = useState('');
   const [toast, setToast] = useState(null);
   const saveTimer = useRef(null);
   const stateRef = useRef({});
@@ -259,13 +262,19 @@ function FlowEditorInner({ flowId, onBack }) {
 
   const saveAsTemplate = async () => {
     if (dirty) await save();
-    const name = prompt('模板名称：', flow.name.replace(/\s*·\s*\d+$/, '') + ' 模板');
-    if (name === null) return;
+    setTplName(flow.name.replace(/\s*·\s*\d+$/, '') + ' 模板');
+    setTplErr('');
+    setTplOpen(true);
+  };
+  const confirmSaveTemplate = async () => {
+    const name = (tplName || '').trim();
+    if (!name) { setTplErr('模板名称不能为空'); return; }
     try {
       const t = await api.saveFlowAsTemplate(flow.id, name);
+      setTplOpen(false);
       showToast(`已存为模板「${t.name}」，可在首页基于它创建多个任务`, 'ok');
     } catch (e) {
-      showToast(`保存模板失败: ${e.message}`);
+      setTplErr(`保存模板失败: ${e.message}`);
     }
   };
 
@@ -553,6 +562,24 @@ function FlowEditorInner({ flowId, onBack }) {
             return nf;
           }}
         />
+      )}
+
+      {tplOpen && (
+        <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && setTplOpen(false)}>
+          <div className="modal">
+            <h3>存为模板</h3>
+            <p style={{ color: 'var(--muted)', fontSize: 12 }}>模板会带走节点/连线/变量/日志/通知，之后可基于它批量创建任务。</p>
+            <div className="field">
+              <label>模板名称</label>
+              <input value={tplName} onChange={(e) => setTplName(e.target.value)} placeholder="如：恩山签到模板" />
+            </div>
+            {tplErr && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{tplErr}</p>}
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <button className="primary" onClick={confirmSaveTemplate}>保存为模板</button>
+              <button onClick={() => setTplOpen(false)}>取消</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {toast && <div className={`toast ${toast.kind}`} onClick={() => setToast(null)}>{toast.text}</div>}

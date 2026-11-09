@@ -137,6 +137,19 @@ export default function FlowList({ onOpen, onLogout }) {
     }
   };
 
+  const openLog = async (f) => {
+    try {
+      const full = f.lastRun ? await api.run(f.lastRun.id) : (await api.runs(f.id, 1))[0];
+      if (!full) {
+        setToast({ kind: 'fail', text: '该任务还没有运行记录，先点 ▶ 运行' });
+        return;
+      }
+      setModal({ type: 'result', run: full, flowId: f.id });
+    } catch (e) {
+      setToast({ kind: 'fail', text: e.message });
+    }
+  };
+
   const lastStatus = (f) => {
     if (!f.lastRun) return <span className="badge muted">未运行</span>;
     const ok = f.lastRun.status === 'success';
@@ -305,6 +318,8 @@ export default function FlowList({ onOpen, onLogout }) {
                     {' '}
                     <button className="small" onClick={() => onOpen(f.id)}>编辑</button>
                     {' '}
+                    <button className="small" title="查看运行日志（每天的签到记录都在这里）" onClick={() => openLog(f)}>日志</button>
+                    {' '}
                     <button className="small" onClick={async () => {
                       try {
                         await api.cloneFlow(f.id);
@@ -439,34 +454,62 @@ function InstantiateModal({ tpl, onClose, onCreated }) {
   );
 }
 
-/** 任务列表页的运行结果弹窗（精简版日志） */
+/** 任务列表页的运行结果弹窗（含历史运行切换） */
 function ResultModal({ run, flowId, onClose }) {
   const [expanded, setExpanded] = useState(null);
-  const statusLabel = run.status === 'success' ? '✅ 运行成功' : run.status === 'failed' ? '❌ 运行失败' : '⏳ 运行中…';
+  const [cur, setCur] = useState(run);
+  const [hist, setHist] = useState(null);
+  useEffect(() => {
+    if (!flowId) return;
+    api.runs(flowId, 30).then(setHist).catch(() => setHist([]));
+  }, [flowId]);
+  useEffect(() => { setCur(run); setExpanded(null); }, [run]);
+  const shown = cur || run;
+  const statusLabel = shown.status === 'success' ? '✅ 运行成功' : shown.status === 'failed' ? '❌ 运行失败' : '⏳ 运行中…';
+  const openRun = async (id) => {
+    try { const full = await api.run(id); setCur(full); setExpanded(null); }
+    catch (e) { }
+  };
   return (
     <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal" style={{ width: 640 }}>
-        <h3>{statusLabel} {run.durationMs ? <span style={{ color: 'var(--muted)', fontSize: 12, fontWeight: 400 }}>{(run.durationMs / 1000).toFixed(1)}s</span> : null}</h3>
-        {run.finalMessage && (
-          <p style={{ color: run.status === 'failed' ? 'var(--fail)' : 'var(--muted)', fontSize: 13, marginTop: -8 }}>{run.finalMessage}</p>
+        <h3>运行日志：{shown.flowName || ''}</h3>
+        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>
+          {statusLabel} · {shown.startedAt ? fmtTime(shown.startedAt) : ''} · 触发 {shown.trigger || 'manual'}
+          {shown.durationMs ? ` · ${(shown.durationMs / 1000).toFixed(1)}s` : ''}
+        </div>
+        {hist && flowId && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ color: 'var(--muted)', fontSize: 11, marginBottom: 4 }}>历史记录（每天的日志在这里切换）</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {(hist || []).map((r) => (
+                <button key={r.id} className={`small ${r.id === shown.id ? 'primary' : ''}`} onClick={() => openRun(r.id)}>
+                  {r.status === 'success' ? '✅' : '❌'} {fmtTime(r.startedAt)}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
-        {run.summary && (
-          <p style={{ color: 'var(--ok)', fontSize: 12, marginTop: -4 }}>📌 {run.summary}</p>
+        {shown.finalMessage && (
+          <p style={{ color: shown.status === 'failed' ? 'var(--fail)' : 'var(--muted)', fontSize: 13, marginTop: -4 }}>{shown.finalMessage}</p>
         )}
-        {run.vars && Object.keys(run.vars).length > 0 && (
+        {shown.summary && (
+          <p style={{ color: 'var(--ok)', fontSize: 12, marginTop: -4 }}>📌 {shown.summary}</p>
+        )}
+        {shown.vars && Object.keys(shown.vars).length > 0 && (
           <div style={{ marginBottom: 10 }}>
             <div style={{ color: 'var(--muted)', fontSize: 11, marginBottom: 4 }}>最终变量快照（已脱敏）</div>
-            <pre>{Object.entries(run.vars).map(([k, v]) => `${k} = ${String(v).slice(0, 120)}`).join('\n')}</pre>
+            <pre>{Object.entries(shown.vars).map(([k, v]) => `${k} = ${String(v).slice(0, 120)}`).join('\n')}</pre>
           </div>
         )}
         <div className="result-logs">
-          {(run.logs || []).length === 0 && <p style={{ color: 'var(--muted)' }}>暂无日志</p>}
-          {(run.logs || []).map((log, i) => (
+          {(shown.logs || []).length === 0 && <p style={{ color: 'var(--muted)' }}>暂无日志</p>}
+          {(shown.logs || []).map((log, i) => (
             <div key={i} className="step-row">
               <div className="step-head" onClick={() => setExpanded(expanded === i ? null : i)}>
                 <span className="idx">{log.index}</span>
                 <span className="dot" style={{ background: log.ok ? 'var(--ok)' : 'var(--fail)', width: 8, height: 8, borderRadius: '50%', flex: 'none' }} />
-                <span className="msg">{log.name} — {log.message}</span>
+                <span className="msg">{log.name} — {log.message}{log.errorType ? ` [${log.errorType}]` : ''}</span>
                 <span style={{ color: 'var(--muted)', fontSize: 11, flex: 'none' }}>{log.ms}ms</span>
               </div>
               {expanded === i && (
@@ -487,6 +530,23 @@ function ResultModal({ run, flowId, onClose }) {
                       <pre>{log.detail.response.body}</pre>
                     </>
                   )}
+                  {log.keywords?.length > 0 && (
+                    <>
+                      <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 6 }}>关键字提取</div>
+                      {log.keywords.map((k, j) => (<div key={j} style={{ color: 'var(--ok)' }}>📌 {k.name}：{k.values.join(', ')}</div>))}
+                    </>
+                  )}
+                  {log.asserts?.length > 0 && (
+                    <>
+                      <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 6 }}>断言</div>
+                      {log.asserts.map((a, j) => (
+                        <div key={j} style={{ color: a.pass ? 'var(--ok)' : 'var(--fail)' }}>
+                          {a.pass ? '✓' : '✗'} {a.label || a.expr}
+                        </div>
+                      ))}
+                    </>
+                  )}
+                  {log.type !== 'http' && log.message && <div style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>{log.message}</div>}
                 </div>
               )}
             </div>

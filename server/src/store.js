@@ -48,14 +48,32 @@ export class Store {
     fs.renameSync(tmp, file);
   }
 
+  #flushNow() {
+    this.#save(this.flowsFile, this.flows);
+    this.#save(this.runsFile, this.runs);
+    this.#save(this.templatesFile, this.templates);
+    this.#save(this.metaFile, this.meta);
+  }
+
+  /** 立即落盘（跳过 400ms 节流窗口）；进程退出前调用，避免重启丢配置 */
+  flush() {
+    if (this.#persistTimer) {
+      clearTimeout(this.#persistTimer);
+      this.#persistTimer = null;
+    }
+    try {
+      this.#flushNow();
+    } catch (err) {
+      console.error('[CheckQ] flush failed:', err.message);
+    }
+  }
+
   #persist() {
     if (this.#persistTimer) return;
     this.#persistTimer = setTimeout(() => {
       this.#persistTimer = null;
       try {
-        this.#save(this.flowsFile, this.flows);
-        this.#save(this.runsFile, this.runs);
-        this.#save(this.templatesFile, this.templates);
+        this.#flushNow();
       } catch (err) {
         console.error('[CheckQ] persist failed:', err.message);
       }

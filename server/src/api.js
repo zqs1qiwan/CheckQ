@@ -31,6 +31,13 @@ function shellQuote(s) {
 export function buildServer({ dataDir, port }) {
   const store = new Store(dataDir);
   const app = Fastify({ logger: false, bodyLimit: 32 * 1024 * 1024 });
+  // 容器 stop/restart 会发 SIGTERM：先立即落盘再退出，避免丢掉 400ms 节流窗口内的配置变更
+  const flushExit = () => {
+    store.flush();
+    process.exit(0);
+  };
+  process.once('SIGTERM', flushExit);
+  process.once('SIGINT', flushExit);
   const sessions = new Map(); // qsid -> expiry
   // 登录防爆破（PRD §4.10）：同一 IP 10 分钟内失败 5 次 → 429 锁定
   const loginFails = new Map(); // ip -> { count, firstAt }

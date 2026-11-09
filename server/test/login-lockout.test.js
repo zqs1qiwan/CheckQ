@@ -39,7 +39,7 @@ const okLogin = await app2.inject({ method: 'POST', url: '/api/login', payload: 
 check('正确密码 → 200', okLogin.statusCode === 200 && okLogin.json().ok === true);
 
 const health = await app2.inject({ method: 'GET', url: '/api/health' });
-check('health version 与 package 一致(0.3.7)', health.json().version === '0.3.7');
+check('health version 与 package 一致(0.3.8)', health.json().version === '0.3.8');
 
 await app.close();
 await app2.close();

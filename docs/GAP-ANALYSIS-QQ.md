@@ -81,10 +81,10 @@
 
 | 功能 | 青龙 | 千岛 | CheckQ | 本轮 |
 |---|---|---|---|---|
-| Webhook / Telegram / Bark | ✅ | ✅ | ✅ × 流级 + 节点级 | 已对齐 |
+| Webhook / Telegram / Bark | ✅ | ✅ | ✅ × 流级 + 节点级 | 已对齐（v0.3.7 修死代码真发送） |
 | onSuccess/onFailure 分流 | ✅ | ✅ | ✅ | 已对齐 |
 | 消息模板 `{{flow.name}}` | 🔶 | ✅ | ✅ v0.3.6 `notify.template`（flow.name/status/message/duration/time） | 新增 |
-| 通知测试按钮 | ✅ | ✅ | 🔶 待办 | 待办 |
+| 通知测试按钮 | ✅ | ✅ | ✅ v0.3.7 `POST /api/flows/:id/notify-test` + 顶栏 ✉ | 已对齐 |
 
 ## 8. 不做项（红线）
 
@@ -94,4 +94,4 @@
 
 ## 剩余待办（优先级）
 
-- P2：通知测试按钮、每日汇总、补跑提示、minimap 自动布局、模板市场索引、运行排队
+- P2：每日汇总已定时（v0.3.8）、运行排队已串行+徽章、模板市场规范+URL 导入已落地（`docs/TEMPLATE-MARKET.md`，社区自发索引，不做官方市场站点）；剩余远期：补跑提示、minimap 自动布局、二维码/手机端

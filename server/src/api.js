@@ -157,6 +157,52 @@ export function buildServer({ dataDir, port }) {
     return { ok: true, flowId, varName: name };
   });
 
+  // 统一浏览器登录（Camofox 自动回填）：服务端开签到站登录页，用户在同一窗口登录后点「已登录，自动抓」
+  // 原理：CheckQ 调 Camofox 新建 tab → navigate 到登录页 → 前端用户自行在该浏览器里操作（noVNC/镜像可见）→ 后端 evaluate 读 document.cookie 写回变量
+  const camoBase = process.env.CAMOFOX_URL || 'http://checkq.local:9377';
+  async function camo(method, path, body) {
+    const res = await fetch(`${camoBase}${path}`, {
+      method,
+      headers: { 'content-type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(30000),
+    });
+    const text = await res.text();
+    let data = null;
+    try { data = JSON.parse(text); } catch { data = text; }
+    if (!res.ok) throw new Error(`camofox ${res.status}: ${String(text).slice(0, 200)}`);
+    return data;
+  }
+  app.post('/api/browser-login/start', async (req, reply) => {
+    const { flowId, url } = req.body || {};
+    const f = flowId ? store.getFlow(flowId) : null;
+    if (!url || !/^https?:\/\//i.test(String(url))) return reply.code(400).send({ error: '缺少合法 url' });
+    const userId = `checkq-${f?.id || 'anon'}`;
+    try {
+      const tab = await camo('POST', '/tabs', { userId, sessionKey: 'login', url });
+      return { ok: true, tabId: tab.tabId || tab.id || tab, url };
+    } catch (e) {
+      return reply.code(502).send({ error: `统一浏览器打不开：${e.message}` });
+    }
+  });
+  app.post('/api/browser-login/capture', async (req, reply) => {
+    const { flowId, tabId, varName } = req.body || {};
+    const f = flowId ? store.getFlow(flowId) : null;
+    if (!f || !tabId) return reply.code(400).send({ error: '缺少 flowId/tabId' });
+    const userId = `checkq-${f.id}`;
+    try {
+      const ev = await camo('POST', `/tabs/${tabId}/evaluate`, { userId, expression: 'document.cookie' });
+      const cookie = String(ev.result || '').trim();
+      if (!cookie) return reply.code(400).send({ error: '当前页面还没有 cookie（可能未登录）' });
+      const name = /^[A-Za-z_][\w]*$/.test(varName || 'cookie') ? (varName || 'cookie') : 'cookie';
+      store.updateFlow(flowId, { vars: { ...(f.vars || {}), [name]: cookie } });
+      store.flush();
+      return { ok: true, flowId, varName: name, length: cookie.length };
+    } catch (e) {
+      return reply.code(502).send({ error: `抓取失败：${e.message}` });
+    }
+  });
+
   async function sendToChannels(channels, text) {
     const results = [];
     for (const ch of channels || []) {
@@ -226,7 +272,7 @@ export function buildServer({ dataDir, port }) {
     return { ok: true };
   });
 
-  app.get('/api/health', async () => ({ ok: true, version: '0.3.12' }));
+  app.get('/api/health', async () => ({ ok: true, version: '0.3.13' }));
 
   // 设置：改密 / API Key（单用户）
   app.get('/api/system/settings', async () => ({ hasApiKey: !!store.meta.apiKey, apiKey: store.meta.apiKey ? store.meta.apiKey.slice(0, 8) + '…' : null }));
@@ -596,7 +642,7 @@ export function buildServer({ dataDir, port }) {
 
   // 备份/恢复：导出 flows/runs/templates（meta 密码不导出）；恢复以新 ID 导入避免覆盖
   app.get('/api/system/backup', async () => ({
-    version: '0.3.12',
+    version: '0.3.13',
     exportedAt: new Date().toISOString(),
     flows: store.flows,
     runs: store.runs,

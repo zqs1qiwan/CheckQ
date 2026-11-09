@@ -564,11 +564,30 @@ function CookieHelpModal({ flow, onClose, onSaved }) {
   const [cookie, setCookie] = useState('');
   const [err, setErr] = useState('');
   const [done, setDone] = useState(false);
+  const [tabId, setTabId] = useState('');
   const origin = window.location.origin;
   const captureUrl = `${origin}/api/cookie-capture`;
   const bookmarklet = `javascript:fetch('${captureUrl}',{method:'POST',headers:{'Content-Type':'application/json'},mode:'no-cors',body:JSON.stringify({flowId:'${flow?.id || ''}',cookie:document.cookie,varName:'cookie'})}).then(()=>alert('已回填到 CheckQ ✅'));`;
   const snippet = "copy(document.cookie); // 备用：已登录页面 Console 回车后粘贴";
   const openLogin = () => window.open(url, '_blank');
+  const unified = async () => {
+    try {
+      setErr('');
+      const r = await api.browserLoginStart(flow.id, url.trim());
+      setTabId(r.tabId);
+      setDone(false);
+    } catch (e) { setErr(e.message); }
+  };
+  const captureNow = async () => {
+    try {
+      setErr('');
+      const r = await api.browserLoginCapture(flow.id, tabId);
+      setCookie(`已抓到 ${r.length} 字符，已写入 {{${r.varName}}}`);
+      setDone(true);
+      onSaved({ cookie: '' }); // 已由服务端写入
+      setTimeout(onClose, 800);
+    } catch (e) { setErr(e.message); }
+  };
   const save = async () => {
     try {
       const f = await onSaved({ cookie: cookie.trim() });
@@ -578,30 +597,32 @@ function CookieHelpModal({ flow, onClose, onSaved }) {
   return (
     <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
-        <h3>🍪 一键填 Cookie（打开登录 → 自动回填）</h3>
+        <h3>🍪 统一浏览器登录（自动抓 Cookie）</h3>
         <p style={{ color: 'var(--muted)', fontSize: 12, lineHeight: 1.7 }}>
-          1. 点「打开登录页」，在站点登录一次（新标签）
+          统一浏览器是路由器上的 Camoufox（与真实浏览器指纹一致）。步骤：
           <br />
-          2. 一键回填（两选一）：把下面书签拖到收藏栏 → 已登录页点它（浏览器会把 cookie 直接 POST 到 CheckQ 并存到 <code>{'{{cookie}}'}</code>）；或在 Console 回车那一行再粘贴到本窗
+          1. 点「打开登录页」→ CheckQ 在统一浏览器打开站点，你在那登录一次
           <br />
-          3. 看到「已回填 ✅」即完成，点 ▶ 运行验证
+          2. 回到这里点「已登录，自动抓」→ CheckQ 自动读 cookie 写进 <code>{'{{cookie}}'}</code>，无需粘贴
+          <br />
+          3. 点 ▶ 运行验证
         </p>
         <div className="field">
           <label>站点地址</label>
           <input className="mono" value={url} onChange={(e) => setUrl(e.target.value)} />
         </div>
         <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-          <button className="primary" onClick={openLogin}>打开登录页</button>
-          <a className="small" style={{ alignSelf: 'center', border: '1px solid var(--border)', borderRadius: 8, padding: '4px 10px', textDecoration: 'none', color: 'var(--text)' }} href={bookmarklet} onClick={(e) => { e.preventDefault(); alert('拖到收藏栏后再到站点页点击'); }}>一键回填书签（拖到收藏栏）</a>
+          <button className="primary" onClick={unified}>打开登录页（统一浏览器）</button>
+          <button className="small" disabled={!tabId} onClick={captureNow}>已登录，自动抓 Cookie</button>
         </div>
-        <pre className="mono" style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, fontSize: 11, wordBreak: 'break-all', userSelect: 'all' }}>{bookmarklet}</pre>
+        {tabId && <p style={{ color: 'var(--muted)', fontSize: 11 }}>tab: {String(tabId).slice(0, 12)}… 登录后点上方抓取</p>}
+        <pre className="mono" style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, fontSize: 11, wordBreak: 'break-all', userSelect: 'all', color: 'var(--muted)' }}>{bookmarklet}</pre>
         <div className="field">
-          <label>备用（粘贴）</label>
+          <label>备用：粘贴 cookie 后保存</label>
           <input className="mono" readOnly value={snippet} onFocus={(e) => e.target.select()} />
         </div>
         <div className="field">
-          <label>粘贴 cookie 后保存</label>
-          <textarea className="mono" rows={3} value={cookie} onChange={(e) => setCookie(e.target.value)} placeholder="koa:sess=...; gld:sess=..." />
+          <textarea className="mono" rows={2} value={cookie} onChange={(e) => setCookie(e.target.value)} placeholder="或在这里粘贴 cookie" />
         </div>
         {done && <p style={{ color: 'var(--ok)', fontSize: 12 }}>✅ 已回填到变量</p>}
         {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}

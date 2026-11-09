@@ -102,6 +102,8 @@ export const api = {
   notifyTest: (flowId) => req('POST', `/api/flows/${flowId}/notify-test`, {}),
   dailySummary: (flowId) => req('POST', '/api/system/daily-summary', flowId ? { flowId } : {}),
   batch: (ids, action) => req('POST', '/api/flows/batch', { ids, action }),
+  browserLoginStart: (flowId, url) => req('POST', '/api/browser-login/start', { flowId, url }),
+  browserLoginCapture: (flowId, tabId) => req('POST', '/api/browser-login/capture', { flowId, tabId }),
   backup: () => req('GET', '/api/system/backup'),
   restore: (body) => req('POST', '/api/system/restore', body),
 };

@@ -64,11 +64,11 @@ export const STEP_TYPES = {
   },
 };
 
-export function validateFlow(flow) {
+export function validateFlow(flow, { allowEmptyDraft = true } = {}) {
   const errors = [];
   if (!flow.name || !flow.name.trim()) errors.push('流程名不能为空');
   const nodes = flow.nodes || [];
-  if (!nodes.length) errors.push('流程至少需要一个步骤');
+  if (!nodes.length && !allowEmptyDraft) errors.push('流程至少需要一个步骤');
   const byId = new Map(nodes.map((n) => [n.id, n]));
   for (const e of flow.edges || []) {
     if (!byId.has(e.source) || !byId.has(e.target)) errors.push(`连线 ${e.id} 引用了不存在的节点`);

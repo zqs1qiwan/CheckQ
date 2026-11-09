@@ -50,6 +50,7 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse }) {
         </div>
         <div className="run-tabs">
           <button className={tab === 'logs' ? 'active' : ''} onClick={() => setTab('logs')}>步骤日志</button>
+          <button className={tab === 'vars' ? 'active' : ''} onClick={() => setTab('vars')}>变量快照</button>
           <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>历史记录</button>
         </div>
         <button className="small" onClick={onClose}>关闭</button>
@@ -111,6 +112,17 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse }) {
                           )}
                         </>
                       )}
+                      {log.keywords?.length > 0 && (
+                        <>
+                          <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 6 }}>关键字提取</div>
+                          {log.keywords.map((k, j) => (
+                            <div key={j} style={{ color: 'var(--ok)' }}>📌 {k.name}：{k.values.join(', ')}</div>
+                          ))}
+                        </>
+                      )}
+                      {log.missing?.length > 0 && (
+                        <div style={{ color: 'var(--warn)', fontSize: 11, marginTop: 6 }}>⚠ 未定义的变量已按空置：{log.missing.join(', ')}</div>
+                      )}
                       {log.asserts?.length > 0 && (
                         <>
                           <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 6 }}>断言</div>
@@ -121,8 +133,8 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse }) {
                           ))}
                         </>
                       )}
-                      {log.type !== 'http' && log.message !== shown.finalMessage && (
-                        <div style={{ color: 'var(--muted)' }}>{log.message}</div>
+                      {log.type !== 'http' && log.message && (
+                        <div style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>{log.message}</div>
                       )}
                     </div>
                   )}
@@ -130,6 +142,20 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse }) {
               ))
             )}
           </>
+        )}
+
+        {tab === 'vars' && (
+          <div>
+            {!shown.vars || Object.keys(shown.vars).length === 0 ? (
+              <div className="empty" style={{ padding: 30 }}>暂无变量快照（日志档位 summary 或 varsSnapshot 已关时不记）</div>
+            ) : (
+              <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{Object.entries(shown.vars).map(([k, v]) => `${k} = ${String(v).slice(0, 200)}`).join('\n')}</pre>
+            )}
+            <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 8 }}>
+              触发方式：{shown.trigger || 'manual'} · 开始：{shown.startedAt ? fmtTime(shown.startedAt) : '—'} · 耗时：{shown.durationMs ?? 0}ms
+              {shown.summary && <> · 摘要：{shown.summary}</>}
+            </div>
+          </div>
         )}
 
         {tab === 'history' && (

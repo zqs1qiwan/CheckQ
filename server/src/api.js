@@ -411,6 +411,8 @@ export function buildServer({ dataDir, port }) {
   });
 
   // ---- runs ----
+  app.get('/api/system/stats', async () => store.stats());
+
   app.get('/api/runs', async (req) => {
     const { flowId, limit } = req.query;
     return store.listRuns(flowId, Math.min(Number(limit) || 30, 200));

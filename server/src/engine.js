@@ -74,8 +74,10 @@ export class Engine {
 
     const entry = this.findEntryNode();
     if (!entry) {
-      logs.push({ stepId: null, index: 1, name: '流程', type: 'error', ok: false, message: '找不到入口节点', detail: null, ms: 0 });
-      return { ok: false, logs, vars: this.logInclude.varsSnapshot ? vars : {}, finalMessage: '找不到入口节点' };
+      const empty = (flow.nodes || []).length === 0;
+      const msg = empty ? '流程为空：请先在画布上加至少一个节点（如 HTTP 请求）再运行' : '找不到入口节点（可能成环：所有节点都有入线）';
+      logs.push({ stepId: null, index: 1, name: '流程', type: 'error', ok: false, message: msg, detail: null, ms: 0 });
+      return { ok: false, logs, vars: this.logInclude.varsSnapshot ? vars : {}, finalMessage: msg };
     }
 
     let node = entry;

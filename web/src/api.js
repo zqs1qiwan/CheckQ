@@ -92,4 +92,5 @@ export const api = {
   instantiateCsv: (tplId, csv) => req('POST', `/api/templates/${tplId}/instantiate-csv`, { csv }),
   importCurl: (command) => req('POST', '/api/import/curl', { command }),
   importHar: (formData) => req('POST', '/api/import/har', formData, true),
+  stats: () => req('GET', '/api/system/stats'),
 };

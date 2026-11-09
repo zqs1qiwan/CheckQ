@@ -50,6 +50,7 @@ export default function FlowEditor({ flowId, onBack }) {
 
 function FlowEditorInner({ flowId, onBack }) {
   const [flow, setFlow] = useState(null);
+  const [loadErr, setLoadErr] = useState('');
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -68,13 +69,13 @@ function FlowEditorInner({ flowId, onBack }) {
   useEffect(() => {
     api.flow(flowId).then((f) => {
       setFlow(f);
-      setNodes(f.nodes.map((n) => ({
+      setNodes((f.nodes || []).map((n) => ({
         id: n.id, type: 'step', position: { x: n.x, y: n.y }, data: { ...n },
       })));
-      setEdges(f.edges.map((e) => decorateEdge({
+      setEdges((f.edges || []).map((e) => decorateEdge({
         id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle,
       })));
-    });
+    }).catch((e) => setLoadErr(e.message));
   }, [flowId]);
 
   const decorateEdge = (e) => ({
@@ -141,18 +142,21 @@ function FlowEditorInner({ flowId, onBack }) {
     markDirty();
   }, [setEdges, markDirty]);
 
-  const onDrop = useCallback((e) => {
-    e.preventDefault();
-    const type = e.dataTransfer.getData('application/checkq-step');
-    if (!type) return;
-    const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-    const id = `n${Date.now().toString(36)}`;
+  const addNodeAt = useCallback((type, pos) => {
+    const id = `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
     setNodes((ns) => [...ns, {
       id, type: 'step', position: pos,
       data: { id, type, name: STEP_TYPES[type].label, config: defaultConfig(type) },
     }]);
     markDirty();
-  }, [screenToFlowPosition, setNodes, markDirty]);
+  }, [setNodes, markDirty]);
+
+  const onDrop = useCallback((e) => {
+    e.preventDefault();
+    const type = e.dataTransfer.getData('application/checkq-step');
+    if (!type) return;
+    addNodeAt(type, screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+  }, [screenToFlowPosition, addNodeAt]);
 
   // 运行回显: 通过 data.runStatus 驱动节点样式(蓝=运行中/绿=成功/红=失败)
   const setRunStatus = useCallback((nodeId, status) => {
@@ -315,7 +319,9 @@ function FlowEditorInner({ flowId, onBack }) {
     }
   }, [setNodes, setEdges, markDirty, updateConfig]);
 
+  if (loadErr) return <div className="boot">加载失败：{loadErr} <button className="small" onClick={onBack}>返回</button></div>;
   if (!flow) return <div className="boot">加载流程…</div>;
+  const empty = nodes.length === 0;
 
   return (
     <>
@@ -373,14 +379,17 @@ function FlowEditorInner({ flowId, onBack }) {
               key={type}
               className="item"
               draggable
+              title="点击直接加到画布，或拖到画布指定位置"
               onDragStart={(e) => e.dataTransfer.setData('application/checkq-step', type)}
+              onClick={() => addNodeAt(type, { x: 80 + (nodes.length % 3) * 40, y: 60 + (nodes.length % 3) * 40 })}
             >
               <span className="dot" style={{ background: meta.color }} />
               {meta.label}
             </div>
           ))}
           <div className="hint">
-            拖拽到画布添加节点<br />
+            点击左侧积木直接加到画布<br />
+            或拖拽到画布添加节点<br />
             拉动节点右侧圆点连线<br />
             点节点配置，Delete 删除
           </div>
@@ -411,6 +420,19 @@ function FlowEditorInner({ flowId, onBack }) {
               style={{ background: '#12161f' }}
             />
           </ReactFlow>
+
+          {empty && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 5 }}>
+              <div style={{ background: 'var(--panel)', border: '1px dashed var(--border)', borderRadius: 14, padding: '28px 36px', textAlign: 'center', pointerEvents: 'auto', maxWidth: 420 }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>🧩</div>
+                <p style={{ margin: '0 0 6px', fontWeight: 600 }}>画布是空的</p>
+                <p style={{ margin: '0 0 12px', color: 'var(--muted)', fontSize: 12, lineHeight: 1.6 }}>
+                  从左侧点「HTTP 请求」开始：填 URL（支持 <code>{'{{变量}}'}</code>）→ 右侧再加「日志」节点 → 右上角 ▶ 运行验证。
+                </p>
+                <button className="small primary" onClick={() => addNodeAt('http', { x: 80, y: 60 })}>+ 加一个 HTTP 请求</button>
+              </div>
+            </div>
+          )}
 
           {drawerOpen && (
             <RunDrawer run={runResult} flowId={flow.id} onClose={() => setDrawerOpen(false)} onPickResponse={handlePickResponse} />
@@ -545,6 +567,11 @@ function VarsEditor({ flow, onVars }) {
 
   return (
     <div>
+      {Object.keys(vars).length === 0 && (
+        <p style={{ color: 'var(--muted)', fontSize: 11, lineHeight: 1.6, marginBottom: 8 }}>
+          暂无变量。在请求里写 {'{{cookie}}'} 即可，运行时会自动替换；敏感值（cookie/token）请在这里填。
+        </p>
+      )}
       {Object.entries(vars).map(([k, v]) => (
         <div key={k} style={{ marginBottom: 8 }}>
           <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>

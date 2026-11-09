@@ -26,12 +26,14 @@ export default function FlowList({ onOpen, onLogout }) {
   const [running, setRunning] = useState(null); // flowId -> 'running'
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all'); // all | scheduled | recent-failed
+  const [stats, setStats] = useState(null);
   const fileRef = useRef();
   const editTemplateRef = useRef(); // 模板编辑页回调刷新
 
   const load = () => {
     api.flows().then(setFlows).catch((e) => setToast({ kind: 'fail', text: e.message }));
     api.templates().then(setTemplates).catch(() => setTemplates([]));
+    api.stats().then(setStats).catch(() => setStats(null));
   };
 
   useEffect(() => { load(); }, []);
@@ -48,10 +50,20 @@ export default function FlowList({ onOpen, onLogout }) {
   });
 
   const createEmpty = async () => {
-    const f = await api.createFlow({
-      name: '新流程', nodes: [], edges: [], vars: {}, cron: '', enabled: false,
-    });
-    onOpen(f.id);
+    try {
+      const f = await api.createFlow({
+        name: '新任务',
+        nodes: [
+          { id: 'n0', type: 'http', name: '请求', x: 80, y: 60, config: { method: 'GET', url: 'https://', headers: [{ name: 'user-agent', value: 'Mozilla/5.0', enabled: true }], body: '', asserts: [] } },
+          { id: 'n1', type: 'log', name: '记录结果', x: 360, y: 60, config: { text: '状态 {{last.status}}' } },
+        ],
+        edges: [{ id: 'e0', source: 'n0', sourceHandle: 'success', target: 'n1' }],
+        vars: {}, cron: '', enabled: false,
+      });
+      onOpen(f.id);
+    } catch (e) {
+      setToast({ kind: 'fail', text: `创建失败: ${e.message}` });
+    }
   };
 
   const doImport = async (file) => {
@@ -124,6 +136,13 @@ export default function FlowList({ onOpen, onLogout }) {
       </div>
 
       <div className="page">
+        {stats && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, fontSize: 12, color: 'var(--muted)' }}>
+            <span className="badge muted">任务 {stats.flows} · 调度中 {stats.enabledScheduled} · 模板 {stats.templates}</span>
+            <span className="badge muted">今日 {stats.todayRuns} 次 · 成功 {stats.todaySuccess} · 失败 {stats.todayFailed}{stats.successRate !== null ? ` · 成功率 ${stats.successRate}%` : ''}</span>
+            {stats.nextRunAt ? <span className="badge ok">下次触发 {fmtTime(stats.nextRunAt)}</span> : <span className="badge muted">暂无调度</span>}
+          </div>
+        )}
         <div className="page-head">
           <h2>模板</h2>
           <span style={{ color: 'var(--muted)', fontSize: 12 }}>一个模板，多份任务；变量（cookie 等）在创建任务时各自填写</span>
@@ -362,6 +381,15 @@ function ResultModal({ run, flowId, onClose }) {
         <h3>{statusLabel} {run.durationMs ? <span style={{ color: 'var(--muted)', fontSize: 12, fontWeight: 400 }}>{(run.durationMs / 1000).toFixed(1)}s</span> : null}</h3>
         {run.finalMessage && (
           <p style={{ color: run.status === 'failed' ? 'var(--fail)' : 'var(--muted)', fontSize: 13, marginTop: -8 }}>{run.finalMessage}</p>
+        )}
+        {run.summary && (
+          <p style={{ color: 'var(--ok)', fontSize: 12, marginTop: -4 }}>📌 {run.summary}</p>
+        )}
+        {run.vars && Object.keys(run.vars).length > 0 && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ color: 'var(--muted)', fontSize: 11, marginBottom: 4 }}>最终变量快照（已脱敏）</div>
+            <pre>{Object.entries(run.vars).map(([k, v]) => `${k} = ${String(v).slice(0, 120)}`).join('\n')}</pre>
+          </div>
         )}
         <div className="result-logs">
           {(run.logs || []).length === 0 && <p style={{ color: 'var(--muted)' }}>暂无日志</p>}

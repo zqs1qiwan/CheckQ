@@ -259,6 +259,36 @@ export class Store {
   getRun(id) {
     return this.runs.find((r) => r.id === id) || null;
   }
+
+  /** 运维统计（首页健康条）：任务/调度/今日运行/成功率/下次触发 */
+  stats() {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const todayStart = start.getTime();
+    const todayRuns = this.runs.filter((r) => (r.startedAt || 0) >= todayStart);
+    const success = todayRuns.filter((r) => r.status === 'success').length;
+    const failed = todayRuns.filter((r) => r.status === 'failed').length;
+    const enabled = this.flows.filter((f) => f.enabled && f.cron);
+    let nextRunAt = null;
+    for (const f of enabled) {
+      try {
+        const job = new Cron(f.cron, { timezone: f.timezone || 'Asia/Shanghai' });
+        const next = job.nextRun()?.getTime() || null;
+        job.stop();
+        if (next && (nextRunAt === null || next < nextRunAt)) nextRunAt = next;
+      } catch { /* 无效 cron 忽略 */ }
+    }
+    return {
+      flows: this.flows.length,
+      enabledScheduled: enabled.length,
+      templates: this.templates.length,
+      todayRuns: todayRuns.length,
+      todaySuccess: success,
+      todayFailed: failed,
+      successRate: todayRuns.length ? Math.round((success / todayRuns.length) * 100) : null,
+      nextRunAt,
+    };
+  }
 }
 
 export function hashPwd(pwd) {

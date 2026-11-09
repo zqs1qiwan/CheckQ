@@ -66,35 +66,43 @@ export function buildServer({ dataDir, port }) {
       try { return await fn(); } finally { release(); }
     });
   };
+  const queuedSet = new Set(); // 等待中的 flowId（排队中徽章）
   const runner = {
     async runFlow(flow, trigger, { debugStopId, onLog } = {}) {
-      return enqueueRun(flow.id, async () => {
-        runningFlows.add(flow.id);
-        const runId = crypto.randomUUID();
-        const run = {
-          id: runId, flowId: flow.id, flowName: flow.name, trigger,
-          startedAt: Date.now(), status: 'running', logs: [], vars: {}, finalMessage: '',
-        };
-        try {
-          const engine = new Engine(flow);
-          const result = await engine.run({ trigger, runId, debugStopId, logSink: onLog });
-          run.status = result.ok ? 'success' : 'failed';
-          run.logs = result.logs;
-          run.finalMessage = result.finalMessage || (result.ok ? '' : '执行失败');
-          run.summary = result.summary || '';
-          run.vars = redactVars(result.vars);
-          run.durationMs = Date.now() - run.startedAt;
-        } catch (err) {
-          run.status = 'failed';
-          run.finalMessage = `引擎异常: ${err.message}`;
-          run.durationMs = Date.now() - run.startedAt;
-        } finally {
-          runningFlows.delete(flow.id);
-        }
-        store.addRun(run);
-        await sendNotify(flow, run);
-        return run;
-      });
+      const isQueued = runningFlows.has(flow.id);
+      if (isQueued) queuedSet.add(flow.id);
+      try {
+        return await enqueueRun(flow.id, async () => {
+          runningFlows.add(flow.id);
+          queuedSet.delete(flow.id);
+          const runId = crypto.randomUUID();
+          const run = {
+            id: runId, flowId: flow.id, flowName: flow.name, trigger,
+            startedAt: Date.now(), status: 'running', logs: [], vars: {}, finalMessage: '',
+          };
+          try {
+            const engine = new Engine(flow);
+            const result = await engine.run({ trigger, runId, debugStopId, logSink: onLog });
+            run.status = result.ok ? 'success' : 'failed';
+            run.logs = result.logs;
+            run.finalMessage = result.finalMessage || (result.ok ? '' : '执行失败');
+            run.summary = result.summary || '';
+            run.vars = redactVars(result.vars);
+            run.durationMs = Date.now() - run.startedAt;
+          } catch (err) {
+            run.status = 'failed';
+            run.finalMessage = `引擎异常: ${err.message}`;
+            run.durationMs = Date.now() - run.startedAt;
+          } finally {
+            runningFlows.delete(flow.id);
+          }
+          store.addRun(run);
+          await sendNotify(flow, run);
+          return run;
+        });
+      } finally {
+        if (queuedSet.has(flow.id) && !runningFlows.has(flow.id)) queuedSet.delete(flow.id);
+      }
     },
   };
 
@@ -185,7 +193,7 @@ export function buildServer({ dataDir, port }) {
     return { ok: true };
   });
 
-  app.get('/api/health', async () => ({ ok: true, version: '0.3.7' }));
+  app.get('/api/health', async () => ({ ok: true, version: '0.3.8' }));
 
   // 设置：改密 / API Key（单用户）
   app.get('/api/system/settings', async () => ({ hasApiKey: !!store.meta.apiKey, apiKey: store.meta.apiKey ? store.meta.apiKey.slice(0, 8) + '…' : null }));
@@ -493,7 +501,37 @@ export function buildServer({ dataDir, port }) {
   });
 
   // ---- runs ----
-  app.get('/api/system/stats', async () => store.stats());
+  app.get('/api/system/stats', async () => {
+    const s = store.stats();
+    return { ...s, queuedFlows: [...runningFlows, ...queuedSet], queueCount: queuedSet.size, runningCount: runningFlows.size, dailySummary: store.meta.dailySummary || null };
+  });
+
+  app.get('/api/system/daily-summary-config', async () => store.meta.dailySummary || { enabled: false, time: '08:00', timezone: 'Asia/Shanghai', targetFlowId: null });
+  app.put('/api/system/daily-summary-config', async (req, reply) => {
+    const cfg = req.body || {};
+    if (cfg.enabled && !/^\d{1,2}:\d{2}$/.test(String(cfg.time || ''))) return reply.code(400).send({ error: 'time 应为 HH:MM' });
+    store.meta.dailySummary = { enabled: !!cfg.enabled, time: cfg.time || '08:00', timezone: cfg.timezone || 'Asia/Shanghai', targetFlowId: cfg.targetFlowId || null };
+    store.flush();
+    scheduler.rebuild();
+    return store.meta.dailySummary;
+  });
+
+  // 模板市场索引导入（规范见 docs/TEMPLATE-MARKET.md）：从 URL 拉取 {name,desc,vars,nodes,edges,log} 建模板
+  app.post('/api/templates/from-url', async (req, reply) => {
+    const { url } = req.body || {};
+    if (!url || !/^https?:\/\//i.test(String(url))) return reply.code(400).send({ error: '缺少合法 url' });
+    let data;
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) return reply.code(502).send({ error: `拉取失败 HTTP ${res.status}` });
+      data = await res.json();
+    } catch (e) {
+      return reply.code(502).send({ error: `拉取失败: ${e.message}` });
+    }
+    if (!data?.name || !Array.isArray(data.nodes)) return reply.code(400).send({ error: '索引 JSON 不合法（需 name + nodes[]）' });
+    const tpl = store.createTemplate({ name: data.name, desc: data.desc || `来自 ${url}`, vars: data.vars || {}, varNames: data.varNames, nodes: data.nodes, edges: data.edges || [], log: data.log || null }, 'market');
+    return { id: tpl.id, name: tpl.name };
+  });
 
   // 批量操作（青龙/千岛对标：多选批量运行/启停/删除）
   app.post('/api/flows/batch', async (req, reply) => {
@@ -525,7 +563,7 @@ export function buildServer({ dataDir, port }) {
 
   // 备份/恢复：导出 flows/runs/templates（meta 密码不导出）；恢复以新 ID 导入避免覆盖
   app.get('/api/system/backup', async () => ({
-    version: '0.3.7',
+    version: '0.3.8',
     exportedAt: new Date().toISOString(),
     flows: store.flows,
     runs: store.runs,

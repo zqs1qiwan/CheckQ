@@ -172,6 +172,8 @@ export default function FlowList({ onOpen, onLogout }) {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, fontSize: 12, color: 'var(--muted)' }}>
             <span className="badge muted">任务 {stats.flows} · 调度中 {stats.enabledScheduled} · 模板 {stats.templates}</span>
             <span className="badge muted">今日 {stats.todayRuns} 次 · 成功 {stats.todaySuccess} · 失败 {stats.todayFailed}{stats.successRate !== null ? ` · 成功率 ${stats.successRate}%` : ''}</span>
+            {stats.queuedFlows?.length ? <span className="badge warn">排队中 {stats.queuedFlows.length}</span> : null}
+            {stats.dailySummary?.enabled ? <span className="badge ok">每日汇总 {stats.dailySummary.time}</span> : null}
             {stats.nextRunAt ? <span className="badge ok">下次触发 {fmtTime(stats.nextRunAt)}</span> : <span className="badge muted">暂无调度</span>}
           </div>
         )}
@@ -639,6 +641,8 @@ function SettingsModal({ onClose }) {
     <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
         <h3>设置</h3>
+        <SettingsFlow onToast={(text, kind) => { setMsg(text); setErr(''); }} />
+        <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '16px 0' }} />
         <div className="field">
           <label>当前密码</label>
           <input type="password" autoComplete="off" value={oldPw} onChange={(e) => setOldPw(e.target.value)} />
@@ -659,6 +663,49 @@ function SettingsModal({ onClose }) {
         <button onClick={onClose}>关闭</button>
       </div>
     </div>
+  );
+}
+
+/* 设置内：每日汇总定时 */
+function SettingsFlow({ onToast }) {
+  const [cfg, setCfg] = useState({ enabled: false, time: '08:00', timezone: 'Asia/Shanghai', targetFlowId: '' });
+  const [flows, setFlows] = useState([]);
+  const [marketUrl, setMarketUrl] = useState('');
+  useEffect(() => {
+    api.dailySummaryConfig().then(setCfg).catch(() => {});
+    api.flows().then(setFlows).catch(() => setFlows([]));
+  }, []);
+  return (
+    <>
+      <div className="field">
+        <label>每日汇总（自动）</label>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input type="checkbox" style={{ width: 'auto' }} checked={!!cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} />
+          每天 {cfg.time} 自动发送到所选任务的通知渠道
+        </label>
+        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+          <input type="time" style={{ width: 110 }} value={cfg.time} onChange={(e) => setCfg({ ...cfg, time: e.target.value })} />
+          <select value={cfg.targetFlowId || ''} onChange={(e) => setCfg({ ...cfg, targetFlowId: e.target.value })}>
+            <option value="">选有渠道的任务</option>
+            {flows.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+          <button className="small" onClick={async () => {
+            try { const r = await api.saveDailySummaryConfig(cfg); setCfg(r); onToast('每日汇总已保存'); }
+            catch (e) { onToast(e.message); }
+          }}>保存</button>
+        </div>
+      </div>
+      <div className="field">
+        <label>模板市场（从 URL 导入索引 JSON）</label>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <input className="mono" placeholder="https://.../template.json" value={marketUrl} onChange={(e) => setMarketUrl(e.target.value)} />
+          <button className="small" onClick={async () => {
+            try { await api.templateFromUrl(marketUrl); onToast('模板已导入'); setMarketUrl(''); }
+            catch (e) { onToast(e.message); }
+          }}>导入</button>
+        </div>
+      </div>
+    </>
   );
 }
 

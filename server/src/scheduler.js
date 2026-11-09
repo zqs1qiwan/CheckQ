@@ -31,8 +31,9 @@ export class Scheduler {
     for (const f of this.store.flows) {
       if (f.enabled && f.cron) want.set(f.id, f);
     }
-    // 移除不再需要的
+    // 移除不再需要的（包含非 flows 的汇总任务 id 统一在这里对账）
     for (const [id, job] of this.jobs) {
+      if (id.startsWith('__summary__')) continue;
       if (!want.has(id) || job.expression !== want.get(id).cron) {
         job.stop();
         this.jobs.delete(id);
@@ -58,6 +59,28 @@ export class Scheduler {
       } catch (err) {
         console.error(`[CheckQ] cron "${f.cron}" invalid on flow ${f.name}: ${err.message}`);
       }
+    }
+    this.#syncDailySummary();
+  }
+
+  #syncDailySummary() {
+    const cfg = this.store.meta.dailySummary || {};
+    const id = '__summary__';
+    const existing = this.jobs.get(id);
+    if (!cfg.enabled || !cfg.time) {
+      if (existing) { existing.stop(); this.jobs.delete(id); }
+      return;
+    }
+    const expr = `${String(cfg.time).split(':')[1] || '0'} ${String(cfg.time).split(':')[0] || '8'} * * *`;
+    if (existing && existing.expression === expr) return;
+    if (existing) existing.stop();
+    try {
+      const job = new Cron(expr, { timezone: cfg.timezone || 'Asia/Shanghai' }, async () => {
+        if (this.runner.sendDailySummary) await this.runner.sendDailySummary();
+      });
+      this.jobs.set(id, job);
+    } catch (err) {
+      console.error(`[CheckQ] daily summary cron invalid: ${err.message}`);
     }
   }
 }

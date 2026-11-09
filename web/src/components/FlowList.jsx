@@ -20,14 +20,36 @@ export function buildWizardFlow({ url, method, keyword, eventLabel }) {
   return { name: `${hostname} · ${eventLabel}`, nodes, edges, vars: {}, cron: '0 8 * * *', timezone: 'Asia/Shanghai', enabled: false };
 }
 
+/** 自然语言解析（对话生成原型）：一句话 → {url, method, keyword, eventLabel} */
+export function parseNatural(text) {
+  const t = String(text || '');
+  const urlM = t.match(/https?:\/\/[^\s"'）)]+/);
+  const url = urlM ? urlM[0] : '';
+  const method = /\bPOST\b/i.test(t) ? 'POST' : 'GET';
+  const kwM = t.match(/看到(.{2,12}?)算?成功/) || t.match(/成功词[是:：](.{2,12})/);
+  const keyword = kwM ? kwM[1].replace(/算?成功$/, '').trim() : '';
+  const events = ['签到', '抽卡', '库存监控', '信息查询'];
+  const eventLabel = events.find((e) => t.includes(e)) || '其他';
+  return { url, method, keyword, eventLabel };
+}
+
 function WizardModal({ onClose, onCreated }) {
   const [url, setUrl] = useState('https://');
   const [method, setMethod] = useState('GET');
   const [events, setEvents] = useState(['签到', '抽卡', '库存监控', '信息查询', '其他']);
   const [eventLabel, setEventLabel] = useState('签到');
   const [keyword, setKeyword] = useState('');
+  const [sentence, setSentence] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const fillFromSentence = () => {
+    if (!sentence.trim()) return;
+    const p = parseNatural(sentence);
+    if (p.url) setUrl(p.url);
+    if (p.method) setMethod(p.method);
+    if (p.keyword) setKeyword(p.keyword);
+    if (p.eventLabel && events.includes(p.eventLabel)) setEventLabel(p.eventLabel);
+  };
   const create = async () => {
     setErr(''); setBusy(true);
     try {
@@ -39,8 +61,13 @@ function WizardModal({ onClose, onCreated }) {
   return (
     <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
-        <h3>✨ 快速组装（菜单式）</h3>
+        <h3>✨ 快速组装（菜单式 + 一句话生成）</h3>
         <p style={{ color: 'var(--muted)', fontSize: 12 }}>填三项就行：站点地址、要做什么、看到什么算成功。进编辑器后点「▶ 运行」验证，响应里点选补细节。</p>
+        <div className="field">
+          <label>一句话生成（可选，例：每天8点去 https://ex.com/sign 签到，看到签到成功算成功）</label>
+          <input value={sentence} onChange={(e) => setSentence(e.target.value)} placeholder="每天8点去 https://ex.com/sign 签到，看到签到成功算成功" />
+          <button className="small" style={{ marginTop: 6 }} onClick={fillFromSentence}>按这句生成并填充</button>
+        </div>
         <div className="field">
           <label>请求地址（浏览器打开站点后复制地址栏）</label>
           <input className="mono" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/sign" />

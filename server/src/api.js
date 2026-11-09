@@ -138,6 +138,25 @@ export function buildServer({ dataDir, port }) {
       .replace(/\{\{\s*time\s*\}\}/g, new Date(run.startedAt || Date.now()).toLocaleString('zh-CN'));
   }
 
+  // Cookie 一键回填（统一浏览器登录）：书签脚本在站点页把 document.cookie POST 到这里，前端已登录的任务自动写入变量
+  app.options('/api/cookie-capture', async (req, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*');
+    reply.header('Access-Control-Allow-Methods', 'POST,OPTIONS');
+    reply.header('Access-Control-Allow-Headers', 'content-type');
+    return reply.code(204).send();
+  });
+  app.post('/api/cookie-capture', async (req, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*');
+    const { flowId, cookie, varName } = req.body || {};
+    if (!flowId || !cookie) return reply.code(400).send({ error: '缺少 flowId/cookie' });
+    const f = store.getFlow(flowId);
+    if (!f) return reply.code(404).send({ error: '任务不存在' });
+    const name = /^[A-Za-z_][\w]*$/.test(varName || 'cookie') ? (varName || 'cookie') : 'cookie';
+    store.updateFlow(flowId, { vars: { ...(f.vars || {}), [name]: String(cookie).trim() } });
+    store.flush();
+    return { ok: true, flowId, varName: name };
+  });
+
   async function sendToChannels(channels, text) {
     const results = [];
     for (const ch of channels || []) {
@@ -207,7 +226,7 @@ export function buildServer({ dataDir, port }) {
     return { ok: true };
   });
 
-  app.get('/api/health', async () => ({ ok: true, version: '0.3.11' }));
+  app.get('/api/health', async () => ({ ok: true, version: '0.3.12' }));
 
   // 设置：改密 / API Key（单用户）
   app.get('/api/system/settings', async () => ({ hasApiKey: !!store.meta.apiKey, apiKey: store.meta.apiKey ? store.meta.apiKey.slice(0, 8) + '…' : null }));
@@ -577,7 +596,7 @@ export function buildServer({ dataDir, port }) {
 
   // 备份/恢复：导出 flows/runs/templates（meta 密码不导出）；恢复以新 ID 导入避免覆盖
   app.get('/api/system/backup', async () => ({
-    version: '0.3.11',
+    version: '0.3.12',
     exportedAt: new Date().toISOString(),
     flows: store.flows,
     runs: store.runs,

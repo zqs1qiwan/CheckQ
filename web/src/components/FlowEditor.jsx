@@ -543,6 +543,7 @@ function FlowEditorInner({ flowId, onBack }) {
 
       {cookieOpen && (
         <CookieHelpModal
+          flow={flow}
           onClose={() => setCookieOpen(false)}
           onSaved={async ({ cookie }) => {
             const nf = await api.updateFlow(flow.id, { vars: { ...(flow.vars || {}), cookie: cookie.trim() } });
@@ -558,40 +559,51 @@ function FlowEditorInner({ flowId, onBack }) {
   );
 }
 
-function CookieHelpModal({ onClose, onSaved }) {
+function CookieHelpModal({ flow, onClose, onSaved }) {
   const [url, setUrl] = useState('https://');
   const [cookie, setCookie] = useState('');
   const [err, setErr] = useState('');
-  const snippet = "copy(document.cookie); // 在站点「已登录」的页面控制台执行，然后回这里粘贴";
+  const [done, setDone] = useState(false);
+  const origin = window.location.origin;
+  const captureUrl = `${origin}/api/cookie-capture`;
+  const bookmarklet = `javascript:fetch('${captureUrl}',{method:'POST',headers:{'Content-Type':'application/json'},mode:'no-cors',body:JSON.stringify({flowId:'${flow?.id || ''}',cookie:document.cookie,varName:'cookie'})}).then(()=>alert('已回填到 CheckQ ✅'));`;
+  const snippet = "copy(document.cookie); // 备用：已登录页面 Console 回车后粘贴";
+  const openLogin = () => window.open(url, '_blank');
   const save = async () => {
     try {
       const f = await onSaved({ cookie: cookie.trim() });
-      if (f) onClose();
+      if (f) { setDone(true); setTimeout(onClose, 600); }
     } catch (e) { setErr(e.message); }
   };
   return (
     <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
-        <h3>🍪 从浏览器填 Cookie（一键抓取）</h3>
+        <h3>🍪 一键填 Cookie（打开登录 → 自动回填）</h3>
         <p style={{ color: 'var(--muted)', fontSize: 12, lineHeight: 1.7 }}>
-          1. 新标签打开站点并登录一次：<a href={url} target="_blank" rel="noreferrer">{url}</a>
+          1. 点「打开登录页」，在站点登录一次（新标签）
           <br />
-          2. 在已登录页面按 <code>F12</code> → Console，粘贴下方一行回车，cookie 会自动复制到剪贴板
+          2. 一键回填（两选一）：把下面书签拖到收藏栏 → 已登录页点它（浏览器会把 cookie 直接 POST 到 CheckQ 并存到 <code>{'{{cookie}}'}</code>）；或在 Console 回车那一行再粘贴到本窗
           <br />
-          3. 回到这里粘贴保存，请求头 <code>{'{{cookie}}'}</code> 自动带上
+          3. 看到「已回填 ✅」即完成，点 ▶ 运行验证
         </p>
         <div className="field">
           <label>站点地址</label>
           <input className="mono" value={url} onChange={(e) => setUrl(e.target.value)} />
         </div>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+          <button className="primary" onClick={openLogin}>打开登录页</button>
+          <a className="small" style={{ alignSelf: 'center', border: '1px solid var(--border)', borderRadius: 8, padding: '4px 10px', textDecoration: 'none', color: 'var(--text)' }} href={bookmarklet} onClick={(e) => { e.preventDefault(); alert('拖到收藏栏后再到站点页点击'); }}>一键回填书签（拖到收藏栏）</a>
+        </div>
+        <pre className="mono" style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, fontSize: 11, wordBreak: 'break-all', userSelect: 'all' }}>{bookmarklet}</pre>
         <div className="field">
-          <label>取 cookie 的一行（粘到浏览器 Console）</label>
-          <pre className="mono" style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, fontSize: 12 }}>{snippet}</pre>
+          <label>备用（粘贴）</label>
+          <input className="mono" readOnly value={snippet} onFocus={(e) => e.target.select()} />
         </div>
         <div className="field">
           <label>粘贴 cookie 后保存</label>
-          <textarea className="mono" rows={4} value={cookie} onChange={(e) => setCookie(e.target.value)} placeholder="koa:sess=...; gld:sess=..." />
+          <textarea className="mono" rows={3} value={cookie} onChange={(e) => setCookie(e.target.value)} placeholder="koa:sess=...; gld:sess=..." />
         </div>
+        {done && <p style={{ color: 'var(--ok)', fontSize: 12 }}>✅ 已回填到变量</p>}
         {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
         <button className="primary" disabled={!cookie.trim()} onClick={save}>保存 cookie</button>
         {' '}

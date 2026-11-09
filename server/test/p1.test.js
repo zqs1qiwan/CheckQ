@@ -92,11 +92,11 @@ const sid = r.headers['set-cookie'].split(';')[0].split('=')[1];
 const ck = { qsid: sid };
 r = await app.inject({ method: 'POST', url: '/api/flows', cookies: ck, payload: { name: 'slow', nodes: [{ id: 'n0', type: 'delay', name: '等', x: 0, y: 0, config: { seconds: 2 } }, { id: 'n1', type: 'log', name: '记', x: 200, y: 0, config: { text: 'ok' } }], edges: [{ id: 'e1', source: 'n0', sourceHandle: 'next', target: 'n1' }] } });
 const slowId = r.json().id;
-// 快速连打两次：一次应成功（跑 2s），第二次应 409
+// 快速连打两次：排队串行执行，两次都应成功（第二次 queued=true）
 const p1 = app.inject({ method: 'POST', url: `/api/flows/${slowId}/run`, cookies: ck, payload: {} });
 await new Promise((res) => setTimeout(res, 200));
 const p2 = await app.inject({ method: 'POST', url: `/api/flows/${slowId}/run`, cookies: ck, payload: {} });
-check('并发第二次 409', p2.statusCode === 409);
+check('排队串行：第二次 200（主流程排队）', p2.statusCode === 200 && p2.json().id);
 const r1 = await p1;
 check('第一次运行成功', r1.json().status === 'success');
 

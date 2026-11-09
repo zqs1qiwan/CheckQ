@@ -55,39 +55,46 @@ export function buildServer({ dataDir, port }) {
     else loginFails.set(ip, { count: 1, firstAt: Date.now() });
   };
 
-  const runningFlows = new Set(); // 并发保护：同一 flow 同时只允许 1 个运行（PRD §4.2）
+  const runningFlows = new Set();
+  const queueMap = new Map(); // flowId -> Promise 链（运行排队：同 flow 串行执行）
+  const enqueueRun = (flowId, fn) => {
+    const prev = queueMap.get(flowId) || Promise.resolve();
+    let release;
+    const cur = new Promise((res) => { release = res; });
+    queueMap.set(flowId, prev.then(() => cur));
+    return prev.then(async () => {
+      try { return await fn(); } finally { release(); }
+    });
+  };
   const runner = {
     async runFlow(flow, trigger, { debugStopId, onLog } = {}) {
-      if (runningFlows.has(flow.id)) {
-        const err = new Error('该任务正在运行中，请稍候');
-        err.code = 409;
-        throw err;
-      }
-      runningFlows.add(flow.id);
-      const runId = crypto.randomUUID();
-      const run = {
-        id: runId, flowId: flow.id, flowName: flow.name, trigger,
-        startedAt: Date.now(), status: 'running', logs: [], vars: {}, finalMessage: '',
-      };
-      try {
-        const engine = new Engine(flow);
-        const result = await engine.run({ trigger, runId, debugStopId, logSink: onLog });
-        run.status = result.ok ? 'success' : 'failed';
-        run.logs = result.logs;
-        run.finalMessage = result.finalMessage || (result.ok ? '' : '执行失败');
-        run.summary = result.summary || ''; // keywords 提取摘要（PRD §4.7.4）
-        run.vars = redactVars(result.vars); // 变量快照脱敏（敏感名值打码）
-        run.durationMs = Date.now() - run.startedAt;
-      } catch (err) {
-        run.status = 'failed';
-        run.finalMessage = `引擎异常: ${err.message}`;
-        run.durationMs = Date.now() - run.startedAt;
-      } finally {
-        runningFlows.delete(flow.id);
-      }
-      store.addRun(run);
-      sendNotify(flow, run);
-      return run;
+      return enqueueRun(flow.id, async () => {
+        runningFlows.add(flow.id);
+        const runId = crypto.randomUUID();
+        const run = {
+          id: runId, flowId: flow.id, flowName: flow.name, trigger,
+          startedAt: Date.now(), status: 'running', logs: [], vars: {}, finalMessage: '',
+        };
+        try {
+          const engine = new Engine(flow);
+          const result = await engine.run({ trigger, runId, debugStopId, logSink: onLog });
+          run.status = result.ok ? 'success' : 'failed';
+          run.logs = result.logs;
+          run.finalMessage = result.finalMessage || (result.ok ? '' : '执行失败');
+          run.summary = result.summary || '';
+          run.vars = redactVars(result.vars);
+          run.durationMs = Date.now() - run.startedAt;
+        } catch (err) {
+          run.status = 'failed';
+          run.finalMessage = `引擎异常: ${err.message}`;
+          run.durationMs = Date.now() - run.startedAt;
+        } finally {
+          runningFlows.delete(flow.id);
+        }
+        store.addRun(run);
+        await sendNotify(flow, run);
+        return run;
+      });
     },
   };
 
@@ -95,16 +102,23 @@ export function buildServer({ dataDir, port }) {
     const n = flow.notify || {};
     const fire = (run.status === 'success' && n.onSuccess) || (run.status === 'failed' && n.onFailure);
     if (!fire || !n.channels?.length) return;
-    // 消息模板（PRD §4.8）：变量 flow.name/status/message/duration/time；默认 `[CheckQ] {{flow.name}} {{status}}\n{{message}}`
-    const tpl = n.template || '[CheckQ] {{flow.name}} {{status}}\n{{message}}';
-    const text = tpl
+    const text = renderNotifyTemplate(n, flow, run);
+    return sendToChannels(n.channels, text);
+  }
+
+  function renderNotifyTemplate(n, flow, run) {
+    const tpl = (n.template || '[CheckQ] {{flow.name}} {{status}}\n{{message}}');
+    return tpl
       .replace(/\{\{\s*flow\.name\s*\}\}/g, flow.name || '')
       .replace(/\{\{\s*status\s*\}\}/g, run.status === 'success' ? '成功 ✅' : '失败 ❌')
-      .replace(/\{\{\s*message\s*\}\}/g, run.finalMessage || (run.logs.at(-1)?.message || ''))
+      .replace(/\{\{\s*message\s*\}\}/g, run.finalMessage || (run.logs?.at(-1)?.message || ''))
       .replace(/\{\{\s*duration\s*\}\}/g, `${((run.durationMs || 0) / 1000).toFixed(1)}s`)
       .replace(/\{\{\s*time\s*\}\}/g, new Date(run.startedAt || Date.now()).toLocaleString('zh-CN'));
-    return text;
-    for (const ch of n.channels) {
+  }
+
+  async function sendToChannels(channels, text) {
+    const results = [];
+    for (const ch of channels || []) {
       try {
         if (ch.type === 'webhook') {
           await fetch(ch.url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: text });
@@ -118,10 +132,13 @@ export function buildServer({ dataDir, port }) {
           const u = ch.url.endsWith('/') ? ch.url : ch.url + '/';
           await fetch(u + encodeURIComponent(text));
         }
+        results.push({ type: ch.type, ok: true });
       } catch (err) {
         console.error(`[CheckQ] notify ${ch.type} failed:`, err.message);
+        results.push({ type: ch.type, ok: false, error: err.message });
       }
     }
+    return results;
   }
 
   const scheduler = new Scheduler(store, runner);
@@ -168,7 +185,7 @@ export function buildServer({ dataDir, port }) {
     return { ok: true };
   });
 
-  app.get('/api/health', async () => ({ ok: true, version: '0.3.6' }));
+  app.get('/api/health', async () => ({ ok: true, version: '0.3.7' }));
 
   // 设置：改密 / API Key（单用户）
   app.get('/api/system/settings', async () => ({ hasApiKey: !!store.meta.apiKey, apiKey: store.meta.apiKey ? store.meta.apiKey.slice(0, 8) + '…' : null }));
@@ -187,6 +204,34 @@ export function buildServer({ dataDir, port }) {
     store.meta.apiKey = key;
     store.flush();
     return { apiKey: key };
+  });
+
+  // 通知测试：向指定 flow 的渠道发一条测试消息（PRD §4.8 P2）
+  app.post('/api/flows/:id/notify-test', async (req, reply) => {
+    const f = store.getFlow(req.params.id);
+    if (!f) return reply.code(404).send({ error: 'not found' });
+    const n = f.notify || {};
+    if (!n.channels?.length) return reply.code(400).send({ error: '该任务未配置通知渠道' });
+    const testRun = { status: 'success', finalMessage: '测试通知（CheckQ）', durationMs: 0, startedAt: Date.now(), logs: [] };
+    const text = renderNotifyTemplate({ ...n, template: n.template || '测试通知：[CheckQ] {{flow.name}} {{status}}' }, f, testRun);
+    const results = await sendToChannels(n.channels, text);
+    const failed = results.filter((r) => !r.ok);
+    if (failed.length) return reply.code(502).send({ error: `部分渠道失败：${failed.map((x) => `${x.type}:${x.error}`).join('；')}`, results });
+    return { ok: true, results, text };
+  });
+
+  // 每日汇总预览/发送（PRD §4.8 P2）：基于 store.stats() 今日口径
+  app.post('/api/system/daily-summary', async (req, reply) => {
+    const s = store.stats();
+    const target = (req.body || {}).flowId ? store.getFlow((req.body || {}).flowId) : null;
+    if (target) {
+      const n = target.notify || {};
+      if (!n.channels?.length) return reply.code(400).send({ error: '该任务未配置通知渠道' });
+      const text = `每日汇总：今日 ${s.todayRuns} 次（成功 ${s.todaySuccess} / 失败 ${s.todayFailed}，成功率 ${s.successRate ?? '—'}%）；任务 ${s.flows}，调度中 ${s.enabledScheduled}，下次 ${s.nextRunAt ? new Date(s.nextRunAt).toLocaleString('zh-CN') : '—'}`;
+      const results = await sendToChannels(n.channels, text);
+      return { ok: results.every((r) => r.ok), text, results };
+    }
+    return { ok: true, stats: s };
   });
 
   // ---- flows ----
@@ -370,11 +415,9 @@ export function buildServer({ dataDir, port }) {
   app.post('/api/flows/:id/run', async (req, reply) => {
     const f = store.getFlow(req.params.id);
     if (!f) return reply.code(404).send({ error: 'not found' });
-    if (runningFlows.has(f.id)) {
-      return reply.code(409).send({ error: '该任务正在运行中，请稍候' });
-    }
     const debugStopId = (req.body || {}).debugStopId || null;
     const stream = (req.body || {}).stream === true;
+    const queued = runningFlows.has(f.id); // 排队提示（第二次请求进入串行队列）
 
     // SSE 模式（PRD §4.7.3 实时推送）：边执行边推送日志，结束事件携带完整 run
     if (stream) {
@@ -386,21 +429,11 @@ export function buildServer({ dataDir, port }) {
       const push = (event, data) => {
         reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       };
-      push('start', { flowId: f.id, flowName: f.name });
-      let run;
-      try {
-        run = await runner.runFlow(f, debugStopId ? 'debug' : 'manual', {
-          debugStopId,
-          onLog: (log) => push('log', log),
-        });
-      } catch (err) {
-        if (err.code === 409) {
-          reply.raw.write(`event: done\ndata: ${JSON.stringify({ id: 'conflict', flowId: f.id, status: 'failed', finalMessage: err.message, logs: [] })}\n\n`);
-          reply.raw.end();
-          return reply;
-        }
-        throw err;
-      }
+      push('start', { flowId: f.id, flowName: f.name, queued });
+      const run = await runner.runFlow(f, debugStopId ? 'debug' : 'manual', {
+        debugStopId,
+        onLog: (log) => push('log', log),
+      });
       push('done', run);
       reply.raw.end();
       return reply;
@@ -492,7 +525,7 @@ export function buildServer({ dataDir, port }) {
 
   // 备份/恢复：导出 flows/runs/templates（meta 密码不导出）；恢复以新 ID 导入避免覆盖
   app.get('/api/system/backup', async () => ({
-    version: '0.3.6',
+    version: '0.3.7',
     exportedAt: new Date().toISOString(),
     flows: store.flows,
     runs: store.runs,

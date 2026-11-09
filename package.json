@@ -1,6 +1,6 @@
 {
   "name": "checkq",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "private": true,
   "description": "Visual HTTP automation flow engine — docker-deployable",
   "license": "MIT"

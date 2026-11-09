@@ -114,6 +114,20 @@ export function buildServer({ dataDir, port }) {
     return sendToChannels(n.channels, text);
   }
 
+  runner.sendDailySummary = async () => {
+    const cfg = store.meta.dailySummary || {};
+    const target = cfg.targetFlowId ? store.getFlow(cfg.targetFlowId) : null;
+    if (!target?.notify.channels?.length) {
+      console.log('[CheckQ] dailySummary 跳过：目标任务无通知渠道');
+      return null;
+    }
+    const s = store.stats();
+    const text = `每日汇总：今日 ${s.todayRuns} 次（成功 ${s.todaySuccess} / 失败 ${s.todayFailed}，成功率 ${s.successRate ?? '—'}%）；任务 ${s.flows}，调度中 ${s.enabledScheduled}，下次 ${s.nextRunAt ? new Date(s.nextRunAt).toLocaleString('zh-CN') : '—'}`;
+    const results = await sendToChannels(target.notify.channels, text);
+    console.log(`[CheckQ] dailySummary 已发送 ${results.filter((x) => x.ok).length}/${results.length} 渠道`);
+    return { text, results };
+  };
+
   function renderNotifyTemplate(n, flow, run) {
     const tpl = (n.template || '[CheckQ] {{flow.name}} {{status}}\n{{message}}');
     return tpl

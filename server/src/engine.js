@@ -11,6 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { ProxyAgent } from 'undici';
+import vm from 'node:vm';
 
 const MAX_STEPS = 500;
 const HTTP_TIMEOUT = 30000;
@@ -521,6 +522,42 @@ export class Engine {
       case 'log': {
         const c = node.config || {};
         stepLog.message = renderTemplate(String(c.text ?? ''), vars, missing) || '(空日志)';
+        return { handle: 'next' };
+      }
+
+      case 'script': {
+        // 受限 JS 沙箱（PRD §4.1）：只注入 vars/last/steps 值，无 require/网络/fs/process；超时 1s；返回值对象合并回 vars
+        const c = node.config || {};
+        const code = String(c.code || '');
+        if (!code.trim()) {
+          stepLog.ok = false;
+          stepLog.message = '脚本为空';
+          return null;
+        }
+        // 先按模板渲染，允许 {{var}} 占位
+        const rendered = renderTemplate(code, vars, missing);
+        const snapshot = JSON.parse(JSON.stringify({ vars, last: state.last, steps: state.steps }, (_k, v) => (typeof v === 'object' && v !== null && v.__proto__ !== undefined ? v : v)));
+        let out;
+        try {
+          const ctx = {
+            vars: snapshot.vars, last: snapshot.last, steps: snapshot.steps,
+            console: { log: () => {}, warn: () => {}, error: () => {} },
+            Math, JSON, Date, Number, String, Array, Object, isNaN, parseInt, parseFloat,
+          };
+          vm.createContext(ctx);
+          const wrapped = `(() => {\n${rendered}\n})();`;
+          out = vm.runInContext(wrapped, ctx, { timeout: 1000 });
+        } catch (err) {
+          stepLog.ok = false;
+          stepLog.message = `脚本异常: ${err.message}`;
+          return null;
+        }
+        if (out && typeof out === 'object' && !Array.isArray(out)) {
+          for (const [k, v] of Object.entries(out)) vars[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
+          stepLog.message = `脚本返回 ${Object.keys(out).length} 个变量：${Object.keys(out).join(', ')}`;
+        } else {
+          stepLog.message = '脚本完成（无返回值）';
+        }
         return { handle: 'next' };
       }
 

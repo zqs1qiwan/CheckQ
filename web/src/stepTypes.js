@@ -9,6 +9,7 @@ export const STEP_TYPES = {
   'random-delay': { label: '随机延迟', color: '#94a3b8', outputs: ['next'] },
   log: { label: '日志', color: '#0ea5e9', outputs: ['next'] },
   notify: { label: '通知', color: '#ec4899', outputs: ['next'] },
+  script: { label: '脚本（JS沙箱）', color: '#f97316', outputs: ['next'] },
 };
 
 export const OUTPUT_LABELS = {
@@ -33,6 +34,8 @@ export function defaultConfig(type) {
       return { text: '' };
     case 'notify':
       return { text: '', channels: [] };
+    case 'script':
+      return { code: '// vars / last / steps 只读可用；return { 新变量: 值 } 合并回 vars\nreturn { out: "" };' };
     default:
       return {};
   }

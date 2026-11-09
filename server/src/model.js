@@ -62,6 +62,11 @@ export const STEP_TYPES = {
     color: '#ec4899',
     outputs: ['next'],
   },
+  script: {
+    label: '脚本（JS沙箱）',
+    color: '#f97316',
+    outputs: ['next'],
+  },
 };
 
 export function validateFlow(flow, { allowEmptyDraft = true } = {}) {

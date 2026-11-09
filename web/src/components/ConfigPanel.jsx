@@ -337,6 +337,14 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
         </div >
       )}
 
+      {type === 'script' && (
+        <div className="field">
+          <label>脚本代码 <span style={{ color: 'var(--muted)' }}>（高级逃生舱：vars/last/steps 只读，return 对象合并回 vars；禁网络/文件，超时 1s）</span></label>
+          <textarea className="mono" rows={8} value={config.code || ''} onChange={(e) => onConfigUpdate({ code: e.target.value })} />
+          <div className="hint">例：<code>{"return { doubled: Number(vars.n || 0) * 2 };"}</code></div>
+        </div>
+      )}
+
       {type === 'notify' && (
         <>{/* Notify node */}
           <div className="field">

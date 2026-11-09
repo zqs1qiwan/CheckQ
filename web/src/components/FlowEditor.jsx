@@ -62,7 +62,60 @@ function FlowEditorInner({ flowId, onBack }) {
   const [toast, setToast] = useState(null);
   const saveTimer = useRef(null);
   const stateRef = useRef({});
+  const historyRef = useRef({ past: [], future: [] });
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
   const { screenToFlowPosition } = useReactFlow();
+
+  const snapshotGraph = useCallback(() => ({
+    nodes: stateRef.current.nodes.map((n) => ({ id: n.id, type: 'step', position: { ...n.position }, data: JSON.parse(JSON.stringify(n.data)) })),
+    edges: stateRef.current.edges.map((e) => ({ ...e, style: e.style ? { ...e.style } : undefined })),
+  }), []);
+
+  const pushHistory = useCallback(() => {
+    historyRef.current.past.push(snapshotGraph());
+    if (historyRef.current.past.length > 50) historyRef.current.past.shift();
+    historyRef.current.future = [];
+    setCanUndo(true);
+    setCanRedo(false);
+  }, [snapshotGraph]);
+
+  const undo = useCallback(() => {
+    const h = historyRef.current;
+    if (!h.past.length) return;
+    h.future.push(snapshotGraph());
+    const prev = h.past.pop();
+    setNodes(prev.nodes);
+    setEdges(prev.edges);
+    setCanUndo(h.past.length > 0);
+    setCanRedo(true);
+    setDirty(true);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => save(), 800);
+  }, [snapshotGraph, setNodes, setEdges]);
+
+  const redo = useCallback(() => {
+    const h = historyRef.current;
+    if (!h.future.length) return;
+    h.past.push(snapshotGraph());
+    const nxt = h.future.pop();
+    setNodes(nxt.nodes);
+    setEdges(nxt.edges);
+    setCanRedo(h.future.length > 0);
+    setCanUndo(true);
+    setDirty(true);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => save(), 800);
+  }, [snapshotGraph, setNodes, setEdges]);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+      else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [undo, redo]);
 
   stateRef.current = { nodes, edges, flow };
 
@@ -138,18 +191,20 @@ function FlowEditorInner({ flowId, onBack }) {
   }, [setNodes, markDirty]);
 
   const onConnect = useCallback((c) => {
+    pushHistory();
     setEdges((es) => addEdge(decorateEdge({ ...c, id: `e${Date.now()}` }), es));
     markDirty();
-  }, [setEdges, markDirty]);
+  }, [setEdges, markDirty, pushHistory]);
 
   const addNodeAt = useCallback((type, pos) => {
+    pushHistory();
     const id = `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
     setNodes((ns) => [...ns, {
       id, type: 'step', position: pos,
       data: { id, type, name: STEP_TYPES[type].label, config: defaultConfig(type) },
     }]);
     markDirty();
-  }, [setNodes, markDirty]);
+  }, [setNodes, markDirty, pushHistory]);
 
   const onDrop = useCallback((e) => {
     e.preventDefault();
@@ -167,6 +222,7 @@ function FlowEditorInner({ flowId, onBack }) {
   }, [setNodes]);
 
   const deleteNode = useCallback((id) => {
+    pushHistory();
     setNodes((ns) => ns.filter((n) => n.id !== id));
     setEdges((es) => es.filter((e) => e.source !== id && e.target !== id));
     if (selectedId === id) setSelectedId(null);
@@ -365,6 +421,8 @@ function FlowEditorInner({ flowId, onBack }) {
           <span className="track" />
         </label>
         <span className="spacer" />
+        <button className="small" disabled={!canUndo} onClick={undo} title="撤销 (Ctrl+Z)">↩ 撤销</button>
+        <button className="small" disabled={!canRedo} onClick={redo} title="重做 (Ctrl+Shift+Z)">↪ 重做</button>
         {saving ? <span style={{ color: 'var(--muted)', fontSize: 12 }}>保存中…</span> : dirty ? <span style={{ color: 'var(--warn)', fontSize: 12 }}>未保存</span> : null}
         <button onClick={() => setLogOpen(true)} title="日志记录配置：档位 / 记录内容 / 响应截断 / 关键字规则（随模板复制）">日志配置</button>
         <button onClick={saveAsTemplate} title="把当前流程保存为模板，之后可基于它批量创建任务">存为模板</button>

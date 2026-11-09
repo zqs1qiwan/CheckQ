@@ -7,6 +7,74 @@ function fmtTime(ts) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+/** 自然语言式向导（菜单式）：填站点/事件 → 生成流程骨架（全程不写正则） */
+export function buildWizardFlow({ url, method, keyword, eventLabel }) {
+  const hostname = (() => {
+    try { return new URL(url).hostname; } catch { return '自定义任务'; }
+  })();
+  const nodes = [
+    { id: 'n0', type: 'http', name: `${method} ${hostname}`, x: 80, y: 60, config: { method, url, headers: [{ name: 'user-agent', value: 'Mozilla/5.0', enabled: true }], body: '', asserts: keyword ? [{ res: [keyword], from: 'content' }] : [] } },
+    { id: 'n1', type: 'log', name: '记录结果', x: 360, y: 60, config: { text: `${eventLabel}完成：{{last.status}}` } },
+  ];
+  const edges = [{ id: 'e0', source: 'n0', sourceHandle: 'success', target: 'n1' }];
+  return { name: `${hostname} · ${eventLabel}`, nodes, edges, vars: {}, cron: '0 8 * * *', timezone: 'Asia/Shanghai', enabled: false };
+}
+
+function WizardModal({ onClose, onCreated }) {
+  const [url, setUrl] = useState('https://');
+  const [method, setMethod] = useState('GET');
+  const [events, setEvents] = useState(['签到', '抽卡', '库存监控', '信息查询', '其他']);
+  const [eventLabel, setEventLabel] = useState('签到');
+  const [keyword, setKeyword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const create = async () => {
+    setErr(''); setBusy(true);
+    try {
+      const payload = buildWizardFlow({ url: url.trim(), method, keyword: keyword.trim(), eventLabel });
+      const f = await api.createFlow(payload);
+      onCreated(f);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <h3>✨ 快速组装（菜单式）</h3>
+        <p style={{ color: 'var(--muted)', fontSize: 12 }}>填三项就行：站点地址、要做什么、看到什么算成功。进编辑器后点「▶ 运行」验证，响应里点选补细节。</p>
+        <div className="field">
+          <label>请求地址（浏览器打开站点后复制地址栏）</label>
+          <input className="mono" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/sign" />
+        </div>
+        <div className="field-inline">
+          <div className="field">
+            <label>方法</label>
+            <select value={method} onChange={(e) => setMethod(e.target.value)}>
+              {['GET', 'POST'].map((m) => <option key={m}>{m}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>要做的事</label>
+            <select value={eventLabel} onChange={(e) => setEventLabel(e.target.value)}>
+              {events.map((x) => <option key={x}>{x}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="field">
+          <label>看到什么词算成功（页面文案，如「签到成功」；空=只看 HTTP 200）</label>
+          <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="签到成功" />
+        </div>
+        <div className="field">
+          <div className="hint">生成：HTTP 节点（带断言/UA）→ 日志节点「{eventLabel}完成」，cron 每天 8 点（可改），调度默认关闭。</div>
+        </div>
+        {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
+        <button className="primary" disabled={busy || !url.trim()} onClick={create}>{busy ? '生成中…' : '生成流程'}</button>
+        {' '}
+        <button onClick={onClose}>取消</button>
+      </div>
+    </div>
+  );
+}
+
 function Toast({ toast, onClose }) {
   useEffect(() => {
     if (!toast) return;
@@ -171,6 +239,7 @@ export default function FlowList({ onOpen, onLogout }) {
         <span className="spacer" />
         <button onClick={() => setModal('curl')} disabled={importBusy}>导入 cURL</button>
         <button onClick={() => setModal('import')} disabled={importBusy}>导入 HAR / 模板 JSON</button>
+        <button onClick={() => setModal('wizard')}>✨ 快速组装</button>
         <button className="primary" onClick={() => setModal('new')}>+ 新建任务</button>
         <button onClick={() => setModal('settings')}>设置</button>
         <button onClick={onLogout}>退出</button>
@@ -338,6 +407,10 @@ export default function FlowList({ onOpen, onLogout }) {
           </table>
         )}
       </div>
+
+      {modal === 'wizard' && (
+        <WizardModal onClose={() => setModal(null)} onCreated={(f) => { setModal(null); onOpen(f.id); setToast({ kind: 'ok', text: '流程已生成，去运行试试，再点「点选生成逻辑」补变量' }); }} />
+      )}
 
       {modal === 'new' && (
         <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && setModal(null)}>

@@ -8,7 +8,7 @@ function fmtTime(ts) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-export default function RunDrawer({ run, flowId, onClose, onPickResponse }) {
+export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepPick }) {
   const [tab, setTab] = useState('logs');
   const [hist, setHist] = useState(null);
   const [expanded, setExpanded] = useState(null); // log index
@@ -106,8 +106,14 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse }) {
                             <span>响应 (HTTP {log.detail.response.status}, {log.detail.response.ms}ms)</span>
                             {onPickResponse && (
                               <button className="small" style={{ padding: '2px 8px' }}
-                                onClick={() => setPickFor({ stepId: log.stepId, body: log.detail.response.body })}>
+                                onClick={() => setPickFor({ stepId: log.stepId, body: log.detail.response.body, repick: false })}>
                                 ✦ 点选生成逻辑
+                              </button>
+                            )}
+                            {!log.ok && onRepPick && (
+                              <button className="small" style={{ padding: '2px 8px' }}
+                                onClick={() => setPickFor({ stepId: log.stepId, body: log.detail.response.body, repick: true })}>
+                                ⟳ 用真实响应重选修复
                               </button>
                             )}
                           </div>
@@ -115,7 +121,7 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse }) {
                             <PickPanel
                               responseBody={pickFor.body}
                               onClose={() => setPickFor(null)}
-                              onApply={(result) => { setPickFor(null); onPickResponse && onPickResponse(result, log); }}
+                              onApply={(result) => { setPickFor(null); (pickFor.repick ? onRepPick : onPickResponse)?.(result, log); }}
                             />
                           ) : (
                             <pre>{log.detail.response.body}</pre>

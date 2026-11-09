@@ -59,6 +59,7 @@ function FlowEditorInner({ flowId, onBack }) {
   const [runResult, setRunResult] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  const [cookieOpen, setCookieOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const saveTimer = useRef(null);
   const stateRef = useRef({});
@@ -300,6 +301,23 @@ function FlowEditorInner({ flowId, onBack }) {
     setFlow(f);
   };
 
+  // 失败重选：原位替换失败节点的提取/断言配置（PRD §4.0.5）
+  const replaceFailedNode = useCallback((picked, log) => {
+    const { nodes: ns, flow: f } = stateRef.current;
+    if (!f || !log.stepId) return;
+    const node = ns.find((n) => n.id === log.stepId);
+    if (!node) return;
+    if (node.data.type === 'extract' && picked.nodes?.[0]) {
+      updateConfig(node.id, { ...node.data.config, ...picked.nodes[0].config, name: picked.varName || node.data.config.name });
+      showToast('已原位替换提取配置，立即重跑验证', 'ok');
+    } else if (picked.assert) {
+      const asserts = [...(node.data.config?.asserts || []), picked.assert];
+      updateConfig(node.id, { asserts });
+      showToast('已原位替换断言，立即重跑验证', 'ok');
+    }
+    markDirty();
+  }, [updateConfig, markDirty]);
+
   /** 点选结果 → 画布流式生长（PRD §4.0.1） */
   const handlePickResponse = useCallback(async (picked, log) => {
     const { nodes: ns, edges: es, flow: f } = stateRef.current;
@@ -435,6 +453,7 @@ function FlowEditorInner({ flowId, onBack }) {
             showToast(r.text || '汇总已发送', 'ok');
           } catch (e) { showToast(`汇总: ${e.message}`); }
         }} title="发送今日汇总到当前任务渠道">📊 每日汇总</button>
+        <button className="small" onClick={() => setCookieOpen(true)} title="从浏览器登录站点，一键抓 cookie 到变量">🍪 填Cookie</button>
         {saving ? <span style={{ color: 'var(--muted)', fontSize: 12 }}>保存中…</span> : dirty ? <span style={{ color: 'var(--warn)', fontSize: 12 }}>未保存</span> : null}
         <button onClick={() => setLogOpen(true)} title="日志记录配置：档位 / 记录内容 / 响应截断 / 关键字规则（随模板复制）">日志配置</button>
         <button onClick={saveAsTemplate} title="把当前流程保存为模板，之后可基于它批量创建任务">存为模板</button>
@@ -505,7 +524,7 @@ function FlowEditorInner({ flowId, onBack }) {
           )}
 
           {drawerOpen && (
-            <RunDrawer run={runResult} flowId={flow.id} onClose={() => setDrawerOpen(false)} onPickResponse={handlePickResponse} />
+            <RunDrawer run={runResult} flowId={flow.id} onClose={() => setDrawerOpen(false)} onPickResponse={handlePickResponse} onRepPick={replaceFailedNode} />
           )}
         </div>
 
@@ -522,8 +541,63 @@ function FlowEditorInner({ flowId, onBack }) {
 
       {logOpen && <LogConfigModal flow={flow} onClose={() => setLogOpen(false)} onSaved={(f) => setFlow(f)} />}
 
+      {cookieOpen && (
+        <CookieHelpModal
+          onClose={() => setCookieOpen(false)}
+          onSaved={async ({ cookie }) => {
+            const nf = await api.updateFlow(flow.id, { vars: { ...(flow.vars || {}), cookie: cookie.trim() } });
+            setFlow(nf);
+            showToast('cookie 已保存到变量', 'ok');
+            return nf;
+          }}
+        />
+      )}
+
       {toast && <div className={`toast ${toast.kind}`} onClick={() => setToast(null)}>{toast.text}</div>}
     </>
+  );
+}
+
+function CookieHelpModal({ onClose, onSaved }) {
+  const [url, setUrl] = useState('https://');
+  const [cookie, setCookie] = useState('');
+  const [err, setErr] = useState('');
+  const snippet = "copy(document.cookie); // 在站点「已登录」的页面控制台执行，然后回这里粘贴";
+  const save = async () => {
+    try {
+      const f = await onSaved({ cookie: cookie.trim() });
+      if (f) onClose();
+    } catch (e) { setErr(e.message); }
+  };
+  return (
+    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <h3>🍪 从浏览器填 Cookie（一键抓取）</h3>
+        <p style={{ color: 'var(--muted)', fontSize: 12, lineHeight: 1.7 }}>
+          1. 新标签打开站点并登录一次：<a href={url} target="_blank" rel="noreferrer">{url}</a>
+          <br />
+          2. 在已登录页面按 <code>F12</code> → Console，粘贴下方一行回车，cookie 会自动复制到剪贴板
+          <br />
+          3. 回到这里粘贴保存，请求头 <code>{'{{cookie}}'}</code> 自动带上
+        </p>
+        <div className="field">
+          <label>站点地址</label>
+          <input className="mono" value={url} onChange={(e) => setUrl(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>取 cookie 的一行（粘到浏览器 Console）</label>
+          <pre className="mono" style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, fontSize: 12 }}>{snippet}</pre>
+        </div>
+        <div className="field">
+          <label>粘贴 cookie 后保存</label>
+          <textarea className="mono" rows={4} value={cookie} onChange={(e) => setCookie(e.target.value)} placeholder="koa:sess=...; gld:sess=..." />
+        </div>
+        {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
+        <button className="primary" disabled={!cookie.trim()} onClick={save}>保存 cookie</button>
+        {' '}
+        <button onClick={onClose}>取消</button>
+      </div>
+    </div>
   );
 }
 

@@ -523,20 +523,27 @@ function CsvImportModal({ tpl, onClose, onDone }) {
   );
 }
 
-/** 模板管理：改名/改默认变量/查看节点数 */
+/** 模板管理：改名/描述/默认变量编辑/节点数（PRD §4.3 默认变量编辑） */
 function TemplateEditorModal({ tpl, onDone }) {
   const [name, setName] = useState(tpl.name);
   const [desc, setDesc] = useState(tpl.desc || '');
   const [detail, setDetail] = useState(null);
+  const [vars, setVars] = useState([]); // [{name, value}]
   const [err, setErr] = useState('');
 
   useEffect(() => {
-    api.template(tpl.id).then(setDetail).catch((e) => setErr(e.message));
+    api.template(tpl.id).then((t) => {
+      setDetail(t);
+      const names = t.varNames && t.varNames.length ? t.varNames : Object.keys(t.vars || {});
+      setVars(names.map((n) => ({ name: n, value: (t.vars || {})[n] ?? '' })));
+    }).catch((e) => setErr(e.message));
   }, [tpl.id]);
 
   const save = async () => {
     try {
-      await api.updateTemplate(tpl.id, { name, desc });
+      const varsObj = {};
+      for (const v of vars) if (v.name.trim()) varsObj[v.name.trim()] = v.value;
+      await api.updateTemplate(tpl.id, { name, desc, vars: varsObj, varNames: Object.keys(varsObj) });
       onDone();
     } catch (e) { setErr(e.message); }
   };
@@ -547,7 +554,7 @@ function TemplateEditorModal({ tpl, onDone }) {
         <h3>管理模板：{tpl.name}</h3>
         {detail && (
           <p style={{ color: 'var(--muted)', fontSize: 12 }}>
-            {detail.nodes.length} 个节点 · 变量：{Object.keys(detail.vars || {}).join(', ') || '无'}
+            {detail.nodes.length} 个节点 · {vars.length} 个默认变量（实例化时预填）
           </p>
         )}
         <div className="field">
@@ -557,6 +564,22 @@ function TemplateEditorModal({ tpl, onDone }) {
         <div className="field">
           <label>描述</label>
           <input value={desc} onChange={(e) => setDesc(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>默认变量值（敏感项建议留空，实例化时再填真实值）</label>
+          {vars.map((v, i) => (
+            <div key={i} style={{ marginBottom: 8 }}>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                <input className="mono" style={{ fontSize: 11, padding: '4px 6px' }} value={v.name} onChange={(e) => setVars(vars.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
+                <button className="small danger" style={{ padding: '2px 7px' }} onClick={() => setVars(vars.filter((_, j) => j !== i))}>×</button>
+              </div>
+              <textarea className="mono" style={{ fontSize: 11, padding: '4px 6px', marginTop: 3 }} rows={1} value={v.value} onChange={(e) => setVars(vars.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))} />
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input style={{ fontSize: 11, padding: '4px 6px' }} placeholder="新变量名" id="tpl-new-var" />
+            <button className="small" onClick={() => setVars([...vars, { name: document.getElementById('tpl-new-var')?.value || `var${vars.length + 1}`, value: '' }])}>+ 添加变量</button>
+          </div>
         </div>
         {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
         <button className="primary" onClick={save}>保存</button>

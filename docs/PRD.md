@@ -1,6 +1,6 @@
 # CheckQ PRD — 可视化 HTTP 自动化流程引擎
 
-版本: 0.3 (PRD) | 基线代码: v0.3.0 | 状态: v0.2 P0 已全部实现；QD 兼容层 GAP-C1~C4 已落地（2026-11-08）
+版本: 0.3 (PRD) | 基线代码: v0.3.4 | 状态: v0.2 P0 已全部实现；QD 兼容层 GAP-C1~C4 已落地（2026-11-08）；v0.3.4 新增日志配置生效（include/resBodyLimit）、QD retry 映射、登录防爆破、cron 抖动、模板默认变量编辑、模板 log 携带修复（2026-11-09）
 定位一句话: **像搭积木一样搭建"自动签到/打卡/监控"类 HTTP 流程，一个模板派生多份任务，全程可视化、可调试、可告警。**
 
 > **续建判断依据（2026-11-08 评审）**：本仓库并非空仓——已有 v0.2 可运行基线（DAG 引擎、8 类节点、Pick Panel、模板系统、SSE 日志、cURL/HAR/QD 导入、103 项单测、路由器实测实例）。产品目标（拖拽流程化、条件分支、自定义请求、日志推送、Docker 部署）与现状同向，重建只会丢弃已验证资产。决策：**续建**。缺口用实测数据驱动收敛——现网 QD 采样（39 任务/13 模板，见 docs/QIANDAO-COMPAT.md）定位出 4 个真实阻塞点（cookie 罐/util 转换/表达式层/变量 URL），本轮已全部闭环，QD 任务运行级兼容 ≥ 12/13。
@@ -111,9 +111,9 @@ Run = { id, flowId, trigger: manual|cron|debug|api, status, logs[], vars, finalM
 4. 无法从响应捕获 Set-Cookie（签到场景高频需求）✅ v0.2 已实现（getSetCookie/头文件解析）
 5. 无循环/遍历节点（翻页、批量元素）⬜ v0.3 P1
 6. 编辑器无 undo/redo、无运行状态回显到画布、无复制节点 ⬜ P1/P2
-7. 模板默认变量不可编辑、无导出 JSON、无 CSV 批量建任务 ✅ v0.2 已实现（导出脱敏 + CSV 批量；默认变量编辑 ⬜）
+7. 模板默认变量不可编辑、无导出 JSON、无 CSV 批量建任务 ✅ v0.2 已实现（导出脱敏 + CSV 批量；默认变量编辑 ✅ v0.3.4）
 8. 无 cURL 命令导入、无"复制为 curl" ✅ v0.2 已实现（cURL 导入；"复制为 curl" ⬜ P1）
-9. 登录无防爆破；无备份/恢复；无运行统计 ⬜ P1/P2
+9. 登录无防爆破 ✅ v0.3.4（5 次/10 分钟锁定）；无备份/恢复；无运行统计 ⬜ P1/P2
 10. 列表无搜索/筛选/分组、无下次运行时间显示 ✅ v0.2 已实现（搜索 + 筛选 + nextRunAt）
 11. 无 run 级 cookie 罐（登录→签到链断裂）✅ v0.3 已实现（GAP-C1，cookiejar.js，显式头同名优先，节点可 `cookieJar:false` 退出）
 12. 模板表达式层弱于 QD jinja（md5 拼接签名/default/striptags 不可用）✅ v0.3 已实现（GAP-C3，白名单函数式求值，无 eval）
@@ -304,7 +304,7 @@ script 沙箱细则:
 | 功能 | 设计 | 状态 |
 |---|---|---|
 | 存为模板 | 流程编辑器一键存（现 prompt 输入名字）→ 改为小弹窗：名字 + 描述 + **勾选哪些变量作为"模板变量"**（未勾选的保留在流程里不抽离） | 🔶 |
-| 默认变量编辑 | 模板管理弹窗可编辑每个 varName 的默认值（textarea），实例化时预填 | ⬜ P0 |
+| 默认变量编辑 | 模板管理弹窗可编辑每个 varName 的默认值（textarea），实例化时预填 | ✅ v0.3.4 |
 | 导出 | 模板卡片"导出 JSON"（下载 .json，含 name/desc/vars/nodes/edges，**不含任何真实凭证——导出前将敏感默认值置空**） | ✅ v0.2 |
 | 导入 | 现有 JSON 导入直接进模板库（现进流程 ⬜ 需改）；格式校验 + 报错定位 | 🔶 |
 | CSV 批量建任务 | 模板卡片"批量创建"：粘贴 CSV（首行=变量名，一列可映射到任务名），预览表格 → 确认生成 N 个任务 | ✅ v0.2 |
@@ -348,7 +348,7 @@ Template = {
 | 立即运行 | ✅ 已有；运行中显示"运行中…"+ 行内 spinner | ✅ |
 | 运行排队 | 并发保护开启后，手动点击进入队列，列表状态显示"排队中 #n" | ⬜ P1 |
 | 变量查看/编辑 | 任务行"变量"按钮 → 弹窗查看+编辑 vars（敏感值默认打码，点眼睛显示，改后需保存） | ✅ v0.2（编辑器内 VarsEditor；首页任务行"变量"按钮 ⬜） |
-| 克隆任务 | 行内"复制"→ 复制为新任务（名字 + ` · 副本`） | ⬜ P1 |
+| 克隆任务 | 行内"复制"→ 复制为新任务（名字 + ` · 副本`，保留 tplId/jitter/log） | ✅ v0.2 + v0.3.4 修复 |
 | 删除确认 | ✅ confirm 弹窗（保持） | ✅ |
 
 ### 4.5 调度系统
@@ -357,7 +357,7 @@ Template = {
 |---|---|---|
 | cron 编辑 | 编辑器"调度"卡片：常用预设下拉（每天 8 点/每小时/工作日…）+ 高级 cron 输入 + 即时校验（croner 解析失败即红框提示）+ 显示未来 3 次运行时间 | 🔶 |
 | 时区 | 每流时区（现有），默认 Asia/Shanghai | ✅ |
-| 随机抖动 | 流级 `jitterMinutes: 0-30`：触发时刻在 cron 点 ± n 分钟内随机延迟（反风控：避免整点指纹） | ⬜ P0 |
+| 随机抖动 | 流级 `jitterMinutes: 0-30`：触发时刻在 cron 点后随机延迟 0-n 分钟（反风控整点指纹；编辑器顶栏可设） | ✅ v0.3.4 |
 | 错峰预设 | cron 预设里提供"每天随机时间 8-10 点"这类模板（本质 jitter） | ⬜ P2 |
 | 补跑策略 | 容器重启错过的运行：不补跑（保持签到类语义，下次 cron 到点再跑）；页面显示"上次错过的计划时间" | ⬜ P2 |
 | 调度健康 | 列表页顶部状态条：调度器活跃、共 N 个任务启用、下次最近触发 | ⬜ P2 |
@@ -477,7 +477,7 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 - 正则非法：编辑器即时红框提示（复用 ConfigPanel 校验）；运行时非法规则跳过并记 warning
 - **创建方式三种**：① Pick Panel 划选文字→"记录到日志"（自动生成规则，同 §4.0.3 泛化）；② 日志详情查看响应时点选→补规则；③ 编辑器"日志配置"面板手填 regex
 
-**日志配置面板（编辑器）** ✅ v0.2
+**日志配置面板（编辑器）** ✅ v0.2（v0.3.4 补：引擎真正执行 include 四开关 + resBodyLimit；编辑器顶栏日志配置可编辑）
 
 - 编辑器顶栏"日志"按钮 → 抽屉：level 三档选择 + include 四开关 + resBodyLimit + 关键字规则表格（name/regex/from/into 增删改，regex 输入框旁"测试"按钮贴样例即时验证）
 - 该面板配置属于流程（模板携带），任务实例化后可各自微调
@@ -504,7 +504,7 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 | 功能 | 设计 | 状态 |
 |---|---|---|
 | HAR 导入 | ✅（进流程） | ✅ |
-| QD 模板导入 | ✅（含 SKIP 过滤、init_env→vars、api://util/delay→delay 节点、util/unicode|urldecode→log 节点、data 字段→body、变量 URL 放行；兼容性实测见 docs/QIANDAO-COMPAT.md） | ✅ v0.3 |
+| QD 模板导入 | ✅（含 SKIP 过滤、init_env→vars、api://util/delay→delay 节点、util/unicode|urldecode→log 节点、data 字段→body、变量 URL 放行、retry_count/retry_interval→节点 retry；兼容性实测见 docs/QIANDAO-COMPAT.md） | ✅ v0.3 + v0.3.4 |
 | cURL 导入 | 粘贴 curl 命令 → 自动解析 method/url/headers/body 生成 http 节点（覆盖 -H/--data/-b/--compressed/--http2） | ✅ v0.2（12 项单测） |
 | 流程导出 | 任务 JSON 导出（含 vars 时警告含敏感信息） | 🔶 v0.2（模板导出已有，任务导出 ⬜） |
 | 全量备份 | 设置页"导出全部"（flows/runs/templates/meta 打包 JSON）；"导入恢复"；建议 cron 外部备份 data 目录 | ⬜ P1 |
@@ -514,7 +514,7 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 
 | 功能 | 设计 | 状态 |
 |---|---|---|
-| 密码登录 | scrypt hash（现有）；**登录失败 5 次/10 分钟锁定（内存计数）** | 🔶 |
+| 密码登录 | scrypt hash；**登录失败 5 次/10 分钟锁定（内存计数，429）** | ✅ v0.3.4 |
 | 会话 | cookie qsid 7 天（现有）；"退出"清空所有会话（现语义） | ✅ |
 | API Key | X-API-Key（现有，存 meta）；设置页可见/重置 | 🔶 |
 | HTTPS | 文档建议反代加 TLS；服务本身不内置 | 文档 |

@@ -32,6 +32,21 @@ export function buildServer({ dataDir, port }) {
   const store = new Store(dataDir);
   const app = Fastify({ logger: false, bodyLimit: 32 * 1024 * 1024 });
   const sessions = new Map(); // qsid -> expiry
+  // 登录防爆破（PRD §4.10）：同一 IP 10 分钟内失败 5 次 → 429 锁定
+  const loginFails = new Map(); // ip -> { count, firstAt }
+  const LOGIN_FAIL_LIMIT = 5;
+  const LOGIN_FAIL_WINDOW = 10 * 60 * 1000;
+  const loginLocked = (ip) => {
+    const rec = loginFails.get(ip);
+    if (!rec) return false;
+    if (Date.now() - rec.firstAt > LOGIN_FAIL_WINDOW) { loginFails.delete(ip); return false; }
+    return rec.count >= LOGIN_FAIL_LIMIT;
+  };
+  const noteLoginFail = (ip) => {
+    const rec = loginFails.get(ip);
+    if (rec && Date.now() - rec.firstAt <= LOGIN_FAIL_WINDOW) rec.count++;
+    else loginFails.set(ip, { count: 1, firstAt: Date.now() });
+  };
 
   const runner = {
     async runFlow(flow, trigger, { debugStopId, onLog } = {}) {
@@ -105,10 +120,19 @@ export function buildServer({ dataDir, port }) {
   });
 
   app.post('/api/login', async (req, reply) => {
+    const ip = req.ip || req.hostname || 'unknown';
+    if (loginLocked(ip)) {
+      return reply.code(429).send({ error: '登录失败次数过多，请 10 分钟后再试' });
+    }
     const { password } = req.body || {};
     if (!password || !verifyPwd(password, store.meta.passwordHash)) {
+      noteLoginFail(ip);
+      if (loginLocked(ip)) {
+        return reply.code(429).send({ error: '登录失败次数过多，请 10 分钟后再试' });
+      }
       return reply.code(401).send({ error: '密码错误' });
     }
+    loginFails.delete(ip);
     const qsid = crypto.randomBytes(24).toString('base64url');
     sessions.set(qsid, Date.now() + 7 * 86400e3);
     reply.setCookie('qsid', qsid, { path: '/', sameSite: 'lax', maxAge: 7 * 86400 });
@@ -120,7 +144,7 @@ export function buildServer({ dataDir, port }) {
     return { ok: true };
   });
 
-  app.get('/api/health', async () => ({ ok: true, version: '0.1.0' }));
+  app.get('/api/health', async () => ({ ok: true, version: '0.3.4' }));
 
   // ---- flows ----
   app.get('/api/flows', async () => store.listFlows());
@@ -145,10 +169,10 @@ export function buildServer({ dataDir, port }) {
   app.get('/api/templates', async () => store.listTemplates());
 
   app.post('/api/templates', async (req, reply) => {
-    const { name, desc, vars, nodes, edges } = req.body || {};
+    const { name, desc, vars, varNames, nodes, edges, log } = req.body || {};
     const errors = validateFlow({ name, nodes, edges, vars });
     if (errors.length) return reply.code(400).send({ error: errors.join('; ') });
-    const tpl = store.createTemplate({ name, desc, vars, nodes, edges }, 'import');
+    const tpl = store.createTemplate({ name, desc, vars, varNames, nodes, edges, log }, 'import');
     return { id: tpl.id, name: tpl.name };
   });
 
@@ -191,6 +215,7 @@ export function buildServer({ dataDir, port }) {
       varNames: t.varNames || Object.keys(safeVars),
       vars: safeVars,
       nodes: t.nodes, edges: t.edges,
+      log: t.log || null,
       samplesIncluded: false,
     };
   });
@@ -340,11 +365,13 @@ export function buildServer({ dataDir, port }) {
       cron: f.cron,
       timezone: f.timezone,
       enabled: false, // 克隆任务默认暂停，避免立即重复执行
+      jitterMinutes: f.jitterMinutes || 0,
       vars: f.vars,
       nodes: f.nodes,
       edges: f.edges,
       notify: f.notify,
       log: f.log,
+      tplId: f.tplId || null,
     });
     return clone;
   });

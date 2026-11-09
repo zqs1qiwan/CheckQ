@@ -10,7 +10,8 @@ Docker 一行部署，导入浏览器 HAR 自动生成流程，条件分支 / �
 - **积木式流程编辑器** — 类似苹果捷径。HTTP 请求、条件分支、变量赋值、正则提取、延迟、日志、通知，拖拽连线即成流程
 - **点选生成逻辑** — 运行后点击响应中的任意 JSON 值或划选文字，一键生成提取/断言/关键字/通知节点，自动接入流程链尾；生成物是标准节点配置，可继续编辑（PRD §4.0）
 - **HAR / cURL 导入** — 浏览器 DevTools 的 HAR、qiandao(QD) 框架模板、cURL 命令均可导入，自动识别生成流程图；QD 模板的 `api://util/delay` 转 delay 节点、`util/unicode|urldecode` 转 log 节点、变量 URL 放行（兼容性实测矩阵见 docs/QIANDAO-COMPAT.md）
-- **关键字提取与日志三档** — flow 级配置 keywords 正则规则（如提取标题），每次运行自动汇总到运行摘要；日志按 all / failure / summary 三档记录，敏感头（cookie/authorization）自动脱敏
+- **关键字提取与日志三档** — flow 级配置 keywords 正则规则（如提取标题），每次运行自动汇总到运行摘要；日志按 all / failure / summary 三档记录，记录内容四开关（请求头/请求体/响应体/变量快照）与响应体截断长度可配，编辑器顶栏「日志配置」可编辑；敏感头（cookie/authorization）自动脱敏
+- **调度抖动** — 流级 `jitterMinutes`（0-30，编辑器顶栏可设）：cron 触发后随机延迟 0-N 分钟，避免整点风控指纹；模板管理弹窗可编辑默认变量值
 - **条件分支** — jexl 表达式，如 `last.json.code == 0`，按响应内容决定走向
 - **run 级 Cookie 罐** — 一次运行内响应 Set-Cookie 自动入罐，后续同域请求自动携带（登录→签到链开箱即用），显式 Cookie 头同名键优先，节点可退出
 - **函数式模板表达式** — `{{md5("f=1&s="+id)|upper}}`、`{{x|default('兜底')}}`、`{{multiply(timestamp('float'),1000)|int}}`，对齐 QD jinja 常用写法，白名单求值无 eval
@@ -73,7 +74,7 @@ services:
 | POST | /api/flows/:id/run | 立即运行（可选 `debugStopId` 调试到指定节点） |
 | GET | /api/runs?flowId= | 运行历史 |
 | GET | /api/runs/:id | 单次运行详情 |
-| POST | /api/import/har | HAR/QD 模板导入 → 流程草稿 |
+| POST | /api/import/har | HAR/QD 模板导入 → 流程草稿（QD `retry_count/retry_interval` 自动映射为 http 节点 `retry`） |
 | POST | /api/import/curl | cURL 命令解析 → HTTP 节点配置 |
 | GET/POST | /api/templates | 模板列表 / JSON 导入建模板 |
 | GET/PUT/DELETE | /api/templates/:id | 模板详情 / 改名改变量 / 删除（不影响已建任务） |

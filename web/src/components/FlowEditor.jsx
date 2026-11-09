@@ -57,6 +57,7 @@ function FlowEditorInner({ flowId, onBack }) {
   const [saving, setSaving] = useState(false);
   const [runResult, setRunResult] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const saveTimer = useRef(null);
   const stateRef = useRef({});
@@ -344,12 +345,22 @@ function FlowEditorInner({ flowId, onBack }) {
           <option value="Asia/Tokyo">Asia/Tokyo</option>
           <option value="America/New_York">America/New_York</option>
         </select>
+        <input
+          className="mono"
+          style={{ width: 105 }}
+          placeholder="抖动(分)"
+          title="调度抖动：cron 触发后随机延迟 0-N 分钟执行（反风控整点指纹），0=不抖动"
+          value={flow.jitterMinutes ?? 0}
+          onChange={(e) => setFlow({ ...flow, jitterMinutes: Number(e.target.value) || 0 })}
+          onBlur={(e) => api.updateFlow(flow.id, { jitterMinutes: Number(e.target.value) || 0 }).then(() => showToast('抖动已保存', 'ok')).catch((err) => showToast(err.message))}
+        />
         <label className="switch" title={flow.enabled ? '点击停用调度' : '点击启用调度'}>
           <input type="checkbox" checked={!!flow.enabled} onChange={toggleEnabled} />
           <span className="track" />
         </label>
         <span className="spacer" />
         {saving ? <span style={{ color: 'var(--muted)', fontSize: 12 }}>保存中…</span> : dirty ? <span style={{ color: 'var(--warn)', fontSize: 12 }}>未保存</span> : null}
+        <button onClick={() => setLogOpen(true)} title="日志记录配置：档位 / 记录内容 / 响应截断 / 关键字规则（随模板复制）">日志配置</button>
         <button onClick={saveAsTemplate} title="把当前流程保存为模板，之后可基于它批量创建任务">存为模板</button>
         <button className="primary" onClick={runNow} title="从头执行整个流程">▶ 运行</button>
       </div>
@@ -417,8 +428,96 @@ function FlowEditorInner({ flowId, onBack }) {
         />
       </div>
 
+      {logOpen && <LogConfigModal flow={flow} onClose={() => setLogOpen(false)} onSaved={(f) => setFlow(f)} />}
+
       {toast && <div className={`toast ${toast.kind}`} onClick={() => setToast(null)}>{toast.text}</div>}
     </>
+  );
+}
+
+/** 日志配置抽屉（PRD §4.7.4）：level 三档 + include 四开关 + resBodyLimit + keywords 规则表 */
+function LogConfigModal({ flow, onClose, onSaved }) {
+  const cur = flow.log && typeof flow.log === 'object' ? flow.log : {};
+  const [level, setLevel] = useState(cur.level || 'all');
+  const [include, setInclude] = useState({
+    reqHeaders: cur.include?.reqHeaders !== false,
+    reqBody: cur.include?.reqBody !== false,
+    resBody: cur.include?.resBody !== false,
+    varsSnapshot: cur.include?.varsSnapshot !== false,
+  });
+  const [resBodyLimit, setResBodyLimit] = useState(cur.resBodyLimit ?? 2000);
+  const [keywords, setKeywords] = useState(Array.isArray(cur.keywords) ? cur.keywords : []);
+  const [err, setErr] = useState('');
+
+  const save = async () => {
+    try {
+      const nf = await api.updateFlow(flow.id, { log: { level, include, resBodyLimit: Number(resBodyLimit) || 0, keywords } });
+      onSaved(nf);
+      onClose();
+    } catch (e) { setErr(e.message); }
+  };
+
+  const chk = (k, label) => (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: 13 }}>
+      <input type="checkbox" style={{ width: 'auto' }} checked={include[k]} onChange={(e) => setInclude({ ...include, [k]: e.target.checked })} />
+      {label}
+    </label>
+  );
+
+  return (
+    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <h3>日志配置：{flow.name}</h3>
+        <div className="field">
+          <label>记录档位（低档位自动忽略下方内容开关）</label>
+          <select value={level} onChange={(e) => setLevel(e.target.value)}>
+            <option value="all">all —— 全部步骤完整记录（调试期）</option>
+            <option value="failure">failure —— 仅失败步骤完整记录（稳定运行期）</option>
+            <option value="summary">summary —— 只记标题/关键字/耗时（长期免维护）</option>
+          </select>
+        </div>
+        <div className="field">
+          <label>记录内容开关（仅 all 档生效）</label>
+          {chk('reqHeaders', '请求头')}
+          {chk('reqBody', '请求体')}
+          {chk('resBody', '响应体')}
+          {chk('varsSnapshot', '运行后变量快照')}
+        </div>
+        <div className="field">
+          <label>响应体截断长度（字符，0 = 不记录）</label>
+          <input className="mono" type="number" min={0} max={100000} value={resBodyLimit} onChange={(e) => setResBodyLimit(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>关键字规则（命中值进运行摘要；仅影响日志/通知，不影响流程执行）</label>
+          {keywords.map((k, i) => (
+            <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 8, marginBottom: 8 }}>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                <input style={{ flex: 1 }} placeholder="规则名（如 积分）" value={k.name || ''} onChange={(e) => setKeywords(keywords.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
+                <button className="small danger" onClick={() => setKeywords(keywords.filter((_, j) => j !== i))}>删除</button>
+              </div>
+              <input className="mono" placeholder="正则（第 1 捕获组为值）" value={k.regex || ''} onChange={(e) => setKeywords(keywords.map((x, j) => (j === i ? { ...x, regex: e.target.value } : x)))} style={{ marginBottom: 6 }} />
+              <div style={{ display: 'flex', gap: 6 }}>
+                <select value={k.from || 'response'} onChange={(e) => setKeywords(keywords.map((x, j) => (j === i ? { ...x, from: e.target.value } : x)))}>
+                  <option value="response">响应体</option>
+                  <option value="headers">响应头</option>
+                  <option value="status">状态码</option>
+                </select>
+                <select value={k.into || 'summary'} onChange={(e) => setKeywords(keywords.map((x, j) => (j === i ? { ...x, into: e.target.value } : x)))}>
+                  <option value="summary">进摘要</option>
+                  <option value="notify">进通知</option>
+                  <option value="var">写变量(仅日志侧)</option>
+                </select>
+              </div>
+            </div>
+          ))}
+          <button className="small" onClick={() => setKeywords([...keywords, { name: '新规则', regex: '', from: 'response', into: 'summary' }])}>+ 添加规则</button>
+        </div>
+        {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
+        <button className="primary" onClick={save}>保存</button>
+        {' '}
+        <button onClick={onClose}>关闭</button>
+      </div>
+    </div>
   );
 }
 

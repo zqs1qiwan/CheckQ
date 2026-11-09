@@ -95,3 +95,4 @@
 **排程切换演练**：16 个迁移流程已启用 cron（00:02–00:17 Asia/Shanghai，全部早于 QD 侧 00:10）。预期明日 QD 侧对应任务将因「今日已签到」出现失败计数——这是切换演练的预期行为，确认我们侧全绿后即可停用 QD 任务。
 
 **迁移遗留**：QD 任务级 retry_count/retry_interval 未映射到节点重试（导入器可后续自动映射）；T13 全链新鲜态验证待明晨 cron 实跑确认。
+> **2026-11-09 v0.3.4 已闭环 retry 映射**：`importHar()` 新增 `resolveRetry()`，读取顶层 / `task.env` 的 `retry_count` / `retry_interval`（秒）并注入每个 http 节点 `retry: { times, backoffMs: interval*1000, retryOn: 'both' }`（钳制 times≤5、backoff 500-30000ms），与单测覆盖。

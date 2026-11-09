@@ -54,16 +54,28 @@ export class Engine {
     const logs = [];
     const missing = new Set();
 
-    // 日志配置（PRD §4.7.4）：level 三档 + keywords 关键字规则
+    // 日志配置（PRD §4.7.4）：level 三档 + include 开关 + resBodyLimit + keywords 关键字规则
+    // 低档位（failure/summary）强制忽略 include（见 run 末尾裁剪），include 只在 level=all 生效
     const logCfg = (flow.log && typeof flow.log === 'object') ? flow.log : null;
     const logLevel = logCfg?.level || 'all';
+    const logInclude = (logCfg?.include && typeof logCfg.include === 'object') ? logCfg.include : {};
+    this.logInclude = {
+      reqHeaders: logInclude.reqHeaders !== false,
+      reqBody: logInclude.reqBody !== false,
+      resBody: logInclude.resBody !== false,
+      varsSnapshot: logInclude.varsSnapshot !== false,
+    };
+    const rawLimit = logCfg?.resBodyLimit;
+    this.resBodyLimit = rawLimit === undefined || rawLimit === null
+      ? 2000
+      : Math.min(100000, Math.max(0, Number(rawLimit) || 0));
     const keywords = Array.isArray(logCfg?.keywords) ? logCfg.keywords.filter((k) => k && k.regex) : [];
     const keywordResults = []; // {name, values[]} 汇总
 
     const entry = this.findEntryNode();
     if (!entry) {
       logs.push({ stepId: null, index: 1, name: '流程', type: 'error', ok: false, message: '找不到入口节点', detail: null, ms: 0 });
-      return { ok: false, logs, vars, finalMessage: '找不到入口节点' };
+      return { ok: false, logs, vars: this.logInclude.varsSnapshot ? vars : {}, finalMessage: '找不到入口节点' };
     }
 
     let node = entry;
@@ -185,6 +197,8 @@ export class Engine {
       ? keywordResults.map((r) => `${r.name}: ${r.values.join(', ')}`).join('； ')
       : '';
 
+    // include.varsSnapshot=false：不记录运行级变量快照（PRD §4.7.4）
+    if (!this.logInclude.varsSnapshot) return { ok: !failed, logs: trimmedLogs, vars: {}, finalMessage, summary };
     return { ok: !failed, logs: trimmedLogs, vars, finalMessage, summary };
   }
 
@@ -231,6 +245,10 @@ export class Engine {
       proxyUrl = String(renderTemplate(c.proxy.url, vars, missing)).trim();
     }
     stepLog.detail = { method, url, headers: redact(headers), body, attempt, proxy: proxyUrl || undefined, jar: jarUsed || undefined };
+    // include 开关（level=all 时生效；failure/summary 的裁剪在 run 末尾统一处理）
+    const include = this.logInclude || { reqHeaders: true, reqBody: true, resBody: true };
+    if (!include.reqHeaders) delete stepLog.detail.headers;
+    if (!include.reqBody) delete stepLog.detail.body;
 
     const t0 = Date.now();
     let status, statusText, text, respHeaders, setCookies;
@@ -285,11 +303,18 @@ export class Engine {
     const duration = Date.now() - t0;
     state.last = { status, statusText, headers: respHeaders, text, json, ms: duration, setCookies: setCookies || [] };
     state.steps[node.id] = state.last;
+    // resBodyLimit 截断（PRD §4.7.4：默认 2000，0-100000；0 = 不记录响应体）
+    const limit = this.resBodyLimit === undefined ? 2000 : this.resBodyLimit;
+    const recBody = !include.resBody
+      ? undefined
+      : limit === 0
+        ? ''
+        : text.length > limit ? text.slice(0, limit) + `… (${text.length} bytes)` : text;
     stepLog.detail.response = {
       status,
       headers: respHeaders,
       setCookie: (setCookies || []).length ? redactSetCookies(setCookies) : undefined,
-      body: text.length > 2000 ? text.slice(0, 2000) + `… (${text.length} bytes)` : text,
+      body: recBody,
       ms: duration,
     };
 

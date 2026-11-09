@@ -81,7 +81,7 @@ export class Store {
       }
       return {
         id: f.id, name: f.name, note: f.note, cron: f.cron, timezone: f.timezone,
-        enabled: f.enabled, varsCount: Object.keys(f.vars || {}).length,
+        enabled: f.enabled, jitterMinutes: f.jitterMinutes || 0, varsCount: Object.keys(f.vars || {}).length,
         nodesCount: (f.nodes || []).length, tplId: f.tplId || null,
         lastRun,
         nextRunAt,
@@ -94,6 +94,7 @@ export class Store {
   }
 
   createFlow(data) {
+    const jitterMinutes = Math.min(30, Math.max(0, Number(data.jitterMinutes) || 0));
     const flow = {
       id: crypto.randomUUID(),
       name: data.name || '未命名流程',
@@ -101,6 +102,7 @@ export class Store {
       cron: data.cron || '',
       timezone: data.timezone || 'Asia/Shanghai',
       enabled: false,
+      jitterMinutes,
       vars: data.vars || {},
       nodes: data.nodes || [],
       edges: data.edges || [],
@@ -118,7 +120,7 @@ export class Store {
   updateFlow(id, patch) {
     const f = this.getFlow(id);
     if (!f) return null;
-    const allowed = ['name', 'note', 'cron', 'timezone', 'enabled', 'vars', 'nodes', 'edges', 'notify', 'log'];
+    const allowed = ['name', 'note', 'cron', 'timezone', 'enabled', 'vars', 'nodes', 'edges', 'notify', 'log', 'jitterMinutes', 'tplId'];
     for (const k of allowed) {
       if (patch[k] !== undefined) f[k] = patch[k];
     }
@@ -162,6 +164,8 @@ export class Store {
       vars: data.vars || {},      // 默认变量值（生成任务时预填）
       nodes: data.nodes || [],
       edges: data.edges || [],
+      // 模板携带日志配置（PRD §4.3.1）：level/include/resBodyLimit/keywords 随模板复制
+      log: data.log || null,
       createdAt: Date.now(),
     };
     this.templates.push(tpl);
@@ -172,8 +176,14 @@ export class Store {
   updateTemplate(id, patch) {
     const t = this.getTemplate(id);
     if (!t) return null;
-    for (const k of ['name', 'desc', 'vars', 'varNames']) {
+    for (const k of ['name', 'desc', 'vars', 'varNames', 'log', 'nodes', 'edges']) {
       if (patch[k] !== undefined) t[k] = patch[k];
+    }
+    // varNames 与 vars 保持一致：显式传 varNames 时以它为准补齐 vars；只改 vars 时同步 varNames
+    if (patch.varNames !== undefined) {
+      for (const vn of patch.varNames) if (t.vars[vn] === undefined) t.vars[vn] = '';
+    } else if (patch.vars !== undefined) {
+      t.varNames = Object.keys(t.vars);
     }
     this.#persist();
     return t;

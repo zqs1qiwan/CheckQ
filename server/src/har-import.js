@@ -11,13 +11,50 @@
  * QD localhost /util/string/replace → log 节点（QD 的 __log__ 渲染 hack）
  */
 
-export function importHar(rawText) {
+/**
+ * QD 任务级 retry → 节点重试（QIANDAO-COMPAT §7 遗留）：
+ * QD 的 retry_count/retry_interval 是任务级 env 变量，语义为"整个任务失败后隔 N 秒再试"。
+ * CheckQ 无任务级整流重试，映射为每个 http 节点的 retry（times/backoffMs/retryOn=both），
+ * 即"每步失败都按任务级次数与间隔重试"。来源优先级：显式 opts > 顶层字段 > task/env 嵌套。
+ */
+function resolveRetry(har, opts = {}) {
+  const pick = (...vals) => {
+    for (const v of vals) {
+      if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+    }
+    return undefined;
+  };
+  const env = har?.task?.env || har?.env || {};
+  const countRaw = pick(
+    opts.retryCount, opts.retry_count,
+    har?.retry_count, har?.retryCount,
+    env.retry_count, env.retryCount,
+    (har?.task || {}).retry_count,
+  );
+  const intervalRaw = pick(
+    opts.retryInterval, opts.retry_interval,
+    har?.retry_interval, har?.retryInterval,
+    env.retry_interval, env.retryInterval,
+    (har?.task || {}).retry_interval,
+  );
+  const times = Math.min(5, Math.max(0, parseInt(countRaw, 10) || 0));
+  if (!times) return undefined;
+  // QD retry_interval 以秒为单位；引擎 backoffMs 钳制 500-30000（见 engine 重试分支）
+  const intervalSec = Number(intervalRaw);
+  const backoffMs = Number.isFinite(intervalSec) && intervalSec > 0
+    ? Math.min(30000, Math.max(500, Math.round(intervalSec * 1000)))
+    : 1000;
+  return { times, backoffMs, retryOn: 'both' };
+}
+
+export function importHar(rawText, opts = {}) {
   let har;
   try {
     har = JSON.parse(rawText);
   } catch {
     throw new Error('HAR 不是合法 JSON');
   }
+  const retry = resolveRetry(har, opts);
   const isQd = Array.isArray(har.tpl) || (har.har && Array.isArray(har.har?.log?.entries));
   const entries = isQd
     ? (har.har?.log?.entries || har.tpl?.map((t) => ({ request: t.request, rule: t.rule })) || [])
@@ -120,7 +157,7 @@ export function importHar(rawText) {
       x: 80,
       y: 60 + i * 130,
       // QD 模板统一 curl 后端（对齐 pycurl 行为：TLS 指纹 + POST 默认 form content-type）；浏览器 HAR 保持 fetch
-      config: { method, url: rawUrl, headers, body, asserts, ...(isQd ? { backend: 'curl' } : {}) },
+      config: { method, url: rawUrl, headers, body, asserts, ...(isQd ? { backend: 'curl' } : {}), ...(retry ? { retry } : {}) },
     };
     chain(node, 'success');
 

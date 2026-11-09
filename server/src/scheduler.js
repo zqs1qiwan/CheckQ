@@ -44,9 +44,15 @@ export class Scheduler {
       try {
         const job = new Cron(f.cron, { timezone: f.timezone || 'Asia/Shanghai' }, async () => {
           const flow = this.store.getFlow(id);
-          if (flow && flow.enabled) {
-            await this.runner.runFlow(flow, 'cron');
-          }
+          if (!flow || !flow.enabled) return;
+          // 随机抖动（PRD §4.5）：触发时刻在 cron 点后随机延迟 0-jitterMinutes 分钟，避免整点风控
+          const jitter = Math.min(30, Math.max(0, Number(flow.jitterMinutes) || 0));
+          const delay = jitter > 0 ? Math.random() * jitter * 60 * 1000 : 0;
+          if (delay > 0) console.log(`[CheckQ] jitter: ${flow.name} 延迟 ${Math.round(delay / 1000)}s (${jitter}min 抖动)`);
+          setTimeout(async () => {
+            const cur = this.store.getFlow(id);
+            if (cur && cur.enabled) await this.runner.runFlow(cur, 'cron');
+          }, delay);
         });
         this.jobs.set(id, job);
       } catch (err) {

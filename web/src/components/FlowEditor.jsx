@@ -9,6 +9,7 @@ import { currentMode, onMode } from '../theme.js';
 import ThemeToggle from './ThemeToggle.jsx';
 import ConfigPanel from './ConfigPanel.jsx';
 import RunDrawer from './RunDrawer.jsx';
+import GuideModal from './GuideModal.jsx';
 
 const COLOR = Object.fromEntries(Object.entries(STEP_TYPES).map(([k, v]) => [k, v.color]));
 
@@ -63,6 +64,8 @@ function FlowEditorInner({ flowId, onBack }) {
   const [showPalette, setShowPalette] = useState(() => (typeof window === 'undefined' ? true : window.innerWidth > 900));
   const [showConfig, setShowConfig] = useState(() => (typeof window === 'undefined' ? true : window.innerWidth > 900));
   const [logOpen, setLogOpen] = useState(false);
+  const [notifyOpen, setNotifyOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [cookieOpen, setCookieOpen] = useState(false);
   const [tplOpen, setTplOpen] = useState(false);
   const [tplName, setTplName] = useState('');
@@ -492,12 +495,14 @@ function FlowEditorInner({ flowId, onBack }) {
         {saving ? <span style={{ color: 'var(--muted)', fontSize: 12 }}>保存中…</span> : dirty ? <span style={{ color: 'var(--warn)', fontSize: 12 }}>未保存</span> : null}
         <button className="small" disabled={!runResult} onClick={() => setDrawerOpen(true)} title={runResult ? '展开运行日志' : '先运行一次'}>日志</button>
         <button className="small primary" onClick={runNow} title="从头执行整个流程">运行</button>
+        <button className="iconbtn" onClick={() => setGuideOpen(true)} title="使用引导" aria-label="使用引导">?</button>
         <details className="menu">
           <summary>···</summary>
           <div className="menu-pop" onClick={(e) => e.currentTarget.closest('details')?.removeAttribute('open')}>
             <button disabled={!canUndo} onClick={undo}>撤销</button>
             <button disabled={!canRedo} onClick={redo}>重做</button>
             <div className="menu-sep" />
+            <button onClick={() => setNotifyOpen(true)}>通知渠道</button>
             <button onClick={testNotify}>测试通知</button>
             <button onClick={sendSummary}>发送每日汇总</button>
             <button onClick={() => setCookieOpen(true)}>填入 Cookie</button>
@@ -593,6 +598,8 @@ function FlowEditorInner({ flowId, onBack }) {
       </div>
 
       {logOpen && <LogConfigModal flow={flow} onClose={() => setLogOpen(false)} onSaved={(f) => setFlow(f)} />}
+      {notifyOpen && <NotifyModal flow={flow} onClose={() => setNotifyOpen(false)} onSaved={(f) => setFlow(f)} onToast={showToast} />}
+      {guideOpen && <GuideModal onClose={() => setGuideOpen(false)} />}
 
       {cookieOpen && (
         <CookieHelpModal
@@ -706,6 +713,104 @@ function CookieHelpModal({ flow, onClose, onSaved }) {
 }
 
 /** 日志配置抽屉（PRD §4.7.4）：level 三档 + include 四开关 + resBodyLimit + keywords 规则表 */
+function NotifyModal({ flow, onClose, onSaved, onToast }) {
+  const cur = flow.notify && typeof flow.notify === 'object' ? flow.notify : {};
+  const [channels, setChannels] = useState(Array.isArray(cur.channels) ? cur.channels : []);
+  const [onSuccess, setOnSuccess] = useState(cur.onSuccess !== false);
+  const [onFailure, setOnFailure] = useState(cur.onFailure !== false);
+  const [template, setTemplate] = useState(cur.template || '[CheckQ] {{flow.name}} {{status}}\n{{message}}');
+  const [err, setErr] = useState('');
+  const [testResult, setTestResult] = useState(null);
+
+  const TYPES = [
+    ['webhook', 'Webhook（通用 JSON）'],
+    ['bark', 'Bark（iOS）'],
+    ['telegram', 'Telegram Bot'],
+    ['serverchan', 'Server酱 Turbo'],
+    ['dingtalk', '钉钉机器人'],
+    ['wecom', '企业微信机器人'],
+    ['feishu', '飞书机器人'],
+  ];
+  const FIELDS = {
+    webhook: [['url', 'URL']],
+    bark: [['url', '服务器 URL'], ['title', '标题'], ['group', '分组（可选）']],
+    telegram: [['token', 'Bot Token'], ['chat', 'Chat ID']],
+    serverchan: [['key', 'SendKey'], ['title', '标题']],
+    dingtalk: [['url', 'Webhook URL'], ['secret', '加签密钥（可选）'], ['title', '标题']],
+    wecom: [['url', 'Webhook URL']],
+    feishu: [['url', 'Webhook URL'], ['secret', '签名密钥（可选）']],
+  };
+
+  const patch = (i, k, v) => setChannels(channels.map((c, j) => (j === i ? { ...c, [k]: v } : c)));
+  const save = async () => {
+    setErr(''); setTestResult(null);
+    try {
+      const nf = await api.updateFlow(flow.id, { notify: { onSuccess, onFailure, template, channels } });
+      onSaved(nf);
+      if (onToast) onToast('通知渠道已保存', 'ok');
+    } catch (e) { setErr(e.message); }
+  };
+  const test = async () => {
+    setErr(''); setTestResult(null);
+    try {
+      await save();
+      const r = await api.notifyTest(flow.id);
+      setTestResult({ ok: true, results: r.results, text: r.text });
+    } catch (e) { setTestResult({ ok: false, error: e.message }); }
+  };
+
+  return (
+    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal notify-modal">
+        <h3>通知渠道：{flow.name}</h3>
+        <label className="checkline">
+          <input type="checkbox" checked={onSuccess} onChange={(e) => setOnSuccess(e.target.checked)} />
+          成功时通知
+        </label>
+        <label className="checkline">
+          <input type="checkbox" checked={onFailure} onChange={(e) => setOnFailure(e.target.checked)} />
+          失败时通知
+        </label>
+        <div className="field">
+          <label>通知模板（支持 {'{{'}flow.name{'}}'} / {'{{'}status{'}}'} / {'{{'}message{'}}'} / {'{{'}duration{'}}'} / {'{{'}time{'}}'}）</label>
+          <textarea rows={2} className="mono" value={template} onChange={(e) => setTemplate(e.target.value)} />
+        </div>
+        {channels.map((c, i) => (
+          <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10, marginBottom: 10 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <select value={c.type || 'webhook'} onChange={(e) => patch(i, 'type', e.target.value)}>
+                {TYPES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+              </select>
+              <button className="small danger" onClick={() => setChannels(channels.filter((_, j) => j !== i))}>删除</button>
+            </div>
+            {(FIELDS[c.type || 'webhook'] || []).map(([k, label]) => (
+              <div className="field" key={k} style={{ marginBottom: 8 }}>
+                <label>{label}</label>
+                <input className="mono" value={c[k] || ''} placeholder={label} onChange={(e) => patch(i, k, e.target.value)} />
+              </div>
+            ))}
+          </div>
+        ))}
+        <button className="small" onClick={() => setChannels([...channels, { type: 'webhook', url: '' }])}>+ 添加渠道</button>
+        {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
+        {testResult && (
+          <div style={{ fontSize: 12, color: testResult.ok ? 'var(--ok)' : 'var(--fail)', marginTop: 8 }}>
+            {testResult.ok ? `已发送 ${testResult.results.filter((r) => r.ok).length}/${testResult.results.length} 个渠道` : `发送失败：${testResult.error}`}
+            {testResult.ok && testResult.results.some((r) => !r.ok) && (
+              <div>{testResult.results.filter((r) => !r.ok).map((r) => `${r.type}: ${r.error}`).join('；')}</div>
+            )}
+          </div>
+        )}
+        <div className="btn-row" style={{ marginTop: 12 }}>
+          <button className="primary" onClick={save}>保存</button>
+          <button onClick={test} disabled={!channels.length}>测试发送</button>
+          <button onClick={onClose}>关闭</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LogConfigModal({ flow, onClose, onSaved }) {
   const cur = flow.log && typeof flow.log === 'object' ? flow.log : {};
   const [record, setRecord] = useState(cur.record || 'all');

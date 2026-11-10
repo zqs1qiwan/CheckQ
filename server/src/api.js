@@ -208,17 +208,60 @@ export function buildServer({ dataDir, port }) {
     for (const ch of channels || []) {
       try {
         if (ch.type === 'webhook') {
-          const res = await fetch(ch.url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: text });
+          const res = await fetch(ch.url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: text, signal: AbortSignal.timeout(15000) });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
         } else if (ch.type === 'telegram') {
           const res = await fetch(`https://api.telegram.org/bot${ch.token}/sendMessage`, {
             method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ chat_id: ch.chat, text }),
+            body: JSON.stringify({ chat_id: ch.chat, text, disable_web_page_preview: true }),
+            signal: AbortSignal.timeout(15000),
           });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const j = await res.json().catch(() => ({}));
+          if (!res.ok || j.ok === false) throw new Error(`HTTP ${res.status} ${j.description || ''}`);
         } else if (ch.type === 'bark') {
-          const u = ch.url.endsWith('/') ? ch.url : ch.url + '/';
-          await fetch(u + encodeURIComponent(text));
+          const u = (ch.url || '').replace(/\/+$/, '');
+          const title = encodeURIComponent(ch.title || 'CheckQ');
+          const body = encodeURIComponent(text);
+          const res = await fetch(`${u}/${title}/${body}${ch.group ? '?group=' + encodeURIComponent(ch.group) : ''}`, { signal: AbortSignal.timeout(15000) });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } else if (ch.type === 'serverchan') {
+          const key = String(ch.key || '').trim();
+          const res = await fetch(`https://sctapi.ftqq.com/${key}.send`, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ title: ch.title || 'CheckQ 通知', desp: text }),
+            signal: AbortSignal.timeout(15000),
+          });
+          const j = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(`HTTP ${res.status} ${j.message || ''}`);
+          if (j.code !== undefined && j.code !== 0) throw new Error(`HTTP ${res.status} code=${j.code} ${j.message || ''}`);
+        } else if (ch.type === 'dingtalk') {
+          const url = await signBotUrl(ch);
+          const res = await fetch(url, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ msgtype: 'markdown', markdown: { title: ch.title || 'CheckQ 通知', text } }),
+            signal: AbortSignal.timeout(15000),
+          });
+          const j = await res.json().catch(() => ({}));
+          if (!res.ok || j.errcode !== 0) throw new Error(`HTTP ${res.status} errcode=${j.errcode} ${j.errmsg || ''}`);
+        } else if (ch.type === 'wecom') {
+          const res = await fetch(ch.url, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ msgtype: 'markdown', markdown: { content: text } }),
+            signal: AbortSignal.timeout(15000),
+          });
+          const j = await res.json().catch(() => ({}));
+          if (!res.ok || j.errcode !== 0) throw new Error(`HTTP ${res.status} errcode=${j.errcode} ${j.errmsg || ''}`);
+        } else if (ch.type === 'feishu') {
+          const url = await signBotUrl(ch);
+          const res = await fetch(url, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ msg_type: 'text', content: { text } }),
+            signal: AbortSignal.timeout(15000),
+          });
+          const j = await res.json().catch(() => ({}));
+          if (!res.ok || j.code !== 0) throw new Error(`HTTP ${res.status} code=${j.code} ${j.msg || ''}`);
+        } else {
+          throw new Error('未知通知类型: ' + ch.type);
         }
         results.push({ type: ch.type, ok: true });
       } catch (err) {
@@ -229,6 +272,16 @@ export function buildServer({ dataDir, port }) {
     return results;
   }
 
+  /** 钉钉/飞书机器人签名：timestamp + "\n" + secret 做 HMAC-SHA256，base64 后拼到 URL */
+  async function signBotUrl(ch) {
+    const url = String(ch.url || '');
+    if (!ch.secret) return url;
+    const ts = Date.now();
+    const sign = encodeURIComponent(crypto.createHmac('sha256', ch.secret).update(`${ts}\n${ch.secret}`).digest('base64'));
+    const sep = url.includes('?') ? '&' : '?';
+    return `${url}${sep}timestamp=${ts}&sign=${sign}`;
+  }
+
   const scheduler = new Scheduler(store, runner);
   scheduler.start();
 
@@ -237,7 +290,7 @@ export function buildServer({ dataDir, port }) {
 
   // ---- auth ----
   app.addHook('onRequest', async (req, reply) => {
-    const pub = req.url === '/api/login' || req.url === '/api/health' || !req.url.startsWith('/api/');
+    const pub = req.url === '/api/login' || req.url === '/api/health' || req.url === '/api/system/bootstrap' || !req.url.startsWith('/api/');
     if (pub) return;
     const qsid = req.cookies?.qsid;
     const exp = sessions.get(qsid);
@@ -274,6 +327,19 @@ export function buildServer({ dataDir, port }) {
   });
 
   app.get('/api/health', async () => ({ ok: true, version: '0.3.17' }));
+
+  // 首次启动：若仍是随机生成的管理员密码，引导用户创建正式密码
+  app.get('/api/system/bootstrap', async () => ({ needsSetup: !!store.meta.generatedPassword }));
+  app.post('/api/system/bootstrap', async (req, reply) => {
+    const { password } = req.body || {};
+    if (!password || String(password).length < 8) return reply.code(400).send({ error: '密码至少 8 位' });
+    store.meta.passwordHash = hashPwd(String(password));
+    store.meta.generatedPassword = false;
+    store.meta.plainHint = null;
+    store.flush();
+    sessions.clear();
+    return { ok: true };
+  });
 
   // 设置：改密 / API Key（单用户）
   app.get('/api/system/settings', async () => ({ hasApiKey: !!store.meta.apiKey, apiKey: store.meta.apiKey ? store.meta.apiKey.slice(0, 8) + '…' : null }));
@@ -789,7 +855,13 @@ export function buildServer({ dataDir, port }) {
 }
 
 export function startServer({ dataDir, port }) {
-  const { app } = buildServer({ dataDir, port });
+  const { app, store, scheduler } = buildServer({ dataDir, port });
+  const shutdown = (sig) => {
+    try { scheduler.stop(); store.flush(); } catch {}
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
   app.listen({ port, host: '0.0.0.0' }).then(() => {
     console.log(`[CheckQ] listening on :${port}`);
   }).catch((err) => {

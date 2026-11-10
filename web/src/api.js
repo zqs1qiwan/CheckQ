@@ -28,6 +28,8 @@ async function req(method, url, body, isForm = false) {
 
 export const api = {
   login: (password) => req('POST', '/api/login', { password }),
+  bootstrap: () => req('GET', '/api/system/bootstrap'),
+  setupPassword: (password) => req('POST', '/api/system/bootstrap', { password }),
   logout: () => req('POST', '/api/logout', {}),
   flows: () => req('GET', '/api/flows'),
   flow: (id) => req('GET', `/api/flows/${id}`),

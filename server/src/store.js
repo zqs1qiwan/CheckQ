@@ -131,7 +131,7 @@ export class Store {
       updatedAt: Date.now(),
     };
     this.flows.push(flow);
-    this.#persist();
+    this.flush();
     return flow;
   }
 
@@ -143,7 +143,7 @@ export class Store {
       if (patch[k] !== undefined) f[k] = patch[k];
     }
     f.updatedAt = Date.now();
-    this.#persist();
+    this.flush();
     return f;
   }
 
@@ -152,7 +152,7 @@ export class Store {
     if (i >= 0) {
       this.flows.splice(i, 1);
       this.runs = this.runs.filter((r) => r.flowId !== id);
-      this.#persist();
+      this.flush();
       return true;
     }
     return false;
@@ -189,7 +189,7 @@ export class Store {
       createdAt: Date.now(),
     };
     this.templates.push(tpl);
-    this.#persist();
+    this.flush();
     return tpl;
   }
 
@@ -205,7 +205,7 @@ export class Store {
     } else if (patch.vars !== undefined) {
       t.varNames = Object.keys(t.vars);
     }
-    this.#persist();
+    this.flush();
     return t;
   }
 
@@ -213,7 +213,7 @@ export class Store {
     const i = this.templates.findIndex((t) => t.id === id);
     if (i < 0) return false;
     this.templates.splice(i, 1);
-    this.#persist();
+    this.flush();
     return true;
   }
 
@@ -252,7 +252,7 @@ export class Store {
       per.set(r.flowId, n);
       return n <= 500;
     });
-    this.#persist();
+    this.flush();
   }
 
   listRuns(flowId, limit = 30) {

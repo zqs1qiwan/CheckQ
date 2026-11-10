@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import ThemeToggle from './ThemeToggle.jsx';
+import GuideModal from './GuideModal.jsx';
 
 function fmtTime(ts) {
   const d = new Date(ts);
@@ -157,6 +158,7 @@ export default function FlowList({ onOpen, onLogout }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all'); // all | scheduled | recent-failed
   const [stats, setStats] = useState(null);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const [batchBusy, setBatchBusy] = useState(false);
   const [batchMode, setBatchMode] = useState(false); // 批量管理开关：勾选列默认隐藏，不干扰日常阅读
@@ -171,6 +173,11 @@ export default function FlowList({ onOpen, onLogout }) {
   };
 
   useEffect(() => { load(); }, []);
+
+  // 首次访问自动打开一次使用引导
+  useEffect(() => {
+    try { if (!localStorage.getItem('checkq-guide-seen')) setGuideOpen(true); } catch {}
+  }, []);
 
   // 搜索 + 筛选（PRD 4.4）
   const visibleFlows = (flows || []).filter((f) => {
@@ -313,6 +320,7 @@ export default function FlowList({ onOpen, onLogout }) {
           </div>
         </details>
         <ThemeToggle />
+        <button className="iconbtn" onClick={() => setGuideOpen(true)} title="使用引导：3 步上手 / 日志 / 通知 / 常见问题" aria-label="使用引导">?</button>
         <input
           ref={fileRef} type="file" accept=".har,.json" style={{ display: 'none' }}
           onChange={(e) => { const f = e.target.files[0]; if (f) doImport(f); e.target.value = ''; }}
@@ -326,7 +334,7 @@ export default function FlowList({ onOpen, onLogout }) {
             <span className="badge muted">今日 {stats.todayRuns} 次 · 成功 {stats.todaySuccess} · 失败 {stats.todayFailed}{stats.successRate !== null ? ` · 成功率 ${stats.successRate}%` : ''}</span>
             {stats.queuedFlows?.length ? <span className="badge warn">排队中 {stats.queuedFlows.length}</span> : null}
             {stats.dailySummary?.enabled ? <span className="badge ok">每日汇总 {stats.dailySummary.time}</span> : null}
-            {stats.nextRunAt ? <span className="badge ok">下次触发 {fmtTime(stats.nextRunAt)}</span> : <span className="badge muted">暂无调度</span>}
+            {stats.nextRunAt ? <span className="badge ok" title="所有已启用任务中，最近的一次自动运行时间">下次调度 {fmtTime(stats.nextRunAt)}</span> : <span className="badge muted">暂无调度</span>}
           </div>
         )}
         <div className="page-head">
@@ -546,6 +554,10 @@ export default function FlowList({ onOpen, onLogout }) {
 
       {modal === 'settings' && (
         <SettingsModal onClose={() => setModal(null)} />
+      )}
+
+      {guideOpen && (
+        <GuideModal onClose={() => { setGuideOpen(false); try { localStorage.setItem('checkq-guide-seen', '1'); } catch {} }} />
       )}
 
       <Toast toast={toast} onClose={() => setToast(null)} />

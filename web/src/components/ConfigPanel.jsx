@@ -59,54 +59,6 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
             </div >
           </div >
           <div className="field">
-            <label>执行后端</label>
-            <select value={config.backend || 'fetch'} onChange={(e) => onConfigUpdate({ backend: e.target.value })}>
-              <option value="fetch">fetch（Node 内置，默认）</option>
-              <option value="curl">curl（TLS 指纹不同，用于绕开 fetch 指纹风控）</option>
-            </select>
-            <div className="hint">目标站若对 Node fetch 的 TLS 指纹风控（如返回权限错误但浏览器/curl 正常），切换到 curl 后端。</div>
-          </div >
-          <div className="field-inline">
-            <div className="field">
-              <label>编码</label>
-              <select value={config.charset || 'auto'} onChange={(e) => onConfigUpdate({ charset: e.target.value === 'auto' ? undefined : e.target.value })}>
-                <option value="auto">自动（按响应头）</option>
-                <option value="utf-8">UTF-8</option>
-                <option value="gbk">GBK</option>
-                <option value="gb2312">GB2312</option>
-                <option value="big5">Big5</option>
-              </select>
-            </div >
-            <div className="field">
-              <label>代理 URL（可选）</label>
-              <input className="mono" placeholder="http://user:pass@host:port 或 {{proxyVar}}" value={config.proxy?.url || ''}
-                onChange={(e) => onConfigUpdate({ proxy: e.target.value.trim() ? { url: e.target.value } : undefined })} />
-            </div >
-          </div >
-          <div className="field-inline">
-            <div className="field">
-              <label>失败重试次数</label>
-              <input type="number" min="0" max="5" value={config.retry?.times ?? 0}
-                onChange={(e) => {
-                  const times = Math.max(0, Math.min(5, Number(e.target.value) || 0));
-                  onConfigUpdate({ retry: times > 0 ? { times, backms: config.retry?.backoffMs || 1000, retryOn: config.retry?.retryOn || 'both' } : undefined });
-                }} />
-            </div >
-            <div className="field">
-              <label>重试内容</label>
-              <select value={config.retry?.retryOn || 'both'} onChange={(e) => onConfigUpdate({ retry: { times: config.retry?.times ?? 0, backoffMs: config.retry?.backoffMs || 1000, retryOn: e.target.value } })}>
-                <option value="both">网络错误 + 断言失败</option>
-                <option value="error">仅网络错误</option>
-              </select>
-            </div >
-          </div >
-          <div className="field">
-            <label>重试间隔基数 (ms)</label>
-            <input type="number" min="500" max="30000" step="500" value={config.retry?.backoffMs ?? 1000}
-              onChange={(e) => onConfigUpdate({ retry: { times: config.retry?.times ?? 0, backoffMs: Math.max(500, Number(e.target.value) || 1000), retryOn: config.retry?.retryOn || 'both' } })} />
-            <div className="hint">线性退避：第 n 次重试等待 基数×n 毫秒。0 次重试时以上设置不生效。</div>
-          </div >
-          <div className="field">
             <label>URL <span style={{ color: 'var(--muted)' }}>（支持 {`{{变量}}`}）</span ></label>
             <input className="mono" value={config.url} onChange={(e) => onConfigUpdate({ url: e.target.value })} />
           </div >
@@ -209,6 +161,59 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
             onClick={() => onConfigUpdate({ asserts: [...(config.asserts || []), { expr: '', expect: 'true' }] })}>
             + 添加断言
           </button>
+
+          <details className="adv-block">
+            <summary>高级选项（后端 / 编码 / 代理 / 重试）</summary>
+            <div className="adv-body">
+              <div className="field">
+                <label>执行后端</label>
+                <select value={config.backend || 'fetch'} onChange={(e) => onConfigUpdate({ backend: e.target.value })}>
+                  <option value="fetch">fetch（Node 内置，默认）</option>
+                  <option value="curl">curl（TLS 指纹不同，用于绕开指纹风控）</option>
+                </select>
+              </div>
+              <div className="field-inline">
+                <div className="field">
+                  <label>编码</label>
+                  <select value={config.charset || 'auto'} onChange={(e) => onConfigUpdate({ charset: e.target.value === 'auto' ? undefined : e.target.value })}>
+                    <option value="auto">自动（按响应头）</option>
+                    <option value="utf-8">UTF-8</option>
+                    <option value="gbk">GBK</option>
+                    <option value="gb2312">GB2312</option>
+                    <option value="big5">Big5</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>代理 URL（可选）</label>
+                  <input className="mono" placeholder="http://user:pass@host:port 或 {{proxyVar}}" value={config.proxy?.url || ''}
+                    onChange={(e) => onConfigUpdate({ proxy: e.target.value.trim() ? { url: e.target.value } : undefined })} />
+                </div>
+              </div>
+              <div className="field-inline">
+                <div className="field">
+                  <label>失败重试次数</label>
+                  <input type="number" min="0" max="5" value={config.retry?.times ?? 0}
+                    onChange={(e) => {
+                      const times = Math.max(0, Math.min(5, Number(e.target.value) || 0));
+                      onConfigUpdate({ retry: times > 0 ? { times, backoffMs: config.retry?.backoffMs || 1000, retryOn: config.retry?.retryOn || 'both' } : undefined });
+                    }} />
+                </div>
+                <div className="field">
+                  <label>重试内容</label>
+                  <select value={config.retry?.retryOn || 'both'} onChange={(e) => onConfigUpdate({ retry: { times: config.retry?.times ?? 0, backoffMs: config.retry?.backoffMs || 1000, retryOn: e.target.value } })}>
+                    <option value="both">网络错误 + 断言失败</option>
+                    <option value="error">仅网络错误</option>
+                  </select>
+                </div>
+              </div>
+              <div className="field">
+                <label>重试间隔基数 (ms)</label>
+                <input type="number" min="500" max="30000" step="500" value={config.retry?.backoffMs ?? 1000}
+                  onChange={(e) => onConfigUpdate({ retry: { times: config.retry?.times ?? 0, backoffMs: Math.max(500, Number(e.target.value) || 1000), retryOn: config.retry?.retryOn || 'both' } })} />
+                <div className="hint">线性退避：第 n 次重试等待 基数×n 毫秒。</div>
+              </div>
+            </div>
+          </details>
         </>
       )}
 
@@ -408,7 +413,7 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
           style={{ width: '100%', marginBottom: 8 }}
           onClick={() => onDebugTo(node.id)}
           title="从头运行流程，执行到这个节点为止（含），不会继续后面的步骤"
-        >▶ 调试到此为止</button>
+        >调试到此为止</button>
       )}
       <button className="danger" style={{ width: '100%' }} onClick={onDelete}>删除此节点</button>
     </div >

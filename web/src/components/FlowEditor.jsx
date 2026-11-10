@@ -74,9 +74,15 @@ function FlowEditorInner({ flowId, onBack }) {
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [themeMode, setThemeMode] = useState(currentMode()); // 'dark' | 'light'（画布 attr 需要解析色值）
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
 
   useEffect(() => onMode(setThemeMode), []);
+
+  // 面板/日志坞开合后重排视口：58 节点也能一屏看全，不用来回拖拽
+  useEffect(() => {
+    const t = setTimeout(() => fitView({ padding: 0.12, duration: 220 }), 90);
+    return () => clearTimeout(t);
+  }, [drawerOpen, showPalette, showConfig, fitView]);
 
   const snapshotGraph = useCallback(() => ({
     nodes: stateRef.current.nodes.map((n) => ({ id: n.id, type: 'step', position: { ...n.position }, data: JSON.parse(JSON.stringify(n.data)) })),
@@ -632,7 +638,7 @@ function CookieHelpModal({ flow, onClose, onSaved }) {
   const [tabId, setTabId] = useState('');
   const origin = window.location.origin;
   const captureUrl = `${origin}/api/cookie-capture`;
-  const bookmarklet = `javascript:fetch('${captureUrl}',{method:'POST',headers:{'Content-Type':'application/json'},mode:'no-cors',body:JSON.stringify({flowId:'${flow?.id || ''}',cookie:document.cookie,varName:'cookie'})}).then(()=>alert('已回填到 CheckQ ✅'));`;
+  const bookmarklet = `javascript:fetch('${captureUrl}',{method:'POST',headers:{'Content-Type':'application/json'},mode:'no-cors',body:JSON.stringify({flowId:'${flow?.id || ''}',cookie:document.cookie,varName:'cookie'})}).then(()=>alert('已回填到 CheckQ'));`;
   const snippet = "copy(document.cookie); // 备用：已登录页面 Console 回车后粘贴";
   const openLogin = () => window.open(url, '_blank');
   const unified = async () => {
@@ -662,7 +668,7 @@ function CookieHelpModal({ flow, onClose, onSaved }) {
   return (
     <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
-        <h3>🍪 统一浏览器登录（自动抓 Cookie）</h3>
+        <h3>统一浏览器登录（自动抓 Cookie）</h3>
         <p style={{ color: 'var(--muted)', fontSize: 12, lineHeight: 1.7 }}>
           统一浏览器是路由器上的 Camoufox（与真实浏览器指纹一致）。步骤：
           <br />
@@ -670,7 +676,7 @@ function CookieHelpModal({ flow, onClose, onSaved }) {
           <br />
           2. 回到这里点「已登录，自动抓」→ CheckQ 自动读 cookie 写进 <code>{'{{cookie}}'}</code>，无需粘贴
           <br />
-          3. 点 ▶ 运行验证
+          3. 点「运行」验证
         </p>
         <div className="field">
           <label>站点地址</label>
@@ -689,7 +695,7 @@ function CookieHelpModal({ flow, onClose, onSaved }) {
         <div className="field">
           <textarea className="mono" rows={2} value={cookie} onChange={(e) => setCookie(e.target.value)} placeholder="或在这里粘贴 cookie" />
         </div>
-        {done && <p style={{ color: 'var(--ok)', fontSize: 12 }}>✅ 已回填到变量</p>}
+        {done && <p style={{ color: 'var(--ok)', fontSize: 12 }}>已回填到变量</p>}
         {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
         <button className="primary" disabled={!cookie.trim()} onClick={save}>保存 cookie</button>
         {' '}

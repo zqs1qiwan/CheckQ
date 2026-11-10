@@ -79,13 +79,13 @@ function WizardModal({ onClose, onCreated }) {
   return (
     <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
-        <h3>✨ 快速组装</h3>
-        <p style={{ color: 'var(--muted)', fontSize: 12 }}>两种方式：一句话让 AI 生成（需在设置配置 LLM API），或手动填三项生成骨架。进编辑器后点「▶ 运行」验证，响应里点选补细节。</p>
+        <h3>快速组装</h3>
+        <p style={{ color: 'var(--muted)', fontSize: 12 }}>两种方式：一句话让 AI 生成（需在设置配置 LLM API），或手动填三项生成骨架。进编辑器后点「运行」验证，响应里点选补细节。</p>
         <div className="field">
           <label>一句话描述（例：每天8点去 https://ex.com/sign 签到，看到签到成功算成功）</label>
           <input value={sentence} onChange={(e) => setSentence(e.target.value)} placeholder="每天8点去 https://ex.com/sign 签到，看到签到成功算成功" />
           <span className="btn-row" style={{ marginTop: 6 }}>
-            <button className="small primary" disabled={aiBusy || !sentence.trim()} onClick={aiGenerate}>{aiBusy ? 'AI 生成中…' : '✨ AI 生成流程'}</button>
+            <button className="small primary" disabled={aiBusy || !sentence.trim()} onClick={aiGenerate}>{aiBusy ? 'AI 生成中…' : 'AI 生成流程'}</button>
             <button className="small" onClick={fillFromSentence}>规则填充（不耗 API）</button>
           </span>
         </div>
@@ -272,7 +272,7 @@ export default function FlowList({ onOpen, onLogout }) {
     try {
       const full = f.lastRun ? await api.run(f.lastRun.id) : (await api.runs(f.id, 1))[0];
       if (!full) {
-        setToast({ kind: 'fail', text: '该任务还没有运行记录，先点 ▶ 运行' });
+        setToast({ kind: 'fail', text: '该任务还没有运行记录，先点「运行」' });
         return;
       }
       setModal({ type: 'result', run: full, flowId: f.id });
@@ -386,7 +386,7 @@ export default function FlowList({ onOpen, onLogout }) {
           {selected.size > 0 && (
             <span className="btn-row">
               <span style={{ fontSize: 12, color: 'var(--accent)', whiteSpace: 'nowrap' }}>已选 {selected.size}</span>
-              <button className="small primary" disabled={batchBusy} onClick={() => doBatch('run')}>▶ 批量运行</button>
+              <button className="small primary" disabled={batchBusy} onClick={() => doBatch('run')}>批量运行</button>
               <button className="small" disabled={batchBusy} onClick={() => doBatch('enable')}>启用</button>
               <button className="small" disabled={batchBusy} onClick={() => doBatch('disable')}>停用</button>
               <button className="small danger" disabled={batchBusy} onClick={() => doBatch('delete')}>删除</button>
@@ -429,7 +429,6 @@ export default function FlowList({ onOpen, onLogout }) {
 
         {visibleFlows.length === 0 ? (
           <div className="empty">
-            <div className="big">🧩</div>
             <p>{(search || filter !== 'all') ? '没有匹配的任务。' : '还没有任务。从上方模板创建，或「+ 新建任务」从零开始搭建。'}</p>
           </div>
         ) : (
@@ -499,7 +498,7 @@ export default function FlowList({ onOpen, onLogout }) {
         <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && setModal(null)}>
           <div className="modal">
             <h3>新建空白任务</h3>
-            <p style={{ color: 'var(--muted)', fontSize: 13 }}>进入编辑器：左侧拖积木到画布 → 连线 → 点「▶ 运行」测试 → 调好后「存为模板」。</p>
+            <p style={{ color: 'var(--muted)', fontSize: 13 }}>进入编辑器：左侧拖积木到画布 → 连线 → 点「运行」测试 → 调好后「存为模板」。</p>
             <button className="primary" onClick={createEmpty}>创建</button>
             {' '}
             <button onClick={() => setModal(null)}>取消</button>
@@ -621,7 +620,7 @@ function ResultModal({ run, flowId, onClose }) {
   }, [flowId]);
   useEffect(() => { setCur(run); setExpanded(null); }, [run]);
   const shown = cur || run;
-  const statusLabel = shown.status === 'success' ? '✅ 运行成功' : shown.status === 'failed' ? '❌ 运行失败' : '⏳ 运行中…';
+  const statusLabel = shown.status === 'success' ? '运行成功' : shown.status === 'failed' ? '运行失败' : '运行中…';
   const openRun = async (id) => {
     try { const full = await api.run(id); setCur(full); setExpanded(null); }
     catch (e) { }
@@ -640,7 +639,7 @@ function ResultModal({ run, flowId, onClose }) {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {(hist || []).map((r) => (
                 <button key={r.id} className={`small ${r.id === shown.id ? 'primary' : ''}`} onClick={() => openRun(r.id)}>
-                  {r.status === 'success' ? '✅' : '❌'} {fmtTime(r.startedAt)}
+                  {r.status === 'success' ? '成功' : '失败'} {fmtTime(r.startedAt)}
                 </button>
               ))}
             </div>
@@ -650,7 +649,7 @@ function ResultModal({ run, flowId, onClose }) {
           <p style={{ color: shown.status === 'failed' ? 'var(--fail)' : 'var(--muted)', fontSize: 13, marginTop: -4 }}>{shown.finalMessage}</p>
         )}
         {shown.summary && (
-          <p style={{ color: 'var(--ok)', fontSize: 12, marginTop: -4 }}>📌 {shown.summary}</p>
+          <p style={{ color: 'var(--ok)', fontSize: 12, marginTop: -4 }}>摘要：{shown.summary}</p>
         )}
         {shown.vars && Object.keys(shown.vars).length > 0 && (
           <div style={{ marginBottom: 10 }}>
@@ -689,7 +688,7 @@ function ResultModal({ run, flowId, onClose }) {
                   {log.keywords?.length > 0 && (
                     <>
                       <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 6 }}>关键字提取</div>
-                      {log.keywords.map((k, j) => (<div key={j} style={{ color: 'var(--ok)' }}>📌 {k.name}：{k.values.join(', ')}</div>))}
+                      {log.keywords.map((k, j) => (<div key={j} style={{ color: 'var(--ok)' }}>{k.name}：{k.values.join(', ')}</div>))}
                     </>
                   )}
                   {log.asserts?.length > 0 && (
@@ -837,6 +836,7 @@ function CsvImportModal({ tpl, onClose, onDone }) {
 
 /** 系统设置：改密 + API Key */
 function SettingsModal({ onClose }) {
+  const [tab, setTab] = useState('general');
   const [oldPw, setOldPw] = useState('');
   const [newPw, setNewPw] = useState('');
   const [msg, setMsg] = useState('');
@@ -853,32 +853,55 @@ function SettingsModal({ onClose }) {
     try { const r = await api.genApiKey(); setKey(r.apiKey); setHasKey(true); }
     catch (e) { setErr(e.message); }
   };
+  const TABS = [
+    ['general', '通知与汇总'],
+    ['ai', 'AI 助手'],
+    ['security', '账号安全'],
+    ['api', 'API Key'],
+  ];
   return (
     <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <h3>设置</h3>
-        <SettingsFlow onToast={(text, kind) => { setMsg(text); setErr(''); }} />
-        <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '16px 0' }} />
-        <div className="field">
-          <label>当前密码</label>
-          <input type="password" autoComplete="off" value={oldPw} onChange={(e) => setOldPw(e.target.value)} />
+      <div className="modal settings-modal">
+        <div className="settings-nav">
+          <div className="settings-title">设置</div>
+          {TABS.map(([id, label]) => (
+            <button key={id} className={`settings-tab${tab === id ? ' active' : ''}`} onClick={() => { setTab(id); setMsg(''); setErr(''); }}>{label}</button>
+          ))}
         </div>
-        <div className="field">
-          <label>新密码（至少 8 位）</label>
-          <input type="password" autoComplete="off" value={newPw} onChange={(e) => setNewPw(e.target.value)} />
+        <div className="settings-body">
+          {tab === 'general' && <SettingsFlow onToast={(text) => { setMsg(text); setErr(''); }} />}
+
+          {tab === 'ai' && <AiSettings />}
+
+          {tab === 'security' && (
+            <>
+              <div className="field">
+                <label>当前密码</label>
+                <input type="password" autoComplete="off" value={oldPw} onChange={(e) => setOldPw(e.target.value)} />
+              </div>
+              <div className="field">
+                <label>新密码（至少 8 位）</label>
+                <input type="password" autoComplete="off" value={newPw} onChange={(e) => setNewPw(e.target.value)} />
+              </div>
+              <button className="primary" onClick={changePw}>修改密码</button>
+            </>
+          )}
+
+          {tab === 'api' && (
+            <div className="field">
+              <label>API Key（{hasKey ? '已生成' : '未生成'}）</label>
+              <p style={{ color: 'var(--muted)', fontSize: 12, margin: '0 0 8px' }}>供外部脚本 / MCP 调用 REST API 使用，重新生成后旧 Key 立即失效。</p>
+              {key && <pre className="mono" style={{ wordBreak: 'break-all', fontSize: 12 }}>{key}</pre>}
+              <button className="small" onClick={genKey}>{hasKey ? '重新生成' : '生成 API Key'}</button>
+            </div>
+          )}
+
+          {msg && <p style={{ color: 'var(--ok)', fontSize: 12 }}>{msg}</p>}
+          {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
+          <div className="settings-foot">
+            <button onClick={onClose}>关闭</button>
+          </div>
         </div>
-        <button className="primary" onClick={changePw}>改密</button>
-        <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '16px 0' }} />
-        <div className="field">
-          <label>API Key（{hasKey ? '已生成' : '未生成'}）</label>
-          {key && <pre className="mono" style={{ wordBreak: 'break-all', fontSize: 12 }}>{key}</pre>}
-          <button className="small" onClick={genKey}>{hasKey ? '重新生成' : '生成 API Key'}</button>
-        </div>
-        <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '16px 0' }} />
-        <AiSettings />
-        {msg && <p style={{ color: 'var(--ok)', fontSize: 12 }}>{msg}</p>}
-        {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
-        <button onClick={onClose}>关闭</button>
       </div>
     </div>
   );

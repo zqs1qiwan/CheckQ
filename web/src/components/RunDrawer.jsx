@@ -132,7 +132,7 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepP
                         <>
                           <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 6 }}>关键字提取</div>
                           {log.keywords.map((k, j) => (
-                            <div key={j} style={{ color: 'var(--ok)' }}>📌 {k.name}：{k.values.join(', ')}</div>
+                            <div key={j} style={{ color: 'var(--ok)' }}>{k.name}：{k.values.join(', ')}</div>
                           ))}
                         </>
                       )}

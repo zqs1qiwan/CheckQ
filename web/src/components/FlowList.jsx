@@ -366,7 +366,7 @@ export default function FlowList({ onOpen, onLogout }) {
           }}>备份</button>
           <button className="small" onClick={() => setModal('restore')}>恢复</button>
           <input
-            style={{ width: 180, minWidth: 140, flex: '0 1 180px', fontSize: 13, padding: '4px 8px' }}
+            style={{ width: 180, minWidth: 120, flex: '0 1 180px', fontSize: 13, padding: '4px 8px' }}
             placeholder="搜索名称/备注…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -607,7 +607,7 @@ function ResultModal({ run, flowId, onClose }) {
         {shown.vars && Object.keys(shown.vars).length > 0 && (
           <div style={{ marginBottom: 10 }}>
             <div style={{ color: 'var(--muted)', fontSize: 11, marginBottom: 4 }}>最终变量快照（已脱敏）</div>
-            <pre>{Object.entries(shown.vars).map(([k, v]) => `${k} = ${String(v).slice(0, 120)}`).join('\n')}</pre>
+            <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{Object.entries(shown.vars).map(([k, v]) => `${k} = ${String(v).slice(0, 120)}`).join('\n')}</pre>
           </div>
         )}
         <div className="result-logs">

@@ -515,7 +515,7 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 | 消息模板 | 流级 `notify.template`，可用变量: flow.name/status/message/duration/time | ✅ v0.4 |
 | 配置 UI | 编辑器 ··· →「通知渠道」：渠道卡片、字段按类型动态显示、保存/测试发送 | ✅ v0.4 |
 | 发送测试 | 「测试发送」立即向所有渠道发测试消息并回显成功/失败 | ✅ v0.4 |
-| 每日汇总 | 全局设置：每天固定时间推送"今日 N 任务：M 成功 / K 失败"摘要（仅启用调度任务） | ✅（配置 + 手动发送；自动调度 ⬜ P2） |
+| 每日汇总 | 全局设置：每天固定时间推送"今日 N 任务：M 成功 / K 失败"摘要（仅启用调度任务）；scheduler 内置 `__summary__` cron + 手动发送 | ✅ v0.4 |
 | 静默时段 | 失败通知勿扰 23:00-7:00（汇总里合并） | ⬜ P2 |
 | 通知节点 | 流程内 notify 节点（webhook/telegram/bark），用于自定义推送内容 | ✅ |
 

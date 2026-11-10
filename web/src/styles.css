@@ -81,7 +81,35 @@ body {
 #root > .topbar { flex: 0 0 auto; }
 #root > .page { flex: 1 1 auto; }
 #root > .editor { flex: 1 1 auto; height: auto; }
-#root > .login-wrap { flex: 1 1 auto; }
+#root > .login-wrap { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+
+/* ---- 登录页 ---- */
+.login-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 34px 32px;
+  width: 100%;
+  max-width: 360px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+}
+.login-card h1 { font-size: 24px; margin: 0 0 4px; }
+.login-card .sub { color: var(--muted); margin: 0 0 22px; font-size: 13px; }
+.login-card input {
+  width: 100%;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel2);
+  color: var(--text);
+  font-size: 15px;
+  margin: 0 0 2px;
+}
+.login-card input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
+.login-card button { width: 100%; margin-top: 16px; padding: 11px; font-size: 14px; }
+.login-err { color: var(--fail); font-size: 12px; margin-top: 10px; min-height: 16px; }
 
 ::selection { background: var(--sel-ring); }
 
@@ -135,6 +163,38 @@ button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 .topbar .logo em { color: var(--accent); font-style: normal; }
 .topbar .spacer { flex: 1 1 0; min-width: 12px; }
 
+/* 图标按钮（不展开文字的紧凑动作） */
+button.iconbtn { padding: 4px 9px; font-size: 13px; border-radius: 6px; }
+
+/* 下拉菜单（顶栏收拢次级导入入口等） */
+.menu { position: relative; display: inline-flex; }
+.menu > summary {
+  list-style: none;
+  font-family: inherit; font-size: 13px; line-height: 1.25; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--panel2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 7px 14px; cursor: pointer;
+}
+.menu > summary::-webkit-details-marker { display: none; }
+.menu > summary::after { content: '▾'; font-size: 11px; color: var(--muted); margin-left: 2px; }
+.menu[open] > summary { border-color: var(--accent); color: var(--accent); }
+.menu > summary:hover { border-color: var(--accent); color: var(--accent); }
+.menu-pop {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 80;
+  min-width: 190px; background: var(--panel);
+  border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: var(--shadow); overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.menu-pop button {
+  justify-content: flex-start; text-align: left;
+  background: transparent; border: none; border-bottom: 1px solid var(--border);
+  border-radius: 0; padding: 10px 14px; font-size: 13px;
+}
+.menu-pop button:last-child { border-bottom: none; }
+.menu-pop button:hover { background: var(--hover-tint); }
+
 /* 主题三段钮（日/夜/自动） */
 .theme-seg {
   display: inline-flex;
@@ -149,10 +209,12 @@ button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
   border: none;
   border-radius: 0;
   background: transparent;
-  padding: 5px 10px;
-  font-size: 12px;
+  padding: 5px 11px;
+  font-size: 14px;
+  line-height: 1.2;
   color: var(--muted);
 }
+.theme-seg button em { font-style: normal; }
 .theme-seg button + button { border-left: 1px solid var(--border); }
 .theme-seg button:hover { color: var(--text); border-left-color: var(--border); }
 .theme-seg button.active { background: var(--accent); color: var(--on-accent); }
@@ -259,6 +321,18 @@ span.json-toggle { cursor: default; }
 .section-title { display: flex; align-items: center; justify-content: space-between; margin: 18px 0 8px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
 
 /* ---- 画布节点 ---- */
+/* xyflow 内置控件（缩放/适应/居中按钮）走主题 token */
+.react-flow__controls { border-radius: 8px; overflow: hidden; box-shadow: var(--shadow); }
+.react-flow__controls-button {
+  background: var(--panel);
+  border: none;
+  border-bottom: 1px solid var(--border);
+}
+.react-flow__controls-button:hover { background: var(--panel2); }
+.react-flow__controls-button svg { fill: var(--text); }
+.react-flow__attribution { background: transparent; color: var(--muted); }
+.react-flow__attribution a { color: var(--muted); }
+
 .node {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -348,14 +422,30 @@ span.json-toggle { cursor: default; }
   .editor { grid-template-columns: 150px minmax(200px, 1fr) 292px; }
 }
 @media (max-width: 900px) {
-  .topbar { padding: 10px 14px; }
+  .topbar { padding: 10px 14px; gap: 10px; row-gap: 7px; }
   .page { padding: 18px 14px 32px; }
   .editor { grid-template-columns: 132px minmax(160px, 1fr) 248px; min-height: calc(100vh - 200px); }
 }
 @media (max-width: 640px) {
-  .editor { grid-template-columns: minmax(120px, 1fr) minmax(160px, 2fr); grid-template-rows: 1fr auto; }
-  .config-panel { grid-column: 1; grid-row: 2; border-left: none; border-top: 1px solid var(--border); max-height: 46vh; }
-  .canvas-wrap { grid-row: 1; grid-column: 1 / -1; }
+  .topbar { padding: 9px 10px; gap: 8px; row-gap: 6px; }
+  .topbar .logo { font-size: 15px; }
+  .page { padding: 14px 10px 26px; }
+  .page-head { gap: 8px; row-gap: 6px; margin-bottom: 14px; }
+  button { padding: 8px 13px; }
+  button.small { padding: 6px 11px; font-size: 12px; }
+  .cell-actions button { padding: 6px 8px; }
+  .theme-seg button { padding: 7px 13px; font-size: 15px; }
+  .menu > summary { padding: 8px 13px; }
+  .flow-table { min-width: 660px; }
+  .flow-table th, .flow-table td { padding: 10px 10px; }
+  .badge { font-size: 11px; padding: 2px 7px; }
+  .modal { width: calc(100% - 18px); max-height: 92vh; padding: 18px 16px; }
+  /* 编辑器：纵向文档流（积木 → 画布 → 参数），画布保住高度 */
+  .editor { display: block; min-height: 0; }
+  .palette { max-height: 38vh; overflow-y: auto; border-right: none; border-bottom: 1px solid var(--border); }
+  .canvas-wrap { height: clamp(300px, 48vh, 560px); }
+  .config-panel { border-left: none; border-top: 1px solid var(--border); max-height: none; }
+  .react-flow__minimap { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

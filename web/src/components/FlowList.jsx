@@ -266,12 +266,17 @@ export default function FlowList({ onOpen, onLogout }) {
       <div className="topbar">
         <span className="logo">Check<em>Q</em></span>
         <span className="spacer" />
-        <button onClick={() => setModal('curl')} disabled={importBusy}>导入 cURL</button>
-        <button onClick={() => setModal('import')} disabled={importBusy}>导入 HAR / 模板 JSON</button>
-        <button onClick={() => setModal('wizard')}>✨ 快速组装</button>
         <button className="primary" onClick={() => setModal('new')}>+ 新建任务</button>
-        <button onClick={() => setModal('settings')}>设置</button>
-        <button onClick={onLogout}>退出</button>
+        <button onClick={() => setModal('wizard')} title="一句话/三栏式生成签到流程">✨ 快速组装</button>
+        <details className="menu">
+          <summary title="导入">导入</summary>
+          <div className="menu-pop" onClick={(e) => e.currentTarget.closest('.menu')?.removeAttribute('open')}>
+            <button onClick={() => setModal('curl')} disabled={importBusy}>cURL 命令导入</button>
+            <button onClick={() => setModal('import')} disabled={importBusy}>HAR / 模板 JSON 导入</button>
+          </div>
+        </details>
+        <button className="iconbtn" onClick={() => setModal('settings')} title="设置：汇总 / 模板市场 / 改密 / API Key" aria-label="设置">⚙</button>
+        <button className="iconbtn" onClick={onLogout} title="退出登录" aria-label="退出">⏻</button>
         <ThemeToggle />
         <input
           ref={fileRef} type="file" accept=".har,.json" style={{ display: 'none' }}
@@ -393,7 +398,7 @@ export default function FlowList({ onOpen, onLogout }) {
               <thead>
                 <tr>
                   {batchMode && <th style={{ width: 36 }}><input type="checkbox" checked={selectedAll} onChange={toggleSelectAll} title="全选" /></th>}
-                  <th>名称</th><th>调度</th><th>下次运行</th><th>状态</th><th>上次运行</th><th style={{ minWidth: 250 }}>操作</th>
+                  <th>名称</th><th>调度</th><th>下次运行</th><th>状态</th><th>上次运行</th><th style={{ minWidth: 210 }}>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -404,7 +409,7 @@ export default function FlowList({ onOpen, onLogout }) {
                       <a className="flow-name" href="#" onClick={(e) => { e.preventDefault(); onOpen(f.id); }}>{f.name}</a>
                       {f.note ? <div style={{ color: 'var(--muted)', fontSize: 12 }}>{f.note}</div> : null}
                     </td>
-                    <td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
                       {f.cron ? <span className="cron-code">{f.cron}</span> : <span style={{ color: 'var(--muted)' }}>手动</span>}
                     </td>
                     <td>
@@ -419,11 +424,11 @@ export default function FlowList({ onOpen, onLogout }) {
                     <td>{lastStatus(f)}</td>
                     <td>
                       <div className="cell-actions">
-                        <button className="small primary" disabled={running === f.id}
-                          onClick={() => runNow(f)}>{running === f.id ? '运行中…' : '▶ 运行'}</button>
-                        <button className="small" onClick={() => onOpen(f.id)}>编辑</button>
-                        <button className="small" title="查看运行日志（每天的签到记录都在这里）" onClick={() => openLog(f)}>日志</button>
-                        <button className="small" onClick={async () => {
+                        <button className="small primary" disabled={running === f.id} title={running === f.id ? '正在运行…' : '立即运行一次'} aria-label="运行"
+                          onClick={() => runNow(f)}>{running === f.id ? '⏳' : '▶'}</button>
+                        <button className="small" title="编辑流程" aria-label="编辑" onClick={() => onOpen(f.id)}>✏️</button>
+                        <button className="small" title="查看运行日志（每天的签到记录都在这里）" aria-label="日志" onClick={() => openLog(f)}>📜</button>
+                        <button className="small" title="复制为副本（调度暂停）" aria-label="复制" onClick={async () => {
                           try {
                             await api.cloneFlow(f.id);
                             setToast({ kind: 'ok', text: '已克隆为副本（调度暂停）' });
@@ -431,8 +436,8 @@ export default function FlowList({ onOpen, onLogout }) {
                           } catch (e) {
                             setToast({ kind: 'fail', text: e.message });
                           }
-                        }}>复制</button>
-                        <button className="small danger" onClick={() => del(f)}>删除</button>
+                        }}>📋</button>
+                        <button className="small danger" title="删除任务（不影响模板）" aria-label="删除" onClick={() => del(f)}>🗑</button>
                       </div>
                     </td>
                   </tr>

@@ -454,24 +454,24 @@ function FlowEditorInner({ flowId, onBack }) {
           <span className="track" />
         </label>
         <span className="spacer" />
-        <button className="small" disabled={!canUndo} onClick={undo} title="撤销 (Ctrl+Z)">↩ 撤销</button>
-        <button className="small" disabled={!canRedo} onClick={redo} title="重做 (Ctrl+Shift+Z)">↪ 重做</button>
+        <button className="small" disabled={!canUndo} onClick={undo} title="撤销 (Ctrl+Z)" aria-label="撤销">↩</button>
+        <button className="small" disabled={!canRedo} onClick={redo} title="重做 (Ctrl+Shift+Z)" aria-label="重做">↪</button>
         <button className="small" onClick={async () => {
           try {
             const r = await api.notifyTest(flow.id);
             showToast(`测试通知已发送 (${r.results?.length || 0} 渠道)`, r.ok ? 'ok' : 'fail');
           } catch (e) { showToast(`测试通知: ${e.message}`); }
-        }} title="向当前任务的通知渠道发一条测试消息">✉ 测试通知</button>
+        }} title="向当前任务的通知渠道发一条测试消息" aria-label="测试通知">✉</button>
         <button className="small" onClick={async () => {
           try {
             const r = await api.dailySummary(flow.id);
             showToast(r.text || '汇总已发送', 'ok');
           } catch (e) { showToast(`汇总: ${e.message}`); }
-        }} title="发送今日汇总到当前任务渠道">📊 每日汇总</button>
-        <button className="small" onClick={() => setCookieOpen(true)} title="从浏览器登录站点，一键抓 cookie 到变量">🍪 填Cookie</button>
+        }} title="发送今日汇总到当前任务渠道" aria-label="每日汇总">📊</button>
+        <button className="small" onClick={() => setCookieOpen(true)} title="从浏览器登录站点，一键抓 cookie 到变量" aria-label="填Cookie">🍪</button>
         {saving ? <span style={{ color: 'var(--muted)', fontSize: 12 }}>保存中…</span> : dirty ? <span style={{ color: 'var(--warn)', fontSize: 12 }}>未保存</span> : null}
-        <button className="small" onClick={() => setLogOpen(true)} title="日志记录配置：档位 / 记录内容 / 响应截断 / 关键字规则（随模板复制）">日志配置</button>
-        <button className="small" onClick={saveAsTemplate} title="把当前流程保存为模板，之后可基于它批量创建任务">存为模板</button>
+        <button className="small" onClick={() => setLogOpen(true)} title="日志记录配置：档位 / 记录内容 / 响应截断 / 关键字规则（随模板复制）" aria-label="日志配置">📝</button>
+        <button className="small" onClick={saveAsTemplate} title="把当前流程保存为模板，之后可基于它批量创建任务" aria-label="存为模板">⧉</button>
         <ThemeToggle />
         <button className="small primary" onClick={runNow} title="从头执行整个流程">▶ 运行</button>
       </div>

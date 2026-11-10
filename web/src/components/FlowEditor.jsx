@@ -60,6 +60,8 @@ function FlowEditorInner({ flowId, onBack }) {
   const [saving, setSaving] = useState(false);
   const [runResult, setRunResult] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [showPalette, setShowPalette] = useState(() => (typeof window === 'undefined' ? true : window.innerWidth > 900));
+  const [showConfig, setShowConfig] = useState(() => (typeof window === 'undefined' ? true : window.innerWidth > 900));
   const [logOpen, setLogOpen] = useState(false);
   const [cookieOpen, setCookieOpen] = useState(false);
   const [tplOpen, setTplOpen] = useState(false);
@@ -265,6 +267,19 @@ function FlowEditorInner({ flowId, onBack }) {
     }
   }, [dirty, save, flow?.id]);
 
+  const testNotify = async () => {
+    try {
+      const r = await api.notifyTest(flow.id);
+      showToast(`测试通知已发送（${r.results?.length || 0} 个渠道）`, r.ok ? 'ok' : 'fail');
+    } catch (e) { showToast(`测试通知失败：${e.message}`); }
+  };
+  const sendSummary = async () => {
+    try {
+      const r = await api.dailySummary(flow.id);
+      showToast(r.text || '汇总已发送', 'ok');
+    } catch (e) { showToast(`汇总发送失败：${e.message}`); }
+  };
+
   const saveAsTemplate = async () => {
     if (dirty) await save();
     setTplName(flow.name.replace(/\s*·\s*\d+$/, '') + ' 模板');
@@ -414,71 +429,86 @@ function FlowEditorInner({ flowId, onBack }) {
 
   return (
     <>
-      <div className="topbar">
-        <button className="small" onClick={onBack}>← 返回</button>
+      <div className="topbar editor-topbar">
+        <button className="small" onClick={onBack}>返回</button>
         <input
-          style={{ flex: '1 1 200px', minWidth: 120, maxWidth: 320, fontWeight: 600, background: 'transparent', border: 'none', padding: '4px 2px' }}
+          className="flow-title"
           value={flow.name}
           onChange={(e) => { setFlow({ ...flow, name: e.target.value }); markDirty(); }}
           onBlur={() => api.updateFlow(flow.id, { name: flow.name }).catch((e) => showToast(e.message))}
         />
-        <input
-          className="mono" style={{ width: 130 }}
-          placeholder="cron 30 8 * * *"
-          value={flow.cron || ''}
-          title="留空=手动运行。例: 30 8 * * * 每天 8:30"
-          onChange={(e) => setFlow({ ...flow, cron: e.target.value })}
-          onBlur={(e) => api.updateFlow(flow.id, { cron: e.target.value }).then(() => showToast('调度已保存', 'ok')).catch((err) => showToast(err.message))}
-        />
-        <select
-          style={{ width: 150 }}
-          value={flow.timezone || 'Asia/Shanghai'}
-          onChange={(e) => { setFlow({ ...flow, timezone: e.target.value }); api.updateFlow(flow.id, { timezone: e.target.value }); }}
-        >
-          <option value="Asia/Shanghai">Asia/Shanghai</option>
-          <option value="UTC">UTC</option>
-          <option value="Asia/Tokyo">Asia/Tokyo</option>
-          <option value="America/New_York">America/New_York</option>
-        </select>
-        <input
-          className="mono"
-          style={{ width: 105 }}
-          placeholder="抖动(分)"
-          title="调度抖动：cron 触发后随机延迟 0-N 分钟执行（反风控整点指纹），0=不抖动"
-          value={flow.jitterMinutes ?? 0}
-          onChange={(e) => setFlow({ ...flow, jitterMinutes: Number(e.target.value) || 0 })}
-          onBlur={(e) => api.updateFlow(flow.id, { jitterMinutes: Number(e.target.value) || 0 }).then(() => showToast('抖动已保存', 'ok')).catch((err) => showToast(err.message))}
-        />
-        <label className="switch" title={flow.enabled ? '点击停用调度' : '点击启用调度'}>
-          <input type="checkbox" checked={!!flow.enabled} onChange={toggleEnabled} />
-          <span className="track" />
-        </label>
+        <details className="menu">
+          <summary>调度</summary>
+          <div className="menu-pop schedule-pop">
+            <div className="field">
+              <label>cron 表达式</label>
+              <input
+                className="mono"
+                placeholder="30 8 * * *（留空=手动）"
+                value={flow.cron || ''}
+                onChange={(e) => setFlow({ ...flow, cron: e.target.value })}
+                onBlur={(e) => api.updateFlow(flow.id, { cron: e.target.value }).then(() => showToast('调度已保存', 'ok')).catch((err) => showToast(err.message))}
+              />
+            </div>
+            <div className="field-inline">
+              <div className="field">
+                <label>时区</label>
+                <select
+                  value={flow.timezone || 'Asia/Shanghai'}
+                  onChange={(e) => { setFlow({ ...flow, timezone: e.target.value }); api.updateFlow(flow.id, { timezone: e.target.value }); }}
+                >
+                  <option value="Asia/Shanghai">Asia/Shanghai</option>
+                  <option value="UTC">UTC</option>
+                  <option value="Asia/Tokyo">Asia/Tokyo</option>
+                  <option value="America/New_York">America/New_York</option>
+                </select>
+              </div>
+              <div className="field">
+                <label>抖动（分钟）</label>
+                <input
+                  type="number"
+                  value={flow.jitterMinutes ?? 0}
+                  title="cron 触发后随机延迟 0-N 分钟，0=不抖动"
+                  onChange={(e) => setFlow({ ...flow, jitterMinutes: Number(e.target.value) || 0 })}
+                  onBlur={(e) => api.updateFlow(flow.id, { jitterMinutes: Number(e.target.value) || 0 }).then(() => showToast('抖动已保存', 'ok')).catch((err) => showToast(err.message))}
+                />
+              </div>
+            </div>
+            <label className="checkline">
+              <input type="checkbox" checked={!!flow.enabled} onChange={toggleEnabled} />
+              启用定时调度
+            </label>
+          </div>
+        </details>
+        <button className={`small${showPalette ? ' active' : ''}`} onClick={() => setShowPalette((v) => !v)} title="显示/收起步骤积木">积木</button>
+        <button className={`small${showConfig ? ' active' : ''}`} onClick={() => setShowConfig((v) => !v)} title="显示/收起参数面板">参数</button>
         <span className="spacer" />
-        <button className="small" disabled={!canUndo} onClick={undo} title="撤销 (Ctrl+Z)" aria-label="撤销">↩</button>
-        <button className="small" disabled={!canRedo} onClick={redo} title="重做 (Ctrl+Shift+Z)" aria-label="重做">↪</button>
-        <button className="small" onClick={async () => {
-          try {
-            const r = await api.notifyTest(flow.id);
-            showToast(`测试通知已发送 (${r.results?.length || 0} 渠道)`, r.ok ? 'ok' : 'fail');
-          } catch (e) { showToast(`测试通知: ${e.message}`); }
-        }} title="向当前任务的通知渠道发一条测试消息" aria-label="测试通知">✉</button>
-        <button className="small" onClick={async () => {
-          try {
-            const r = await api.dailySummary(flow.id);
-            showToast(r.text || '汇总已发送', 'ok');
-          } catch (e) { showToast(`汇总: ${e.message}`); }
-        }} title="发送今日汇总到当前任务渠道" aria-label="每日汇总">📊</button>
-        <button className="small" onClick={() => setCookieOpen(true)} title="从浏览器登录站点，一键抓 cookie 到变量" aria-label="填Cookie">🍪</button>
         {saving ? <span style={{ color: 'var(--muted)', fontSize: 12 }}>保存中…</span> : dirty ? <span style={{ color: 'var(--warn)', fontSize: 12 }}>未保存</span> : null}
-        <button className="small" onClick={() => setLogOpen(true)} title="日志记录配置：档位 / 记录内容 / 响应截断 / 关键字规则（随模板复制）" aria-label="日志配置">📝</button>
-        <button className="small" onClick={saveAsTemplate} title="把当前流程保存为模板，之后可基于它批量创建任务" aria-label="存为模板">⧉</button>
+        <button className="small" disabled={!runResult} onClick={() => setDrawerOpen(true)} title={runResult ? '展开运行日志' : '先运行一次'}>日志</button>
+        <button className="small primary" onClick={runNow} title="从头执行整个流程">运行</button>
+        <details className="menu">
+          <summary>···</summary>
+          <div className="menu-pop" onClick={(e) => e.currentTarget.closest('details')?.removeAttribute('open')}>
+            <button disabled={!canUndo} onClick={undo}>撤销</button>
+            <button disabled={!canRedo} onClick={redo}>重做</button>
+            <div className="menu-sep" />
+            <button onClick={testNotify}>测试通知</button>
+            <button onClick={sendSummary}>发送每日汇总</button>
+            <button onClick={() => setCookieOpen(true)}>填入 Cookie</button>
+            <button onClick={() => setLogOpen(true)}>日志配置</button>
+            <button onClick={saveAsTemplate}>存为模板</button>
+          </div>
+        </details>
         <ThemeToggle />
-        <button className="small primary" onClick={runNow} title="从头执行整个流程">▶ 运行</button>
       </div>
 
-      <div className="editor" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+      <div className={`editor${showPalette ? '' : ' no-palette'}${showConfig ? '' : ' no-config'}`} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+        <div className="editor-main">
         <div className="palette">
-          <h4>步骤积木</h4>
+          <div className="panel-head">
+            <h4>步骤积木</h4>
+            <button className="linkbtn" onClick={() => setShowPalette(false)}>收起</button>
+          </div>
           {Object.entries(STEP_TYPES).map(([type, meta]) => (
             <div
               key={type}
@@ -516,31 +546,26 @@ function FlowEditorInner({ flowId, onBack }) {
             fitView
             proOptions={{ hideAttribution: true }}
           >
-            <Background color={themeMode === 'dark' ? '#1a2130' : '#c8d2e2'} gap={22} />
+            <Background color={themeMode === 'dark' ? '#232933' : '#d8d2c6'} gap={22} />
             <Controls />
             <MiniMap
               pannable
               nodeColor={(n) => COLOR[n.data.type] || '#666'}
-              maskColor={themeMode === 'dark' ? 'rgba(11,14,20,.7)' : 'rgba(238,241,246,.72)'}
-              style={{ background: themeMode === 'dark' ? '#12161f' : '#ffffff' }}
+              maskColor={themeMode === 'dark' ? 'rgba(15,17,21,.7)' : 'rgba(244,242,237,.72)'}
+              style={{ background: themeMode === 'dark' ? '#161a20' : '#fffefa' }}
             />
           </ReactFlow>
 
           {empty && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 5 }}>
-              <div style={{ background: 'var(--panel)', border: '1px dashed var(--border)', borderRadius: 14, padding: '28px 36px', textAlign: 'center', pointerEvents: 'auto', maxWidth: 420 }}>
-                <div style={{ fontSize: 28, marginBottom: 8 }}>🧩</div>
-                <p style={{ margin: '0 0 6px', fontWeight: 600 }}>画布是空的</p>
-                <p style={{ margin: '0 0 12px', color: 'var(--muted)', fontSize: 12, lineHeight: 1.6 }}>
-                  从左侧点「HTTP 请求」开始：填 URL（支持 <code>{'{{变量}}'}</code>）→ 右侧再加「日志」节点 → 右上角 ▶ 运行验证。
+              <div style={{ background: 'var(--panel)', border: '1px dashed var(--border)', borderRadius: 14, padding: '26px 32px', textAlign: 'center', pointerEvents: 'auto', maxWidth: 420 }}>
+                <p style={{ margin: '0 0 6px', fontWeight: 600 }}>空白流程</p>
+                <p style={{ margin: '0 0 12px', color: 'var(--muted)', fontSize: 12, lineHeight: 1.7 }}>
+                  从「积木」里点 HTTP 请求开始：填 URL（支持 <code>{'{{变量}}'}</code>）→ 再加一个日志节点 → 点「运行」验证。
                 </p>
                 <button className="small primary" onClick={() => addNodeAt('http', { x: 80, y: 60 })}>+ 加一个 HTTP 请求</button>
               </div>
             </div>
-          )}
-
-          {drawerOpen && (
-            <RunDrawer run={runResult} flowId={flow.id} onClose={() => setDrawerOpen(false)} onPickResponse={handlePickResponse} onRepPick={replaceFailedNode} />
           )}
         </div>
 
@@ -552,7 +577,13 @@ function FlowEditorInner({ flowId, onBack }) {
           onDebugTo={debugTo}
           flowId={flow?.id}
           flowVars={flow?.vars || {}}
+          onCollapse={() => setShowConfig(false)}
         />
+        </div>
+
+        {drawerOpen && (
+          <RunDrawer run={runResult} flowId={flow.id} onClose={() => setDrawerOpen(false)} onPickResponse={handlePickResponse} onRepPick={replaceFailedNode} />
+        )}
       </div>
 
       {logOpen && <LogConfigModal flow={flow} onClose={() => setLogOpen(false)} onSaved={(f) => setFlow(f)} />}

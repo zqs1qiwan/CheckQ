@@ -31,7 +31,7 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepP
   if (!run && !override) return null;
   const shown = override || run;
 
-  const statusLabel = shown.status === 'success' ? '✅ 执行成功' : shown.status === 'failed' ? '❌ 执行失败' : '⏳ 执行中';
+  const statusLabel = shown.status === 'success' ? '执行成功' : shown.status === 'failed' ? '执行失败' : '执行中';
   const failLog = shown.logs?.find((l) => !l.ok);
   const [errFilter, setErrFilter] = useState('all'); // all | network | assert | engine
   const visibleLogs = (shown.logs || []).filter((l) => errFilter === 'all' || l.errorType === errFilter || (errFilter === 'network' && l.errorType === 'network'));
@@ -40,13 +40,13 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepP
     <div className="run-drawer">
       <div className="drawer-head">
         <div className="drawer-title">
-          <div style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{statusLabel} <span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: 12 }}>{shown.durationMs ? `${(shown.durationMs / 1000).toFixed(1)}s` : ''}</span></div>
+          <div style={{ fontWeight: 600, whiteSpace: 'nowrap' }}><span className={`run-status ${shown.status}`}>{statusLabel}</span> <span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: 12 }}>{shown.durationMs ? `${(shown.durationMs / 1000).toFixed(1)}s` : ''}</span></div>
           <div style={{ fontSize: 12, color: failLog ? 'var(--fail)' : 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {shown.finalMessage || fmtTime(shown.startedAt)}
+            {shown.finalMessage || (shown.startedAt ? fmtTime(shown.startedAt) : '正在执行…')}
           </div>
           {shown.summary && (
-            <div style={{ fontSize: 12, color: 'var(--ok)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={shown.summary}>
-              📌 {shown.summary}
+            <div style={{ fontSize: 12, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={shown.summary}>
+              摘要：<span style={{ color: 'var(--ok)' }}>{shown.summary}</span>
             </div>
           )}
         </div>

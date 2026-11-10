@@ -2,10 +2,14 @@ import React from 'react';
 import { STEP_TYPES } from '../stepTypes.js';
 import { api } from '../api.js';
 
-export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, onDebugTo, flowId, flowVars }) {
+export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, onDebugTo, flowId, flowVars, onCollapse }) {
   if (!node) {
     return (
       <div className="config-panel">
+        <div className="panel-head">
+          <h4>参数</h4>
+          {onCollapse && <button className="linkbtn" onClick={onCollapse}>收起</button>}
+        </div>
         <div className="empty" style={{ padding: 30, color: 'var(--muted)', fontSize: 13, lineHeight: 1.8 }}>
           点击画布上的节点<br />在此配置参数
         </div >
@@ -18,7 +22,10 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
 
   return (
     <div className="config-panel">
-      <div className="section-title">{STEP_TYPES[type]?.label || type}</div >
+      <div className="panel-head">
+        <h4>{STEP_TYPES[type]?.label || type}</h4>
+        {onCollapse && <button className="linkbtn" onClick={onCollapse}>收起</button>}
+      </div>
       <div className="field">
         <label>节点名称</label>
         <input value={node.name} onChange={(e) => onUpdate({ name: e.target.value })} />
@@ -34,9 +41,9 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
               </select>
             </div >
             <div className="field">
-              <label>超时 (秒)</label>
-              <input type="number" value={(config.timeout || 30000) / 1000}
-                onChange={(e) => onConfigUpdate({ timeout: Math.max(1, Number(e.target.value) || 30) * 1000 })} />
+              <label>超时（秒）</label>
+              <input type="number" min="1" value={config.timeout || 30}
+                onChange={(e) => onConfigUpdate({ timeout: Math.max(1, Number(e.target.value) || 30) })} />
             </div >
             <div className="field" style={{ alignSelf: 'flex-end' }}>
               <button className="small" title="生成等价 curl 命令（变量以当前值代入，敏感值完整还原，仅本机调试用）"

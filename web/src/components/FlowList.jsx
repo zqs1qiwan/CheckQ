@@ -301,16 +301,17 @@ export default function FlowList({ onOpen, onLogout }) {
         <span className="logo">Check<em>Q</em></span>
         <span className="spacer" />
         <button className="primary" onClick={() => setModal('new')}>+ 新建任务</button>
-        <button onClick={() => setModal('wizard')} title="一句话/三栏式生成签到流程">✨ 快速组装</button>
         <details className="menu">
-          <summary title="导入">导入</summary>
-          <div className="menu-pop" onClick={(e) => e.currentTarget.closest('.menu')?.removeAttribute('open')}>
-            <button onClick={() => setModal('curl')} disabled={importBusy}>cURL 命令导入</button>
-            <button onClick={() => setModal('import')} disabled={importBusy}>HAR / 模板 JSON 导入</button>
+          <summary>更多</summary>
+          <div className="menu-pop" onClick={(e) => e.currentTarget.closest('details')?.removeAttribute('open')}>
+            <button onClick={() => setModal('wizard')}>快速组装</button>
+            <button onClick={() => setModal('curl')} disabled={importBusy}>导入 cURL 命令</button>
+            <button onClick={() => setModal('import')} disabled={importBusy}>导入 HAR / JSON</button>
+            <div className="menu-sep" />
+            <button onClick={() => setModal('settings')}>设置</button>
+            <button onClick={onLogout}>退出登录</button>
           </div>
         </details>
-        <button className="iconbtn" onClick={() => setModal('settings')} title="设置：汇总 / 模板市场 / 改密 / API Key" aria-label="设置">⚙</button>
-        <button className="iconbtn" onClick={onLogout} title="退出登录" aria-label="退出">⏻</button>
         <ThemeToggle />
         <input
           ref={fileRef} type="file" accept=".har,.json" style={{ display: 'none' }}
@@ -344,26 +345,31 @@ export default function FlowList({ onOpen, onLogout }) {
                 </div>
                 <div className="tpl-actions">
                   <button className="small primary" onClick={() => setModal({ type: 'instantiate', tpl: t })}>+ 创建任务</button>
-                  <button className="small" onClick={() => setModal({ type: 'csv', tpl: t })}>批量</button>
-                  <button className="small" onClick={() => setModal({ type: 'template-editor', tpl: t })}>管理</button>
-                  <button className="small" onClick={async () => {
-                    try {
-                      const data = await api.exportTemplate(t.id);
-                      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                      const a = document.createElement('a');
-                      a.href = URL.createObjectURL(blob);
-                      a.download = `${t.name.replace(/[\\/:*?"<>|]/g, '_')}.json`;
-                      a.click();
-                      URL.revokeObjectURL(a.href);
-                    } catch (e) {
-                      setToast({ kind: 'fail', text: `导出失败: ${e.message}` });
-                    }
-                  }}>导出</button>
-                  <button className="small danger" onClick={async () => {
-                    if (!confirm(`删除模板「${t.name}」？已创建的任务不受影响。`)) return;
-                    await api.deleteTemplate(t.id);
-                    load();
-                  }}>删除</button>
+                  <details className="row-menu">
+                    <summary title="更多操作">···</summary>
+                    <div className="menu-pop" onClick={(e) => e.currentTarget.closest('details')?.removeAttribute('open')}>
+                      <button onClick={() => setModal({ type: 'csv', tpl: t })}>批量创建</button>
+                      <button onClick={() => setModal({ type: 'template-editor', tpl: t })}>管理模板</button>
+                      <button onClick={async () => {
+                        try {
+                          const data = await api.exportTemplate(t.id);
+                          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                          const a = document.createElement('a');
+                          a.href = URL.createObjectURL(blob);
+                          a.download = `${t.name.replace(/[\\/:*?"<>|]/g, '_')}.json`;
+                          a.click();
+                          URL.revokeObjectURL(a.href);
+                        } catch (e) {
+                          setToast({ kind: 'fail', text: `导出失败: ${e.message}` });
+                        }
+                      }}>导出 JSON</button>
+                      <button className="danger-text" onClick={async () => {
+                        if (!confirm(`删除模板「${t.name}」？已创建的任务不受影响。`)) return;
+                        await api.deleteTemplate(t.id);
+                        load();
+                      }}>删除模板</button>
+                    </div>
+                  </details>
                 </div>
               </div>
             ))}
@@ -432,7 +438,7 @@ export default function FlowList({ onOpen, onLogout }) {
               <thead>
                 <tr>
                   {batchMode && <th style={{ width: 36 }}><input type="checkbox" checked={selectedAll} onChange={toggleSelectAll} title="全选" /></th>}
-                  <th>名称</th><th>调度</th><th>下次运行</th><th>状态</th><th>上次运行</th><th style={{ minWidth: 210 }}>操作</th>
+                  <th>名称</th><th>调度</th><th className="col-next">下次运行</th><th>状态</th><th className="col-last">上次运行</th><th style={{ minWidth: 150 }}>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -446,32 +452,35 @@ export default function FlowList({ onOpen, onLogout }) {
                     <td style={{ whiteSpace: 'nowrap' }}>
                       {f.cron ? <span className="cron-code">{f.cron}</span> : <span style={{ color: 'var(--muted)' }}>手动</span>}
                     </td>
-                    <td>
+                    <td className="col-next">
                       {f.nextRunAt ? <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{fmtTime(f.nextRunAt)}</span> : <span style={{ color: 'var(--muted)', fontSize: 12 }}>—</span>}
                     </td>
-                    <td>
-                      <label className="switch" title={f.enabled ? '点击停用调度' : '点击启用调度'}>
-                        <input type="checkbox" checked={!!f.enabled} onChange={() => toggle(f)} />
-                        <span className="track" />
-                      </label>
+                    <td style={{ whiteSpace: 'nowrap', fontSize: 12, color: f.enabled ? 'var(--ok)' : 'var(--muted)' }}>
+                      <span className={`status-dot${f.enabled ? ' on' : ''}`} />{f.enabled ? '已启用' : '已停用'}
                     </td>
-                    <td>{lastStatus(f)}</td>
+                    <td className="col-last">{lastStatus(f)}</td>
                     <td>
                       <div className="cell-actions">
-                        <button className="small primary" disabled={running === f.id} title={running === f.id ? '正在运行…' : '立即运行一次'} aria-label="运行"
-                          onClick={() => runNow(f)}>{running === f.id ? '⏳' : '▶'}</button>
-                        <button className="small" title="编辑流程" aria-label="编辑" onClick={() => onOpen(f.id)}>✏️</button>
-                        <button className="small" title="查看运行日志（每天的签到记录都在这里）" aria-label="日志" onClick={() => openLog(f)}>📜</button>
-                        <button className="small" title="复制为副本（调度暂停）" aria-label="复制" onClick={async () => {
-                          try {
-                            await api.cloneFlow(f.id);
-                            setToast({ kind: 'ok', text: '已克隆为副本（调度暂停）' });
-                            load();
-                          } catch (e) {
-                            setToast({ kind: 'fail', text: e.message });
-                          }
-                        }}>📋</button>
-                        <button className="small danger" title="删除任务（不影响模板）" aria-label="删除" onClick={() => del(f)}>🗑</button>
+                        <button className="small primary" disabled={running === f.id} title={running === f.id ? '正在运行…' : '立即运行一次'}
+                          onClick={() => runNow(f)}>{running === f.id ? '运行中' : '运行'}</button>
+                        <button className="small" title="查看运行日志（每天的签到记录都在这里）" onClick={() => openLog(f)}>日志</button>
+                        <details className="row-menu">
+                          <summary title="更多操作">···</summary>
+                          <div className="menu-pop" onClick={(e) => e.currentTarget.closest('details')?.removeAttribute('open')}>
+                            <button onClick={() => onOpen(f.id)}>编辑</button>
+                            <button onClick={async () => {
+                              try {
+                                await api.cloneFlow(f.id);
+                                setToast({ kind: 'ok', text: '已克隆为副本（调度暂停）' });
+                                load();
+                              } catch (e) {
+                                setToast({ kind: 'fail', text: e.message });
+                              }
+                            }}>复制副本</button>
+                            <button onClick={() => toggle(f)}>{f.enabled ? '停用调度' : '启用调度'}</button>
+                            <button className="danger-text" onClick={() => del(f)}>删除</button>
+                          </div>
+                        </details>
                       </div>
                     </td>
                   </tr>

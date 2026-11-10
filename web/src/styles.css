@@ -524,7 +524,7 @@ span.json-toggle { cursor: default; }
   button.small { padding: 6px 11px; font-size: 12px; }
   .theme-btn { padding: 7px 12px; font-size: 16px; }
   .menu > summary { padding: 8px 13px; }
-  .flow-table { min-width: 560px; }
+  .flow-table { min-width: 540px; }
   .flow-table th.col-next, .flow-table td.col-next,
   .flow-table th.col-last, .flow-table td.col-last { display: none; }
   .flow-table th, .flow-table td { padding: 10px 10px; }

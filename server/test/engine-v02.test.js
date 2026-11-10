@@ -238,6 +238,26 @@ await ok('log 节点渲染 {{last.status}}', async () => {
   assert.strictEqual(log.message, '完成：200');
 });
 
+// ========== 12. 回归: HTTP 400 + 业务码 10001 断言通过（领积分幂等已签） ==========
+await ok('http 400 + code 10001 断言通过（已签幂等）', async () => {
+  globalThis.fetch = async () => new Response('{"code":10001,"msg":"今天已签到，请明天再来"}', {
+    status: 400,
+    headers: { 'content-type': 'application/json' },
+  });
+  const f = flow([
+    httpNode('a', { method: 'POST', url: 'https://example.com/claim', headers: [], body: '', asserts: [{ res: ['"code":(0|10001)'], from: 'content' }] }),
+    { id: 'b', type: 'script', name: 'parse', x: 100, y: 0, config: { code: `const r = last.json || {}; return { already: r.code === 10001 ? 'true' : 'false', log: r.code === 10001 ? '今日已签（并发）' : '签到成功' };` } },
+    { id: 'c', type: 'log', name: 'show', x: 200, y: 0, config: { text: '{{log}}' } },
+  ], [
+    { id: 'e1', source: 'a', target: 'b' },
+    { id: 'e2', source: 'b', target: 'c' },
+  ]);
+  const res = await new Engine(f).run({});
+  assert.strictEqual(res.ok, true, res.logs.map((l) => l.message).join('; '));
+  assert.strictEqual(res.vars.already, 'true');
+  assert.strictEqual(res.logs.find((l) => l.type === 'log').message, '今日已签（并发）');
+});
+
 globalThis.fetch = realFetch;
 
 console.log(`\n${passing.length}/${passing.length} passed`);

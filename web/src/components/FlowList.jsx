@@ -627,35 +627,29 @@ function ResultModal({ run, flowId, onClose }) {
   };
   return (
     <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ width: 640 }}>
+      <div className="modal result-modal">
         <h3>运行日志：{shown.flowName || ''}</h3>
         <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>
           {statusLabel} · {shown.startedAt ? fmtTime(shown.startedAt) : ''} · 触发 {shown.trigger || 'manual'}
           {shown.durationMs ? ` · ${(shown.durationMs / 1000).toFixed(1)}s` : ''}
         </div>
-        {hist && flowId && (
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ color: 'var(--muted)', fontSize: 11, marginBottom: 4 }}>历史记录（每天的日志在这里切换）</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {(hist || []).map((r) => (
-                <button key={r.id} className={`small ${r.id === shown.id ? 'primary' : ''}`} onClick={() => openRun(r.id)}>
-                  {r.status === 'success' ? '成功' : '失败'} {fmtTime(r.startedAt)}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
         {shown.finalMessage && (
           <p style={{ color: shown.status === 'failed' ? 'var(--fail)' : 'var(--muted)', fontSize: 13, marginTop: -4 }}>{shown.finalMessage}</p>
         )}
         {shown.summary && (
           <p style={{ color: 'var(--ok)', fontSize: 12, marginTop: -4 }}>摘要：{shown.summary}</p>
         )}
-        {shown.vars && Object.keys(shown.vars).length > 0 && (
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ color: 'var(--muted)', fontSize: 11, marginBottom: 4 }}>最终变量快照（已脱敏）</div>
-            <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{Object.entries(shown.vars).map(([k, v]) => `${k} = ${String(v).slice(0, 120)}`).join('\n')}</pre>
-          </div>
+        {hist && flowId && (
+          <details className="adv-block">
+            <summary>历史记录（最近 {hist.length} 次，点此切换）</summary>
+            <div className="adv-body" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, paddingBottom: 10 }}>
+              {(hist || []).map((r) => (
+                <button key={r.id} className={`small ${r.id === shown.id ? 'primary' : ''}`} onClick={() => openRun(r.id)}>
+                  {r.status === 'success' ? '成功' : '失败'} {fmtTime(r.startedAt)}
+                </button>
+              ))}
+            </div>
+          </details>
         )}
         <div className="result-logs">
           {(shown.logs || []).length === 0 && <p style={{ color: 'var(--muted)' }}>暂无日志</p>}
@@ -664,7 +658,7 @@ function ResultModal({ run, flowId, onClose }) {
               <div className="step-head" onClick={() => setExpanded(expanded === i ? null : i)}>
                 <span className="idx">{log.index}</span>
                 <span className="dot" style={{ background: log.ok ? 'var(--ok)' : 'var(--fail)', width: 8, height: 8, borderRadius: '50%', flex: 'none' }} />
-                <span className="msg">{log.name} — {log.message}{log.errorType ? ` [${log.errorType}]` : ''}</span>
+                <span className="msg" title={`${log.name} — ${log.message || ''}`}>{log.name} — {log.message}{log.errorType ? ` [${log.errorType}]` : ''}</span>
                 <span style={{ color: 'var(--muted)', fontSize: 11, flex: 'none' }}>{log.ms}ms</span>
               </div>
               {expanded === i && (
@@ -707,7 +701,15 @@ function ResultModal({ run, flowId, onClose }) {
             </div>
           ))}
         </div>
-        <div style={{ marginTop: 14 }}>
+        {shown.vars && Object.keys(shown.vars).length > 0 && (
+          <details className="adv-block">
+            <summary>最终变量快照（已脱敏）</summary>
+            <div className="adv-body">
+              <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}>{Object.entries(shown.vars).map(([k, v]) => `${k} = ${String(v).slice(0, 120)}`).join('\n')}</pre>
+            </div>
+          </details>
+        )}
+        <div className="result-foot">
           <button onClick={onClose}>关闭</button>
         </div>
       </div>

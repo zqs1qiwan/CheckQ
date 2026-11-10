@@ -484,6 +484,22 @@ span.json-toggle { cursor: default; }
 .modal .tpl-item .t { font-weight: 600; margin-bottom: 4px; }
 .modal .tpl-item .d { color: var(--muted); font-size: 12px; line-height: 1.5; }
 
+/* 运行日志弹窗：头部固定，步骤列表独立滚动，变量快照折叠 */
+.modal.result-modal {
+  width: min(700px, 100%);
+  height: min(660px, 86vh);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.result-modal .result-logs { flex: 1 1 auto; overflow-y: auto; margin-top: 10px; padding-right: 4px; max-height: none; }
+.result-modal .step-row .step-head .msg {
+  white-space: normal; text-overflow: clip;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  line-height: 1.5;
+}
+.result-modal .adv-block { flex: none; }
+.result-foot { display: flex; justify-content: flex-end; padding-top: 10px; flex: none; }
+
 /* 设置：左导航 + 右内容，固定高度一屏，内容区独立滚动 */
 .modal.settings-modal {
   width: min(760px, 100%);

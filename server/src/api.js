@@ -294,6 +294,73 @@ export function buildServer({ dataDir, port }) {
     return { apiKey: key };
   });
 
+  // AI 助手（快速组装 LLM）：OpenAI 兼容接口配置，key 只存 meta、返回时打码
+  app.get('/api/system/ai', async () => {
+    const a = store.meta.ai || {};
+    return { configured: !!(a.baseUrl && a.apiKey && a.model), baseUrl: a.baseUrl || '', model: a.model || '', apiKey: a.apiKey ? a.apiKey.slice(0, 6) + '…' : '' };
+  });
+  app.put('/api/system/ai', async (req) => {
+    const { baseUrl, apiKey, model } = req.body || {};
+    const prev = store.meta.ai || {};
+    // apiKey 传空或打码占位时保留旧 key
+    const key = String(apiKey || '').trim();
+    store.meta.ai = {
+      baseUrl: String(baseUrl || '').trim(),
+      apiKey: key && !key.endsWith('…') ? key : (prev.apiKey || ''),
+      model: String(model || '').trim(),
+    };
+    store.flush();
+    return { ok: true };
+  });
+  app.post('/api/ai/generate', async (req, reply) => {
+    const a = store.meta.ai || {};
+    if (!a.baseUrl || !a.apiKey || !a.model) return reply.code(400).send({ error: '未配置 AI：请到「设置 → AI 助手」填 Base URL / API Key / 模型' });
+    const sentence = String((req.body || {}).sentence || '').trim();
+    if (!sentence) return reply.code(400).send({ error: '请先输入一句话描述' });
+    const sys = 'You generate CheckQ automation flow JSON. Output ONLY compact JSON, no markdown fences. Shape: '
+      + '{"name":"<short task name>","cron":"<5-field cron e.g. 0 8 * * *>","nodes":[{"id":"n0","type":"http","name":"<short>","x":80,"y":60,"config":{"method":"GET","url":"<absolute https url from user text>","headers":[{"name":"user-agent","value":"Mozilla/5.0","enabled":true}],"body":"","asserts":[]}},{"id":"n1","type":"log","name":"记录结果","x":360,"y":60,"config":{"text":"完成：{{last.status}}"}}],"edges":[{"id":"e0","source":"n0","sourceHandle":"success","target":"n1"}]} '
+      + 'Rules: only node types http,log,set,delay; first node must be http with a real absolute url from the user text; if user says 看到X算成功 set asserts:[{"res":["X"],"from":"content"}]; <=5 nodes; JSON only.';
+    try {
+      const r = await fetch(a.baseUrl.replace(/\/+$/, '') + '/chat/completions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: 'Bearer ' + a.apiKey },
+        body: JSON.stringify({ model: a.model, temperature: 0.2, messages: [{ role: 'system', content: sys }, { role: 'user', content: sentence }] }),
+        signal: AbortSignal.timeout(60000),
+      });
+      if (!r.ok) {
+        const t = await r.text();
+        return reply.code(502).send({ error: `LLM 接口错误 ${r.status}: ${t.slice(0, 200)}` });
+      }
+      const data = await r.json();
+      let text = String(data.choices?.[0]?.message?.content || '');
+      text = text.replace(/^```(json)?/i, '').replace(/```\s*$/, '').trim();
+      const start = text.indexOf('{'); const end = text.lastIndexOf('}');
+      if (start < 0 || end <= start) return reply.code(502).send({ error: 'LLM 未返回 JSON' });
+      const draft = JSON.parse(text.slice(start, end + 1));
+      if (!Array.isArray(draft.nodes) || !draft.nodes.length) return reply.code(502).send({ error: 'LLM JSON 缺少 nodes' });
+      const okTypes = new Set(['http', 'log', 'set', 'delay']);
+      draft.nodes = draft.nodes.slice(0, 6).map((n, i) => ({
+        id: String(n.id || 'n' + i),
+        type: okTypes.has(n.type) ? n.type : 'log',
+        name: String(n.name || n.type || '节点').slice(0, 60),
+        x: Number(n.x) || 80 + i * 280,
+        y: Number(n.y) || 60,
+        config: n.config && typeof n.config === 'object' ? n.config : {},
+      }));
+      draft.edges = Array.isArray(draft.edges) ? draft.edges.slice(0, 8) : [];
+      const first = draft.nodes.find((n) => n.type === 'http');
+      if (!first || !/^https?:\/\//.test(String(first.config?.url || ''))) return reply.code(502).send({ error: 'LLM 未给出有效 HTTP 节点/URL' });
+      draft.name = String(draft.name || 'AI 生成任务').slice(0, 60);
+      draft.cron = typeof draft.cron === 'string' ? draft.cron.slice(0, 40) : '';
+      draft.timezone = 'Asia/Shanghai';
+      draft.enabled = false;
+      draft.vars = {};
+      return { draft };
+    } catch (e) {
+      return reply.code(502).send({ error: 'LLM 调用失败: ' + e.message });
+    }
+  });
+
   // 通知测试：向指定 flow 的渠道发一条测试消息（PRD §4.8 P2）
   app.post('/api/flows/:id/notify-test', async (req, reply) => {
     const f = store.getFlow(req.params.id);

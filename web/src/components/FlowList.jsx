@@ -43,6 +43,9 @@ function WizardModal({ onClose, onCreated }) {
   const [sentence, setSentence] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiDraft, setAiDraft] = useState(null);
+  const [aiErr, setAiErr] = useState('');
   const fillFromSentence = () => {
     if (!sentence.trim()) return;
     const p = parseNatural(sentence);
@@ -59,16 +62,47 @@ function WizardModal({ onClose, onCreated }) {
       onCreated(f);
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
+  const aiGenerate = async () => {
+    setAiErr(''); setAiBusy(true); setAiDraft(null);
+    try {
+      const { draft } = await api.aiGenerate(sentence.trim());
+      setAiDraft(draft);
+    } catch (e) { setAiErr(e.message); } finally { setAiBusy(false); }
+  };
+  const createFromDraft = async () => {
+    setAiErr(''); setAiBusy(true);
+    try {
+      const f = await api.createFlow(aiDraft);
+      onCreated(f);
+    } catch (e) { setAiErr(e.message); } finally { setAiBusy(false); }
+  };
   return (
     <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
-        <h3>✨ 快速组装（菜单式 + 一句话生成）</h3>
-        <p style={{ color: 'var(--muted)', fontSize: 12 }}>填三项就行：站点地址、要做什么、看到什么算成功。进编辑器后点「▶ 运行」验证，响应里点选补细节。</p>
+        <h3>✨ 快速组装</h3>
+        <p style={{ color: 'var(--muted)', fontSize: 12 }}>两种方式：一句话让 AI 生成（需在设置配置 LLM API），或手动填三项生成骨架。进编辑器后点「▶ 运行」验证，响应里点选补细节。</p>
         <div className="field">
-          <label>一句话生成（可选，例：每天8点去 https://ex.com/sign 签到，看到签到成功算成功）</label>
+          <label>一句话描述（例：每天8点去 https://ex.com/sign 签到，看到签到成功算成功）</label>
           <input value={sentence} onChange={(e) => setSentence(e.target.value)} placeholder="每天8点去 https://ex.com/sign 签到，看到签到成功算成功" />
-          <button className="small" style={{ marginTop: 6 }} onClick={fillFromSentence}>按这句生成并填充</button>
+          <span className="btn-row" style={{ marginTop: 6 }}>
+            <button className="small primary" disabled={aiBusy || !sentence.trim()} onClick={aiGenerate}>{aiBusy ? 'AI 生成中…' : '✨ AI 生成流程'}</button>
+            <button className="small" onClick={fillFromSentence}>规则填充（不耗 API）</button>
+          </span>
         </div>
+        {aiErr && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{aiErr}</p>}
+        {aiDraft && (
+          <div className="ai-preview">
+            <div style={{ fontWeight: 600, fontSize: 13 }}>{aiDraft.name}</div>
+            <div style={{ color: 'var(--muted)', fontSize: 12, margin: '4px 0' }}>
+              {aiDraft.nodes?.length || 0} 个节点 · cron {aiDraft.cron || '—'} · {aiDraft.nodes?.map((n) => n.type).join(' → ')}
+            </div>
+            <span className="btn-row">
+              <button className="small primary" disabled={aiBusy} onClick={createFromDraft}>用 AI 结果创建</button>
+              <button className="small" onClick={() => setAiDraft(null)}>丢弃</button>
+            </span>
+          </div>
+        )}
+        <div style={{ borderTop: '1px solid var(--border)', margin: '12px 0 10px' }} />
         <div className="field">
           <label>请求地址（浏览器打开站点后复制地址栏）</label>
           <input className="mono" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/sign" />
@@ -92,7 +126,7 @@ function WizardModal({ onClose, onCreated }) {
           <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="签到成功" />
         </div>
         <div className="field">
-          <div className="hint">生成：HTTP 节点（带断言/UA）→ 日志节点「{eventLabel}完成」，cron 每天 8 点（可改），调度默认关闭。</div>
+          <div className="hint">规则模式生成：HTTP 节点（带断言/UA）→ 日志节点「{eventLabel}完成」，cron 每天 8 点（可改），调度默认关闭。</div>
         </div>
         {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
         <button className="primary" disabled={busy || !url.trim()} onClick={create}>{busy ? '生成中…' : '生成流程'}</button>
@@ -831,11 +865,55 @@ function SettingsModal({ onClose }) {
           {key && <pre className="mono" style={{ wordBreak: 'break-all', fontSize: 12 }}>{key}</pre>}
           <button className="small" onClick={genKey}>{hasKey ? '重新生成' : '生成 API Key'}</button>
         </div>
+        <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '16px 0' }} />
+        <AiSettings />
         {msg && <p style={{ color: 'var(--ok)', fontSize: 12 }}>{msg}</p>}
         {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
         <button onClick={onClose}>关闭</button>
       </div>
     </div>
+  );
+}
+
+/** 设置内：AI 助手（快速组装 LLM，OpenAI 兼容接口；key 只存服务端） */
+function AiSettings() {
+  const [cfg, setCfg] = useState({ baseUrl: '', apiKey: '', model: '' });
+  const [configured, setConfigured] = useState(false);
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    api.aiSettings().then((s) => { setConfigured(s.configured); setCfg({ baseUrl: s.baseUrl, apiKey: s.apiKey, model: s.model }); }).catch(() => {});
+  }, []);
+  const save = async () => {
+    setMsg('');
+    try {
+      await api.saveAiSettings(cfg);
+      const s = await api.aiSettings();
+      setConfigured(s.configured); setCfg({ baseUrl: s.baseUrl, apiKey: s.apiKey, model: s.model });
+      setMsg('AI 配置已保存');
+    } catch (e) { setMsg('保存失败: ' + e.message); }
+  };
+  return (
+    <>
+      <div className="field">
+        <label>AI 助手（快速组装 LLM，OpenAI 兼容接口{configured ? ' · 已配置' : ' · 未配置'}）</label>
+        <input placeholder="Base URL，例：https://api.deepseek.com/v1" value={cfg.baseUrl} onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value })} />
+      </div>
+      <div className="field-inline">
+        <div className="field">
+          <label>API Key</label>
+          <input type="password" autoComplete="off" placeholder={cfg.apiKey || 'sk-…'} value={cfg.apiKey} onChange={(e) => setCfg({ ...cfg, apiKey: e.target.value })} />
+        </div>
+        <div className="field">
+          <label>模型</label>
+          <input placeholder="deepseek-chat / gpt-4o-mini" value={cfg.model} onChange={(e) => setCfg({ ...cfg, model: e.target.value })} />
+        </div>
+      </div>
+      <div style={{ color: 'var(--muted)', fontSize: 11, marginBottom: 8, lineHeight: 1.5 }}>
+        支持 OpenAI 兼容接口（DeepSeek / OpenAI / Ollama 等）。Key 只存服务端 meta.json，不回显明文。未配置时快速组装走本地规则模式（不耗 API）。
+      </div>
+      <button className="small" onClick={save}>保存 AI 配置</button>
+      {msg && <p style={{ color: msg.startsWith('保存失败') ? 'var(--fail)' : 'var(--ok)', fontSize: 12 }}>{msg}</p>}
+    </>
   );
 }
 

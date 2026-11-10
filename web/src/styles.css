@@ -195,29 +195,18 @@ button.iconbtn { padding: 4px 9px; font-size: 13px; border-radius: 6px; }
 .menu-pop button:last-child { border-bottom: none; }
 .menu-pop button:hover { background: var(--hover-tint); }
 
-/* 主题三段钮（日/夜/自动） */
-.theme-seg {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-  flex: 0 0 auto;
-  background: var(--panel2);
+/* AI 生成结果预览（快速组装） */
+.ai-preview {
+  border: 1px solid var(--accent);
+  background: var(--hover-tint);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 4px 0 10px;
 }
-.theme-seg button {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  padding: 5px 11px;
-  font-size: 14px;
-  line-height: 1.2;
-  color: var(--muted);
-}
-.theme-seg button em { font-style: normal; }
-.theme-seg button + button { border-left: 1px solid var(--border); }
-.theme-seg button:hover { color: var(--text); border-left-color: var(--border); }
-.theme-seg button.active { background: var(--accent); color: var(--on-accent); }
+
+/* 主题单按钮（点击循环 日→夜→自动） */
+.theme-btn { font-size: 15px; line-height: 1.2; padding: 4px 10px; color: var(--text); }
+.theme-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 .page { max-width: 1100px; margin: 0 auto; padding: 24px 20px 40px; width: 100%; }
 .page-head { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; row-gap: 8px; margin-bottom: 20px; }
@@ -434,7 +423,7 @@ span.json-toggle { cursor: default; }
   button { padding: 8px 13px; }
   button.small { padding: 6px 11px; font-size: 12px; }
   .cell-actions button { padding: 6px 8px; }
-  .theme-seg button { padding: 7px 13px; font-size: 15px; }
+  .theme-btn { padding: 7px 12px; font-size: 16px; }
   .menu > summary { padding: 8px 13px; }
   .flow-table { min-width: 660px; }
   .flow-table th, .flow-table td { padding: 10px 10px; }

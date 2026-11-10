@@ -417,7 +417,7 @@ function FlowEditorInner({ flowId, onBack }) {
       <div className="topbar">
         <button className="small" onClick={onBack}>← 返回</button>
         <input
-          style={{ width: 220, fontWeight: 600, background: 'transparent', border: 'none', padding: '4px 2px' }}
+          style={{ flex: '1 1 200px', minWidth: 120, maxWidth: 320, fontWeight: 600, background: 'transparent', border: 'none', padding: '4px 2px' }}
           value={flow.name}
           onChange={(e) => { setFlow({ ...flow, name: e.target.value }); markDirty(); }}
           onBlur={() => api.updateFlow(flow.id, { name: flow.name }).catch((e) => showToast(e.message))}

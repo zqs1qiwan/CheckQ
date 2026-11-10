@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
+import ThemeToggle from './ThemeToggle.jsx';
 
 function fmtTime(ts) {
   const d = new Date(ts);
@@ -124,6 +125,7 @@ export default function FlowList({ onOpen, onLogout }) {
   const [stats, setStats] = useState(null);
   const [selected, setSelected] = useState(new Set());
   const [batchBusy, setBatchBusy] = useState(false);
+  const [batchMode, setBatchMode] = useState(false); // 批量管理开关：勾选列默认隐藏，不干扰日常阅读
   const fileRef = useRef();
   const editTemplateRef = useRef(); // 模板编辑页回调刷新
 
@@ -270,6 +272,7 @@ export default function FlowList({ onOpen, onLogout }) {
         <button className="primary" onClick={() => setModal('new')}>+ 新建任务</button>
         <button onClick={() => setModal('settings')}>设置</button>
         <button onClick={onLogout}>退出</button>
+        <ThemeToggle />
         <input
           ref={fileRef} type="file" accept=".har,.json" style={{ display: 'none' }}
           onChange={(e) => { const f = e.target.files[0]; if (f) doImport(f); e.target.value = ''; }}
@@ -336,8 +339,8 @@ export default function FlowList({ onOpen, onLogout }) {
           <h2>任务</h2>
           <span className="spacer" />
           {selected.size > 0 && (
-            <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <span style={{ fontSize: 12, color: 'var(--accent)' }}>已选 {selected.size}</span>
+            <span className="btn-row">
+              <span style={{ fontSize: 12, color: 'var(--accent)', whiteSpace: 'nowrap' }}>已选 {selected.size}</span>
               <button className="small primary" disabled={batchBusy} onClick={() => doBatch('run')}>▶ 批量运行</button>
               <button className="small" disabled={batchBusy} onClick={() => doBatch('enable')}>启用</button>
               <button className="small" disabled={batchBusy} onClick={() => doBatch('disable')}>停用</button>
@@ -345,6 +348,10 @@ export default function FlowList({ onOpen, onLogout }) {
               <button className="small" onClick={() => setSelected(new Set())}>取消</button>
             </span>
           )}
+          <span className="spacer" />
+          <button className={`small ${batchMode ? 'primary' : ''}`} onClick={() => { setBatchMode((v) => !v); setSelected(new Set()); }}>
+            ☑ 批量{batchMode ? '退出' : '管理'}
+          </button>
           <button className="small" onClick={async () => {
             try {
               const data = await api.backup();
@@ -359,13 +366,13 @@ export default function FlowList({ onOpen, onLogout }) {
           }}>备份</button>
           <button className="small" onClick={() => setModal('restore')}>恢复</button>
           <input
-            style={{ width: 180, fontSize: 13, padding: '4px 8px' }}
+            style={{ width: 180, minWidth: 140, flex: '0 1 180px', fontSize: 13, padding: '4px 8px' }}
             placeholder="搜索名称/备注…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           <select
-            style={{ width: 110, fontSize: 13, padding: '4px 6px' }}
+            style={{ width: 110, flex: '0 0 auto', fontSize: 13, padding: '4px 6px' }}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           >
@@ -381,57 +388,58 @@ export default function FlowList({ onOpen, onLogout }) {
             <p>{(search || filter !== 'all') ? '没有匹配的任务。' : '还没有任务。从上方模板创建，或「+ 新建任务」从零开始搭建。'}</p>
           </div>
         ) : (
-          <table className="flow-table">
-            <thead>
-              <tr>
-                <th style={{ width: 36 }}><input type="checkbox" checked={selectedAll} onChange={toggleSelectAll} title="全选" /></th>
-                <th>名称</th><th>调度</th><th>下次运行</th><th>状态</th><th>上次运行</th><th style={{ width: 240 }}>操作</th></tr>
-            </thead>
-            <tbody>
-              {visibleFlows.map((f) => (
-                <tr key={f.id}>
-                  <td><input type="checkbox" checked={selected.has(f.id)} onChange={() => toggleSelect(f.id)} /></td>
-                  <td>
-                    <a className="flow-name" href="#" onClick={(e) => { e.preventDefault(); onOpen(f.id); }}>{f.name}</a>
-                    {f.note ? <div style={{ color: 'var(--muted)', fontSize: 12 }}>{f.note}</div> : null}
-                  </td>
-                  <td>
-                    {f.cron ? <span className="cron-code">{f.cron}</span> : <span style={{ color: 'var(--muted)' }}>手动</span>}
-                  </td>
-                  <td>
-                    {f.nextRunAt ? <span style={{ fontSize: 12, color: 'var(--muted)' }}>{fmtTime(f.nextRunAt)}</span> : <span style={{ color: 'var(--muted)', fontSize: 12 }}>—</span>}
-                  </td>
-                  <td>
-                    <label className="switch" title={f.enabled ? '点击停用调度' : '点击启用调度'}>
-                      <input type="checkbox" checked={!!f.enabled} onChange={() => toggle(f)} />
-                      <span className="track" />
-                    </label>
-                  </td>
-                  <td>{lastStatus(f)}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <button className="small primary" disabled={running === f.id}
-                      onClick={() => runNow(f)}>{running === f.id ? '运行中…' : '▶ 运行'}</button>
-                    {' '}
-                    <button className="small" onClick={() => onOpen(f.id)}>编辑</button>
-                    {' '}
-                    <button className="small" title="查看运行日志（每天的签到记录都在这里）" onClick={() => openLog(f)}>日志</button>
-                    {' '}
-                    <button className="small" onClick={async () => {
-                      try {
-                        await api.cloneFlow(f.id);
-                        setToast({ kind: 'ok', text: '已克隆为副本（调度暂停）' });
-                        load();
-                      } catch (e) {
-                        setToast({ kind: 'fail', text: e.message });
-                      }
-                    }}>复制</button>
-                    {' '}
-                    <button className="small danger" onClick={() => del(f)}>删除</button>
-                  </td>
+          <div className="table-scroll">
+            <table className="flow-table">
+              <thead>
+                <tr>
+                  {batchMode && <th style={{ width: 36 }}><input type="checkbox" checked={selectedAll} onChange={toggleSelectAll} title="全选" /></th>}
+                  <th>名称</th><th>调度</th><th>下次运行</th><th>状态</th><th>上次运行</th><th style={{ minWidth: 250 }}>操作</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {visibleFlows.map((f) => (
+                  <tr key={f.id}>
+                    {batchMode && <td><input type="checkbox" checked={selected.has(f.id)} onChange={() => toggleSelect(f.id)} /></td>}
+                    <td>
+                      <a className="flow-name" href="#" onClick={(e) => { e.preventDefault(); onOpen(f.id); }}>{f.name}</a>
+                      {f.note ? <div style={{ color: 'var(--muted)', fontSize: 12 }}>{f.note}</div> : null}
+                    </td>
+                    <td>
+                      {f.cron ? <span className="cron-code">{f.cron}</span> : <span style={{ color: 'var(--muted)' }}>手动</span>}
+                    </td>
+                    <td>
+                      {f.nextRunAt ? <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{fmtTime(f.nextRunAt)}</span> : <span style={{ color: 'var(--muted)', fontSize: 12 }}>—</span>}
+                    </td>
+                    <td>
+                      <label className="switch" title={f.enabled ? '点击停用调度' : '点击启用调度'}>
+                        <input type="checkbox" checked={!!f.enabled} onChange={() => toggle(f)} />
+                        <span className="track" />
+                      </label>
+                    </td>
+                    <td>{lastStatus(f)}</td>
+                    <td>
+                      <div className="cell-actions">
+                        <button className="small primary" disabled={running === f.id}
+                          onClick={() => runNow(f)}>{running === f.id ? '运行中…' : '▶ 运行'}</button>
+                        <button className="small" onClick={() => onOpen(f.id)}>编辑</button>
+                        <button className="small" title="查看运行日志（每天的签到记录都在这里）" onClick={() => openLog(f)}>日志</button>
+                        <button className="small" onClick={async () => {
+                          try {
+                            await api.cloneFlow(f.id);
+                            setToast({ kind: 'ok', text: '已克隆为副本（调度暂停）' });
+                            load();
+                          } catch (e) {
+                            setToast({ kind: 'fail', text: e.message });
+                          }
+                        }}>复制</button>
+                        <button className="small danger" onClick={() => del(f)}>删除</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

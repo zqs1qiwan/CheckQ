@@ -5,6 +5,8 @@ import {
 } from '@xyflow/react';
 import { api } from '../api.js';
 import { STEP_TYPES, OUTPUT_LABELS, defaultConfig } from '../stepTypes.js';
+import { currentMode, onMode } from '../theme.js';
+import ThemeToggle from './ThemeToggle.jsx';
 import ConfigPanel from './ConfigPanel.jsx';
 import RunDrawer from './RunDrawer.jsx';
 
@@ -69,7 +71,10 @@ function FlowEditorInner({ flowId, onBack }) {
   const historyRef = useRef({ past: [], future: [] });
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  const [themeMode, setThemeMode] = useState(currentMode()); // 'dark' | 'light'（画布 attr 需要解析色值）
   const { screenToFlowPosition } = useReactFlow();
+
+  useEffect(() => onMode(setThemeMode), []);
 
   const snapshotGraph = useCallback(() => ({
     nodes: stateRef.current.nodes.map((n) => ({ id: n.id, type: 'step', position: { ...n.position }, data: JSON.parse(JSON.stringify(n.data)) })),
@@ -465,9 +470,10 @@ function FlowEditorInner({ flowId, onBack }) {
         }} title="发送今日汇总到当前任务渠道">📊 每日汇总</button>
         <button className="small" onClick={() => setCookieOpen(true)} title="从浏览器登录站点，一键抓 cookie 到变量">🍪 填Cookie</button>
         {saving ? <span style={{ color: 'var(--muted)', fontSize: 12 }}>保存中…</span> : dirty ? <span style={{ color: 'var(--warn)', fontSize: 12 }}>未保存</span> : null}
-        <button onClick={() => setLogOpen(true)} title="日志记录配置：档位 / 记录内容 / 响应截断 / 关键字规则（随模板复制）">日志配置</button>
-        <button onClick={saveAsTemplate} title="把当前流程保存为模板，之后可基于它批量创建任务">存为模板</button>
-        <button className="primary" onClick={runNow} title="从头执行整个流程">▶ 运行</button>
+        <button className="small" onClick={() => setLogOpen(true)} title="日志记录配置：档位 / 记录内容 / 响应截断 / 关键字规则（随模板复制）">日志配置</button>
+        <button className="small" onClick={saveAsTemplate} title="把当前流程保存为模板，之后可基于它批量创建任务">存为模板</button>
+        <ThemeToggle />
+        <button className="small primary" onClick={runNow} title="从头执行整个流程">▶ 运行</button>
       </div>
 
       <div className="editor" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
@@ -510,13 +516,13 @@ function FlowEditorInner({ flowId, onBack }) {
             fitView
             proOptions={{ hideAttribution: true }}
           >
-            <Background color="#1a2130" gap={22} />
+            <Background color={themeMode === 'dark' ? '#1a2130' : '#c8d2e2'} gap={22} />
             <Controls />
             <MiniMap
               pannable
               nodeColor={(n) => COLOR[n.data.type] || '#666'}
-              maskColor="rgba(11,14,20,.7)"
-              style={{ background: '#12161f' }}
+              maskColor={themeMode === 'dark' ? 'rgba(11,14,20,.7)' : 'rgba(238,241,246,.72)'}
+              style={{ background: themeMode === 'dark' ? '#12161f' : '#ffffff' }}
             />
           </ReactFlow>
 

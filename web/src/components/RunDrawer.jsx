@@ -39,8 +39,8 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepP
   return (
     <div className="run-drawer">
       <div className="drawer-head">
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 600 }}>{statusLabel} <span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: 12 }}>{shown.durationMs ? `${(shown.durationMs / 1000).toFixed(1)}s` : ''}</span></div>
+        <div className="drawer-title">
+          <div style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{statusLabel} <span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: 12 }}>{shown.durationMs ? `${(shown.durationMs / 1000).toFixed(1)}s` : ''}</span></div>
           <div style={{ fontSize: 12, color: failLog ? 'var(--fail)' : 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {shown.finalMessage || fmtTime(shown.startedAt)}
           </div>

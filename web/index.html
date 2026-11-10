@@ -4,6 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CheckQ — 可视化自动化流程</title>
+  <script>
+    // 防 FOUC：JS 加载前先按持久化主题（默认自动=跟随系统）定 data-mode
+    try {
+      var t = localStorage.getItem('checkq-theme') || 'auto';
+      var dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.dataset.theme = t;
+      document.documentElement.dataset.mode = dark ? 'dark' : 'light';
+    } catch (e) {}
+  </script>
 </head>
 <body>
   <div id="root"></div>

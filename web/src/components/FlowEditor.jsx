@@ -708,7 +708,7 @@ function CookieHelpModal({ flow, onClose, onSaved }) {
 /** 日志配置抽屉（PRD §4.7.4）：level 三档 + include 四开关 + resBodyLimit + keywords 规则表 */
 function LogConfigModal({ flow, onClose, onSaved }) {
   const cur = flow.log && typeof flow.log === 'object' ? flow.log : {};
-  const [level, setLevel] = useState(cur.level || 'all');
+  const [record, setRecord] = useState(cur.record || 'all');
   const [include, setInclude] = useState({
     reqHeaders: cur.include?.reqHeaders !== false,
     reqBody: cur.include?.reqBody !== false,
@@ -721,7 +721,7 @@ function LogConfigModal({ flow, onClose, onSaved }) {
 
   const save = async () => {
     try {
-      const nf = await api.updateFlow(flow.id, { log: { level, include, resBodyLimit: Number(resBodyLimit) || 0, keywords } });
+      const nf = await api.updateFlow(flow.id, { log: { level, record, include, resBodyLimit: Number(resBodyLimit) || 0, keywords } });
       onSaved(nf);
       onClose();
     } catch (e) { setErr(e.message); }
@@ -744,6 +744,14 @@ function LogConfigModal({ flow, onClose, onSaved }) {
             <option value="all">all —— 全部步骤完整记录（调试期）</option>
             <option value="failure">failure —— 仅失败步骤完整记录（稳定运行期）</option>
             <option value="summary">summary —— 只记标题/关键字/耗时（长期免维护）</option>
+          </select>
+        </div>
+        <div className="field">
+          <label>记录范围（决定运行日志里出现哪些步骤）</label>
+          <select value={record} onChange={(e) => setRecord(e.target.value)}>
+            <option value="all">全部步骤（调试：每个节点一行）</option>
+            <option value="log">仅 log 节点（qinglong/qiandao 风格：只看调教好的干净日志）</option>
+            <option value="log-final">合并为一条（所有 log 合并成最终一条日志）</option>
           </select>
         </div>
         <div className="field">

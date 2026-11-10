@@ -59,6 +59,12 @@ export class Engine {
     // 低档位（failure/summary）强制忽略 include（见 run 末尾裁剪），include 只在 level=all 生效
     const logCfg = (flow.log && typeof flow.log === 'object') ? flow.log : null;
     const logLevel = logCfg?.level || 'all';
+    const logRecord = logCfg?.record || 'all';
+    const shouldDisplay = (sl) => {
+      if (logRecord === 'all') return true;
+      if (!sl.ok) return true; // 失败步骤永远保留
+      return sl.type === 'log';
+    };
     const logInclude = (logCfg?.include && typeof logCfg.include === 'object') ? logCfg.include : {};
     this.logInclude = {
       reqHeaders: logInclude.reqHeaders !== false,
@@ -103,7 +109,7 @@ export class Engine {
         const outcome = await this.execNode(node, state, stepLog, missing, logs, logSink);
         stepLog.ms = Date.now() - started;
         logs.push(stepLog);
-        if (logSink) logSink(stepLog);
+        if (logSink && shouldDisplay(stepLog)) logSink(stepLog);
         if (missing.size) {
           stepLog.missing = [...missing];
           missing.clear();
@@ -167,7 +173,7 @@ export class Engine {
         stepLog.message = `步骤异常: ${err.message}`;
         stepLog.ms = Date.now() - started;
         logs.push(stepLog);
-        if (logSink) logSink(stepLog);
+        if (logSink && shouldDisplay(stepLog)) logSink(stepLog);
         failed = true;
         finalMessage = stepLog.message;
         break;
@@ -179,9 +185,23 @@ export class Engine {
       finalMessage = `流程超过 ${MAX_STEPS} 步，疑似成环`;
     }
 
-    // level 三档日志裁剪（PRD §4.7.4）：all=完整 / failure=仅失败完整 / summary=仅标题行
+    // 日志记录范围（PRD §4.7.4 扩展）：
+    //   all       = 所有步骤（默认，调试）
+    //   log       = 仅 log 节点 + 失败步骤（qinglong/qiandao 风格，用户只看调教好的干净日志）
+    //   log-final = 合并所有 log 节点为一条汇总日志 + 失败步骤
     let trimmedLogs = logs;
-    if (logLevel !== 'all') {
+    if (logRecord === 'log' || logRecord === 'log-final') {
+      const displayed = logs.filter((l) => shouldDisplay(l));
+      if (logRecord === 'log-final') {
+        const logLines = logs.filter((l) => l.type === 'log' && l.ok).map((l) => (l.message || '').trim()).filter(Boolean);
+        const merged = logLines.join('； ');
+        const finalEntry = { stepId: null, index: 1, name: '汇总', type: 'log', ok: !failed, message: merged || (finalMessage || '流程执行完成'), detail: null, ms: 0 };
+        const failedOnes = logs.filter((l) => !l.ok);
+        trimmedLogs = failedOnes.length ? [...failedOnes, finalEntry] : [finalEntry];
+      } else {
+        trimmedLogs = displayed;
+      }
+    } else if (logLevel !== 'all') {
       trimmedLogs = logs.map((l) => {
         const keepFull = logLevel === 'failure' ? !l.ok : false;
         if (keepFull) return l;

@@ -1,6 +1,6 @@
 # CheckQ PRD — 可视化 HTTP 自动化流程引擎
 
-版本: 0.3 (PRD) | 基线代码: v0.3.4 | 状态: v0.2 P0 已全部实现；QD 兼容层 GAP-C1~C4 已落地（2026-11-08）；v0.3.4 新增日志配置生效（include/resBodyLimit）、QD retry 映射、登录防爆破、cron 抖动、模板默认变量编辑、模板 log 携带修复（2026-11-09）
+版本: 0.4 (PRD) | 基线代码: v0.3.17 | 状态: v0.2/v0.3 P0 全量实现；**v0.4 产品完整度升级**（2026-11-10）——通知 7 渠道原生集成、日志 record 三档（qinglong/qiandao 风格干净日志）、使用引导系统、首次启动 bootstrap、存储立即 flush + 备份评估、WorkBuddy 全量任务自动完成（18/18，事件链）、竞品分析与迭代管理（见 docs/ROADMAP.md / docs/COMPETITIVE-ANALYSIS.md）
 定位一句话: **像搭积木一样搭建"自动签到/打卡/监控"类 HTTP 流程，一个模板派生多份任务，全程可视化、可调试、可告警。**
 
 > **续建判断依据（2026-11-08 评审）**：本仓库并非空仓——已有 v0.2 可运行基线（DAG 引擎、8 类节点、Pick Panel、模板系统、SSE 日志、cURL/HAR/QD 导入、103 项单测、路由器实测实例）。产品目标（拖拽流程化、条件分支、自定义请求、日志推送、Docker 部署）与现状同向，重建只会丢弃已验证资产。决策：**续建**。缺口用实测数据驱动收敛——现网 QD 采样（39 任务/13 模板，见 docs/QIANDAO-COMPAT.md）定位出 4 个真实阻塞点（cookie 罐/util 转换/表达式层/变量 URL），本轮已全部闭环，QD 任务运行级兼容 ≥ 12/13。
@@ -47,9 +47,16 @@ Run（运行记录）  一次执行的完整日志（每步请求/响应/断言/
 Flow = {
   id, name, note, cron: '30 8 * * *', timezone, enabled,
   vars: { cookie: '...', ua: '...' },
-  notify: { channels: [{type: webhook|telegram|bark, ...}], onSuccess, onFailure },
+  notify: {
+    channels: [
+      { type: 'webhook|bark|telegram|serverchan|dingtalk|wecom|feishu', ... }
+    ],
+    onSuccess: true, onFailure: true,
+    template: '[CheckQ] {{flow.name}} {{status}}\n{{message}}',
+  },
   log: {                                  // 日志内容配置（§4.7.4）
     level: 'all' | 'failure' | 'summary', // 记录条件：全部 / 仅失败 / 仅摘要
+    record: 'all' | 'log' | 'log-final',  // 记录范围：全部步骤 / 仅 log 节点 / 合并为一条（v0.4）
     include: {                            // 记录内容开关
       reqHeaders: true, reqBody: true, resBody: true,
       varsSnapshot: true,                 // 每步执行后的变量快照（脱敏）
@@ -450,6 +457,16 @@ ConfigPanel 改进:
 | `failure` | 成功步骤只记标题行+耗时；失败步骤完整记录（req/res/断言/vars 快照） | 稳定运行期，省空间 |
 | `summary` | 不记 req/res，仅记录：最终状态、关键字提取结果、耗时、错误信息 | 长期免维护运行 |
 
+**记录范围（`log.record`，v0.4 新增）— 决定日志里出现哪些步骤**
+
+| 档位 | 记录范围 | 适用场景 |
+|---|---|---|
+| `all`（默认） | 所有步骤（每个节点一行，含 http/script/条件） | 调试期 |
+| `log` | **仅 log 节点**（+ 失败步骤，失败必须可见） | qinglong/qiandao 风格：只看调教好的干净日志 |
+| `log-final` | 所有 log 节点合并为**一条**汇总日志（+ 失败步骤） | 日报式一条结果 |
+
+> 说明：`record` 与 `level` 正交——`record` 决定"哪些步骤出现"，`level` 决定"出现多少细节"。SSE 实时日志与最终保存日志使用同一过滤规则，流式输出即最终结果。
+
 **记录内容开关（`log.include`）**
 
 reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 控制响应体截断长度（默认 2000，0-100000）。低档位（failure/summary）强制忽略更细的 include 开关。
@@ -488,16 +505,19 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 - Pick"记录到日志" → 生成 **keywords 规则** → 只影响日志展示/摘要/通知内容
 - 两者可一键互转（extract 节点↔keywords 规则，语义对齐时）
 
-### 4.8 通知
+### 4.8 通知（v0.4：qinglong 标准原生集成）
 
 | 功能 | 设计 | 状态 |
 |---|---|---|
-| 渠道 | webhook / telegram / bark（现有）| ✅ |
-| 流级开关 | onSuccess / onFailure（现有）| ✅ |
-| 消息模板 | 流级 `notify.template`：默认 `[CheckQ] {{flow.name}} {{status}}\n{{message}}`，可用变量: flow.name/status/message/duration/时间；TG 支持 Markdown | ⬜ P1 |
-| 每日汇总 | 全局设置：每天固定时间推送"今日 N 任务：M 成功 / K 失败"摘要（仅启用调度任务）| ⬜ P2 |
-| 静默时段 | 失败通知勿扰 23:00-7:00（汇总里合并）| ⬜ P2 |
-| 发送测试 | 通知渠道配置处"发送测试"按钮 | ⬜ P1 |
+| 渠道 | **webhook / bark / telegram / serverchan / dingtalk / wecom / feishu**（7 种原生集成，无外部脚本） | ✅ v0.4 |
+| 加签 | 钉钉/飞书机器人 `secret` → HMAC-SHA256 签名（timestamp+sign 拼 URL） | ✅ v0.4 |
+| 流级开关 | onSuccess / onFailure | ✅ |
+| 消息模板 | 流级 `notify.template`，可用变量: flow.name/status/message/duration/time | ✅ v0.4 |
+| 配置 UI | 编辑器 ··· →「通知渠道」：渠道卡片、字段按类型动态显示、保存/测试发送 | ✅ v0.4 |
+| 发送测试 | 「测试发送」立即向所有渠道发测试消息并回显成功/失败 | ✅ v0.4 |
+| 每日汇总 | 全局设置：每天固定时间推送"今日 N 任务：M 成功 / K 失败"摘要（仅启用调度任务） | ✅（配置 + 手动发送；自动调度 ⬜ P2） |
+| 静默时段 | 失败通知勿扰 23:00-7:00（汇总里合并） | ⬜ P2 |
+| 通知节点 | 流程内 notify 节点（webhook/telegram/bark），用于自定义推送内容 | ✅ |
 
 ### 4.9 导入 / 导出 / 迁移
 
@@ -514,22 +534,47 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 
 | 功能 | 设计 | 状态 |
 |---|---|---|
+| 首次启动 | `/api/system/bootstrap`：若仍是随机生成的管理员密码（`generatedPassword=true`）→ 登录页显示「创建管理员账号」（密码+确认），创建后 `needsSetup=false` | ✅ v0.4 |
 | 密码登录 | scrypt hash；**登录失败 5 次/10 分钟锁定（内存计数，429）** | ✅ v0.3.4 |
-| 会话 | cookie qsid 7 天（现有）；"退出"清空所有会话（现语义） | ✅ |
-| API Key | X-API-Key（现有，存 meta）；设置页可见/重置 | 🔶 |
+| 会话 | cookie qsid 7 天；"退出"清空所有会话 | ✅ |
+| API Key | X-API-Key（存 meta）；设置页可见/重置；MCP/Agent 推荐用 Key | ✅ v0.4 |
+| Passkey/WebAuthn | 无状态 passkey 登录 | ⬜ P2 |
 | HTTPS | 文档建议反代加 TLS；服务本身不内置 | 文档 |
 | 审计 | 关键操作（登录失败/改密码/删任务）console 日志即可，不做持久审计 | 决策 |
-| 敏感输入 | 变量编辑框 type=password 风格打码 + 显隐切换；浏览器密码管理器不缓存（autocomplete=off） | ⬜ P0 |
+| 敏感输入 | 变量编辑框打码 + 显隐切换；autocomplete=off | ✅（变量面板已打码；显隐 ⬜） |
 
 ### 4.11 运维与部署
 
 | 项 | 设计 | 状态 |
 |---|---|---|
-| 部署 | docker compose up -d（现有）；镜像发布 ghcr | 🔶 |
-| 数据卷 | data 目录挂载（现有）；升级只换镜像不动数据 | ✅ |
-| 健康检查 | /api/health（现有）+ compose healthcheck | 🔶 |
-| 统计面板 | 首页顶部小卡：今日运行/成功率/失败任务列表（可点击直达） | ⬜ P2 |
-| 日志 | 服务自身 stdout 精简日志（启动/调度错误/通知失败），业务日志全在 runs | ✅ |
+| 部署 | docker compose up -d；镜像发布 ghcr | 🔶 |
+| 数据卷 | data 目录挂载；升级只换镜像不动数据 | ✅ |
+| 健康检查 | /api/health + compose healthcheck | 🔶 |
+| 统计面板 | 首页顶部小卡：任务/调度/今日成功率/**下次调度**（label 明确为"所有已启用任务中最近的一次"） | ✅ v0.4 |
+| 存储可靠性 | 每次变更**立即 flush**（原子写 tmp+rename）+ SIGTERM/SIGINT flush；评估见 docs/STORAGE-BACKUP.md | ✅ v0.4 |
+| 备份/恢复 | `GET/POST /api/system/backup|restore`（恢复新 ID 停用） | ✅（自动定时备份 ⬜ P1） |
+| 日志 | 服务自身 stdout 精简日志；业务日志全在 runs | ✅ |
+
+### 4.12 使用引导（v0.4）
+
+| 功能 | 设计 | 状态 |
+|---|---|---|
+| 入口 | 顶栏 `?` 按钮（首页 + 编辑器）；首次访问自动打开一次（localStorage `checkq-guide-seen`） | ✅ v0.4 |
+| 内容 | 6 节：3 步上手 / 任务列表 / 编辑器 / 日志配置（重要）/ 通知渠道 / 常见问题 | ✅ v0.4 |
+| 形态 | 左导航 + 右内容，一屏无滚动；文案全部中文、去技术黑话 | ✅ v0.4 |
+| 上下文引导 | 编辑器空画布引导、变量面板「运行日志里出现过未定义的变量」提示 | ✅ |
+
+### 4.13 自动化任务完成（事件链，v0.4）
+
+> 以 WorkBuddy 为最佳案例：不仅自动签到，还能自动完成「任务中心」全部活动。
+
+| 功能 | 设计 | 状态 |
+|---|---|---|
+| 事件上报 | `POST /v2/report`（桌面/web/小程序三种客户端指纹），支持批量事件数组 | ✅ v0.4 |
+| 任务事件链 | 桌面对话链（agent_task_created→chat_response）、buddyapp 五连、template_used、playbook、automation、expert_summon/use、skill_info | ✅ v0.4（WorkBuddy 18/18） |
+| 专家真实对话 | `POST /v2/chat/completions`（SSE 抓服务端 requestId）→ 使用事件必须带真实 id | ✅ v0.4 |
+| 幂等与回读 | 上报后轮询任务进度，达标才 claim；重复运行不重复领奖 | ✅ v0.4 |
+| 通用化 | 其他站点若有类似埋点/进度接口，可用 script 生成事件体 + http 上报（框架能力，非内置模板） | ✅ 能力具备 |
 
 ---
 
@@ -607,6 +652,8 @@ GET  /api/runs/:id/stream (SSE)                     ⬜ P1 实时日志
 
 ## 8. 版本路线图
 
+> 迭代状态、优先级与待办见 `docs/ROADMAP.md`；竞品对比见 `docs/COMPETITIVE-ANALYSIS.md`。
+
 **v0.2 — 引擎补课 + 点选即逻辑 MVP（P0 全量）**
 - 交互核心：Pick Panel（JSON 树/文本划选/HTML 点击）+ 用途选择器（变量/断言/通知/日志记录）+ 正则自动泛化 + 画布流式生长；日志失败步骤「重新点选」原位修复；试运行单节点（Pick 的数据来源）
 - **HAR 进组装**：请求选择器 → 自动生成节点链 + 变量占位 → 自动进入点选模式；HAR 响应快照离线点选（不落地）；URL 泛化提示；模板导出强制清样本
@@ -628,8 +675,17 @@ GET  /api/runs/:id/stream (SSE)                     ⬜ P1 实时日志
 - 通知：消息模板；发送测试
 - 任务：批量操作；克隆任务；空状态引导；统计卡(轻量)
 
-**v0.4 — 生态（P2）**
-模板市场索引规范 + 从 URL 导入；模板更新 diff/应用；运行导出 HAR；每日汇总/静默时段；minimap/自动布局/移动端适配；错峰预设；补跑提示。
+**v0.4 — 产品完整度（P0，2026-11-10）**
+- 通知：7 渠道原生集成（Webhook/Bark/Telegram/Server酱/钉钉/企业微信/飞书，含加签）+ 配置 UI + 测试发送；
+- 日志：`log.record` 三档（all / log / log-final）——qinglong/qiandao 风格「只显示调教好的干净日志」；
+- 引导：顶栏 `?` + 6 节使用引导，首次自动打开；
+- 账号：首次启动 bootstrap 创建管理员密码；API Key 管理完善；
+- 存储：每次变更立即 flush + SIGTERM/SIGINT flush；备份/恢复 API；STORAGE-BACKUP.md；
+- 任务：WorkBuddy 全量 18 项任务自动完成（事件链 + 专家真实对话 + 回读领奖），生产 cron `25 6 * * *`；
+- UI：「下次触发」→「下次调度」；设置逐项走查（设置/日志/通知/引导一屏无滚动）。
+
+**v0.5 — 生态（P2）**
+模板市场索引规范 + 从 URL 导入；模板更新 diff/应用；运行导出 HAR；每日汇总/静默时段；minimap/自动布局/移动端适配；错峰预设；补跑提示；MCP 扩展工具（flow_create/update/delete/import_curl）。
 
 **v1.0 — 收敛**
 文档完备（节点手册/表达式手册）；镜像发布；性能与压力验证；安全复查。
@@ -646,6 +702,11 @@ GET  /api/runs/:id/stream (SSE)                     ⬜ P1 实时日志
 6. **交互验收**: 新用户 10 分钟内完成"导入模板→建 2 个账号任务→启用调度→收到通知"全流程，无需看文档。
 7. **安全验收**: 日志/导出中搜不到任何完整 cookie/token；登录爆破被锁定；HAR 样本不入库不入模板。
 8. **红线**: 公开仓库 `git grep` 无任何真实站点业务信息。
+9. **通知验收（v0.4）**: 7 渠道各发出一条真实测试消息（或本地 echo 等效验证），模板变量正确渲染；钉钉/飞书加签可通过服务端校验；失败渠道在 UI 明确报错。
+10. **日志验收（v0.4）**: `record=log` 运行日志只包含 log 节点（+失败步骤），http/script 等技术步骤不可见；`record=log-final` 输出一条合并日志。
+11. **引导验收（v0.4）**: 首次访问自动打开引导；`?` 在首页与编辑器均可打开；6 节内容一屏可读。
+12. **账号与存储验收（v0.4）**: 全新数据目录启动 → 登录页出现「创建管理员账号」→ 创建后可登录；`kill -TERM` 后配置不丢；备份 JSON 可恢复。
+13. **任务完成验收（v0.4）**: WorkBuddy 案例 18/18 任务完成并领奖（+1100 积分），重复运行零重复领奖；生产 cron 自动执行有日志证据。
 
 ---
 
@@ -658,3 +719,6 @@ GET  /api/runs/:id/stream (SSE)                     ⬜ P1 实时日志
 5. 模板市场是否做自建站点，还是仅约定索引 JSON 让社区自发（建议后者，成本最低）。
 6. 列表页"标签/分组"与"按模板筛选"是否二选一先行（建议先做模板筛选，标签延后）。
 7. 生成节点的变量命名策略：自动起名（如点选"积分"→ `points`，中文自动转拼音/语义映射表）vs 统一 `var1/var2`——建议中英文小词表映射 + 冲突自动加后缀，用户随时可改。
+8. 通知渠道范围：v0.4 已覆盖 7 种主流渠道；是否继续扩展 PushPlus / 邮箱 / 自定义卡片？（建议按需再加，保持内核轻量）
+9. 多用户/多账号：当前单管理员 + API Key；是否做多用户隔离（建议 v1.0 后再评估，当前自部署个人场景足够）。
+10. WorkBuddy 案例定位：作为「事件链自动完成任务」的验收样板（已 18/18），是否将事件链能力抽象为通用节点（report 节点）？（建议先保持 script+http 组合，观察第二案例再抽象）。

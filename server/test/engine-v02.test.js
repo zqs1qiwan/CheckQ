@@ -194,6 +194,37 @@ await ok('回归: 无 mode 时正则提取照常', async () => {
   assert.strictEqual(res.vars.points, '42');
 });
 
+// ========== 9. 回归: http 节点 timeout 单位是秒（fetch 后端 30s→30ms 曾被误 abort） ==========
+await ok('回归: timeout=1（秒）允许 300ms 慢响应', async () => {
+  globalThis.fetch = async (url, opts = {}) => {
+    await new Promise((r) => setTimeout(r, 300));
+    return new Response('{"ok":1}', { headers: { 'content-type': 'application/json' } });
+  };
+  const f = flow([
+    httpNode('a', { method: 'GET', url: 'https://example.com/slow', headers: [], body: '', asserts: [], timeout: 1 }),
+  ], []);
+  const res = await new Engine(f).run({});
+  assert.strictEqual(res.ok, true, res.logs.map((l) => l.message).join('; '));
+});
+
+// ========== 10. 回归: foreach 支持 JSON 字符串数组源 ==========
+await ok('foreach 源为 JSON 字符串数组 → 正常遍历', async () => {
+  mockFetch([{ body: '{"ok":1}' }, { body: '{"ok":1}' }]);
+  const f = flow([
+    { id: 'f', type: 'foreach', name: 'loop', x: 0, y: 0, config: { source: 'vars.codes', itemVar: 'code', indexVar: 'i' } },
+    httpNode('a', { method: 'GET', url: 'https://example.com/t/{{code}}', headers: [], body: '', asserts: [] }),
+    { id: 'l', type: 'log', name: 'done', x: 100, y: 0, config: { text: 'loop done' } },
+  ], [
+    { id: 'e1', source: 'f', sourceHandle: 'each', target: 'a' },
+    { id: 'e2', source: 'f', sourceHandle: 'next', target: 'l' },
+    { id: 'e3', source: 'a', target: 'l' },
+  ], { codes: '["x","y"]' });
+  const res = await new Engine(f).run({});
+  assert.strictEqual(res.ok, true, res.logs.map((l) => l.message).join('; '));
+  assert.ok(res.logs.some((l) => l.type === 'http' && l.detail?.url === 'https://example.com/t/x'), '第一轮应请求 code=x');
+  assert.ok(res.logs.some((l) => l.type === 'http' && l.detail?.url === 'https://example.com/t/y'), '第二轮应请求 code=y');
+});
+
 globalThis.fetch = realFetch;
 
 console.log(`\n${passing.length}/${passing.length} passed`);

@@ -258,11 +258,13 @@ export class Engine {
     try {
       if ((c.backend || 'fetch') === 'curl') {
         ({ status, statusText, headers: respHeaders, text, setCookies } = await httpViaCurl(
-          url, method, headers, body, c.timeout || HTTP_TIMEOUT, (c.redirect || 'follow') !== 'manual', proxyUrl));
+          url, method, headers, body, c.timeout || HTTP_TIMEOUT / 1000, (c.redirect || 'follow') !== 'manual', proxyUrl));
       } else {
         const dispatcher = proxyUrl ? getProxyAgent(proxyUrl) : undefined;
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), c.timeout || HTTP_TIMEOUT);
+        // config.timeout 单位是秒（ConfigPanel「超时 (秒)」/ curl --max-time），fetch 需换算成毫秒
+        const timeoutMs = c.timeout ? Math.max(1000, Number(c.timeout) * 1000) : HTTP_TIMEOUT;
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
         const resp = await fetch(url, {
           method,
           headers,
@@ -579,6 +581,10 @@ export class Engine {
           stepLog.ok = false;
           stepLog.message = `遍历源表达式异常: ${err.message}`;
           return null;
+        }
+        if (typeof arr === 'string' && arr.trim().startsWith('[')) {
+          // extract/script 把数组存成 JSON 字符串，这里兼容解析
+          try { arr = JSON.parse(arr); } catch { /* 保持原字符串，走下面的类型错误提示 */ }
         }
         if (!Array.isArray(arr)) {
           stepLog.ok = false;

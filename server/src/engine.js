@@ -525,7 +525,9 @@ export class Engine {
 
       case 'log': {
         const c = node.config || {};
-        stepLog.message = renderTemplate(String(c.text ?? ''), vars, missing) || '(空日志)';
+        // 日志模板支持 {{last.status}} / {{steps.n1.json...}}（与 http/set 节点同语义）
+        const scope = { ...vars, last: state.last || {}, steps: state.steps || {} };
+        stepLog.message = renderTemplate(String(c.text ?? ''), scope, missing) || '(空日志)';
         return { handle: 'next' };
       }
 

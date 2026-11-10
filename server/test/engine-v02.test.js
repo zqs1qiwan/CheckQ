@@ -225,6 +225,19 @@ await ok('foreach 源为 JSON 字符串数组 → 正常遍历', async () => {
   assert.ok(res.logs.some((l) => l.type === 'http' && l.detail?.url === 'https://example.com/t/y'), '第二轮应请求 code=y');
 });
 
+// ========== 11. 回归: log 节点支持 {{last.status}}（快速组装内置模板依赖） ==========
+await ok('log 节点渲染 {{last.status}}', async () => {
+  mockFetch([{ body: '{"ok":1}' }]);
+  const f = flow([
+    httpNode('a', { method: 'GET', url: 'https://example.com/x', headers: [], body: '', asserts: [] }),
+    { id: 'b', type: 'log', name: 'show', x: 100, y: 0, config: { text: '完成：{{last.status}}' } },
+  ], [{ id: 'e1', source: 'a', target: 'b' }]);
+  const res = await new Engine(f).run({});
+  assert.strictEqual(res.ok, true);
+  const log = res.logs.find((l) => l.type === 'log');
+  assert.strictEqual(log.message, '完成：200');
+});
+
 globalThis.fetch = realFetch;
 
 console.log(`\n${passing.length}/${passing.length} passed`);

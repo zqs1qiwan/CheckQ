@@ -12,6 +12,7 @@ import RunDrawer from './RunDrawer.jsx';
 import GuideModal from './GuideModal.jsx';
 import Modal from './Modal.jsx';
 import Dropdown from './Dropdown.jsx';
+import FlowInfoModal from './FlowInfoModal.jsx';
 import { IconHelp, IconBug, IconPlay } from './Icons.jsx';
 import { toast as globalToast } from '../toast.js';
 
@@ -74,6 +75,7 @@ function FlowEditorInner({ flowId, onBack }) {
   const [debugView, setDebugView] = useState(false); // 当前运行结果是否展开每步细节
   const [cookieOpen, setCookieOpen] = useState(false);
   const [tplOpen, setTplOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false); // 任务信息（名称 / 备注 / 模板归属）
   const [tplName, setTplName] = useState('');
   const [tplErr, setTplErr] = useState('');
   const saveTimer = useRef(null);
@@ -490,12 +492,13 @@ function FlowEditorInner({ flowId, onBack }) {
         <button className="small" disabled={!runResult} onClick={() => setDrawerOpen(true)} title={runResult ? '展开运行日志' : '先运行一次'}>日志</button>
         <button className="small primary" onClick={runNow} title="从头执行整个流程">运行</button>
         <button className="iconbtn" onClick={() => setGuideOpen(true)} title="使用引导" aria-label="使用引导"><IconHelp size={16} /></button>
-        <Dropdown trigger="···" triggerClass="dd-menu" align="right" width={170} ariaLabel="编辑器更多操作">
+        <Dropdown trigger="更多" caret triggerClass="dd-menu" align="right" width={170} ariaLabel="编辑器更多操作">
           <button disabled={!canUndo} onClick={undo}>撤销</button>
           <button disabled={!canRedo} onClick={redo}>重做</button>
           <div className="menu-sep" />
           <button onClick={runDebug} title="记录每一步的请求/响应并展开运行过程窗口"><IconBug size={14} /> 调试运行</button>
           <div className="menu-sep" />
+          <button onClick={() => setInfoOpen(true)}>任务信息…</button>
           <button onClick={() => setNotifyOpen(true)}>通知渠道</button>
           <button onClick={testNotify}>测试通知</button>
           <button onClick={() => setCookieOpen(true)}>填入 Cookie</button>
@@ -603,6 +606,16 @@ function FlowEditorInner({ flowId, onBack }) {
             showToast('cookie 已保存到变量', 'ok');
             return nf;
           }}
+        />
+      )}
+
+      {infoOpen && (
+        <FlowInfoModal
+          flow={flow}
+          template={flow.template}
+          onClose={() => setInfoOpen(false)}
+          onSaved={(nf) => { setFlow(nf); }}
+          onToast={(text, kind) => showToast(text, kind)}
         />
       )}
 

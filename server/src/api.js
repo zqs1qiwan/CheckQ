@@ -729,9 +729,9 @@ export function buildServer({ dataDir, port }) {
     docs: 'docs/AGENT-ACCESS.md · docs/API.md',
     agentGuide: '/api/openapi.json',
     endpoints: {
-      flows: ['GET /api/flows', 'GET /api/flows/:id', 'PUT /api/flows/:id', 'POST /api/flows/:id/run', 'GET /api/flows/:id/logs'],
+      flows: ['GET /api/flows', 'GET /api/flows/:id', 'PUT /api/flows/:id', 'POST /api/flows/:id/run', 'GET /api/flows/:id/logs', 'POST /api/flows/:id/sync-template', 'POST /api/flows/batch'],
       runs: ['GET /api/runs?flowId=', 'GET /api/runs/:id'],
-      templates: ['GET /api/templates', 'GET /api/templates/:id', 'POST /api/templates/:id/instantiate'],
+      templates: ['GET /api/templates', 'GET /api/templates/:id', 'POST /api/templates/:id/instantiate', 'POST /api/templates/:id/sync'],
       meta: ['GET /api/health', 'GET /api/me', 'GET /api/system/stats', 'GET /api/system/push-targets', 'GET /api/notifications'],
       keys: ['GET /api/system/apikeys', 'POST /api/system/apikeys', 'DELETE /api/system/apikeys/:id'],
     },
@@ -1211,6 +1211,19 @@ export function buildServer({ dataDir, port }) {
     return flow;
   });
 
+  // 模板联动：一次性把该模板下的所有派生任务同步到当前版本
+  app.post('/api/templates/:id/sync', async (req, reply) => {
+    const tpl = store.getTemplate(req.params.id);
+    if (!tpl) return reply.code(404).send({ error: '模板不存在' });
+    const ids = store.flows.filter((f) => f.tplId === tpl.id).map((f) => f.id);
+    const results = [];
+    for (const id of ids) {
+      const r = store.syncFlowWithTemplate(id, { keepNotify: true });
+      results.push({ id, ok: !!(r && !r.error), error: r && r.error });
+    }
+    return { ok: true, total: results.length, okCount: results.filter((r) => r.ok).length, results };
+  });
+
   // 模板详情（编辑用）
   app.get('/api/templates/:id', async (req, reply) => {
     const t = store.getTemplate(req.params.id);
@@ -1320,7 +1333,7 @@ export function buildServer({ dataDir, port }) {
   app.get('/api/flows/:id', async (req, reply) => {
     const f = store.getFlow(req.params.id);
     if (!f) return reply.code(404).send({ error: 'not found' });
-    return f;
+    return { ...f, template: store.templateInfo(f) };
   });
 
   app.put('/api/flows/:id', async (req, reply) => {
@@ -1331,7 +1344,7 @@ export function buildServer({ dataDir, port }) {
     if (errors.length) return reply.code(400).send({ error: errors.join('; ') });
     const f = store.updateFlow(req.params.id, patch);
     scheduler.rebuild();
-    return f;
+    return { ...f, template: store.templateInfo(f) };
   });
 
   app.delete('/api/flows/:id', async (req, reply) => {
@@ -1392,6 +1405,14 @@ export function buildServer({ dataDir, port }) {
       tplId: f.tplId || null,
     });
     return clone;
+  });
+
+  // 模板联动：把派生任务同步到模板当前版本（流程图/日志/通知覆盖，变量保留本任务的值）
+  app.post('/api/flows/:id/sync-template', async (req, reply) => {
+    const r = store.syncFlowWithTemplate(req.params.id, { keepNotify: req.body?.keepNotify !== false });
+    if (!r) return reply.code(404).send({ error: '任务不存在' });
+    if (r.error) return reply.code(400).send({ error: r.error });
+    return { ok: true, id: r.id, template: store.templateInfo(r) };
   });
 
   // 复制为 curl（PRD §4.7.2）：从节点配置生成等价 curl 命令
@@ -1484,7 +1505,7 @@ export function buildServer({ dataDir, port }) {
   app.post('/api/flows/batch', async (req, reply) => {
     const { ids, action } = req.body || {};
     if (!Array.isArray(ids) || !ids.length) return reply.code(400).send({ error: '缺少 ids' });
-    if (!['run', 'enable', 'disable', 'delete'].includes(action)) return reply.code(400).send({ error: '不支持的 action' });
+    if (!['run', 'enable', 'disable', 'delete', 'sync-template'].includes(action)) return reply.code(400).send({ error: '不支持的 action' });
     if (ids.length > 200) return reply.code(400).send({ error: '单次最多 200 个' });
     const results = [];
     let changed = false;
@@ -1495,6 +1516,13 @@ export function buildServer({ dataDir, port }) {
         if (action === 'enable') { store.updateFlow(id, { enabled: true }); changed = true; results.push({ id, ok: true }); }
         else if (action === 'disable') { store.updateFlow(id, { enabled: false }); changed = true; results.push({ id, ok: true }); }
         else if (action === 'delete') { store.deleteFlow(id); changed = true; results.push({ id, ok: true }); }
+        else if (action === 'sync-template') {
+          // 同步到模板当前版本：覆盖流程图/日志，保留本任务的变量值与通知渠道
+          const r = store.syncFlowWithTemplate(id, { keepNotify: true });
+          if (!r) results.push({ id, ok: false, error: '任务不存在' });
+          else if (r.error) results.push({ id, ok: false, error: r.error });
+          else { changed = true; results.push({ id, ok: true }); }
+        }
         else if (action === 'run') {
           const run = await runner.runFlow(f, 'manual');
           results.push({ id, ok: run.status === 'success', runId: run.id, status: run.status });

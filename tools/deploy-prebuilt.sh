@@ -24,6 +24,16 @@ fi
 echo "==> 解包 $TARBALL"
 tar -xzf "$TARBALL" -C "$WORK"
 
+# 设备刚重启时容器可能还没起来（docker 会按 restart 策略拉起，但有延迟）
+if ! docker ps --filter "name=^${CONTAINER}$" --filter status=running -q | grep -q .; then
+  echo "==> 容器未运行，先启动"
+  docker start "$CONTAINER" >/dev/null 2>&1 || true
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    docker ps --filter "name=^${CONTAINER}$" --filter status=running -q | grep -q . && break
+    sleep 2
+  done
+fi
+
 echo "==> 替换前端产物（/app/public）"
 docker exec "$CONTAINER" sh -c 'rm -rf /app/public.new && mkdir -p /app/public.new'
 docker cp "$WORK/web/." "$CONTAINER:/app/public.new/"

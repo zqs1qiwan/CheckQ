@@ -654,6 +654,44 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 - 编辑器与首页在 1440×900 下一屏放下（`body.scrollHeight == innerHeight`），无横向溢出；
 - 移动端（<640px）：顶栏不换行挤压、表格横向滚动、弹窗宽度自适应、日志坞改为纵向文档流。
 
+#### 4.14.6 调试运行 vs 正常运行（v0.4.2）
+
+| 入口 | 行为 | 日志 |
+|---|---|---|
+| 顶栏「运行」 | 正常执行 | **只输出配置好的日志**（默认 `record=log`：log 节点输出 + 失败步骤）；多余细节不落库 |
+| 任务 ··· →「调试运行」 | 正常执行，但强制记录每步请求/响应 | 自动展开**运行过程窗口**，逐步显示（含请求头/体、响应体），可展开每步细节 |
+| 节点「调试到此为止」 | 执行到指定节点即停 | 同调试运行（强制记录细节） |
+| 顶栏「日志」/ 状态徽章 | 不执行 | 打开**连续日志流**（历史多次运行），多余日志在这里查 |
+
+- 日志坞里的「调试」开关只是**视图开关**（看已记录的每步细节），不会改变后续运行记录什么；
+- 流程里没有 log 节点时，正常运行会自动退回「记录全部步骤」，避免日志空白。
+
+#### 4.14.7 每日总推送的「推送单位」（v0.4.2）
+
+- 推送单位 = **任务**（用该任务自己的通知渠道发）；
+- 设置 →「每日总推送」里勾选哪些任务要收汇总（可多选），没有通知渠道的任务不出现；
+- 接口：`GET /api/system/push-targets`（可推送单位列表）、`GET/PUT /api/system/daily-summary-config`（`targetFlowIds` 数组）、`POST /api/system/daily-summary`（`flowIds`）。
+
+#### 4.14.8 品牌与设计令牌（v0.4.2）
+
+全站尺寸只认一套令牌（`web/src/styles.css` 顶部 `:root`）：
+
+| 令牌 | 值 | 用途 |
+|---|---|---|
+| `--ctl-h` / `--ctl-h-sm` / `--ctl-h-lg` | 32 / 26 / 38px | 标准 / 小号 / 移动端控件高度（按钮、输入、选择、下拉 summary） |
+| `--ctl-px` / `--ctl-px-sm` | 14 / 11px | 横向内边距 |
+| `--r-sm` … `--r-xl` | 6 / 8 / 12 / 14px | 圆角梯度 |
+| `--fs-xs` … `--fs-xl` | 11 … 17px | 字号梯度 |
+| `--sp-1` … `--sp-6` | 4 … 24px | 间距梯度 |
+| `--icon-sm/md/lg` | 13 / 16 / 20px | 图标尺寸 |
+
+规范：
+- 所有按钮（主/次/小/图标/菜单项）走同一高度与圆角，**不得再写行内 padding/height**；
+- 图标统一用 `web/src/components/Icons.jsx` 的线性 SVG（`IconBell / IconHelp / IconSun / IconMoon / IconAuto / IconClose / IconBug / IconDownload / IconTrash / IconMore`），**禁止 emoji 充当图标**；
+- 危险操作统一走应用内确认弹窗（`web/src/confirm.jsx` 的 `confirmDialog`），不再用浏览器 `confirm`；
+- 日志坞高度可拖拽（把手 `drawer-grip`，记住高度），移动端默认 92vh 接近全屏。
+
+
 ## 5. 签到场景覆盖矩阵（验收核心）
 
 > 要求达到 qiandao 同级的"常见签到都能搭出来"覆盖度。

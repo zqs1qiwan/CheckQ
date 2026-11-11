@@ -484,6 +484,7 @@ span.json-toggle { cursor: default; }
 .modal .tpl-item .t { font-weight: 600; margin-bottom: 4px; }
 .modal .tpl-item .d { color: var(--muted); font-size: 12px; line-height: 1.5; }
 .modal.notify-modal { width: min(680px, 100%); max-height: 86vh; overflow-y: auto; }
+.notify-empty { border: 1px dashed var(--border); border-radius: 10px; padding: 14px; font-size: 12px; line-height: 1.7; color: var(--muted); margin-bottom: 10px; background: var(--panel2); }
 
 /* 使用引导：左导航 + 右内容 */
 .modal.guide-modal { width: min(720px, 100%); height: min(560px, 86vh); padding: 0; overflow: hidden; display: flex; }

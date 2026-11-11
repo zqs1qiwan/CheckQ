@@ -775,6 +775,12 @@ function NotifyModal({ flow, onClose, onSaved, onToast }) {
           <label>通知模板（支持 {'{{'}flow.name{'}}'} / {'{{'}status{'}}'} / {'{{'}message{'}}'} / {'{{'}duration{'}}'} / {'{{'}time{'}}'}）</label>
           <textarea rows={2} className="mono" value={template} onChange={(e) => setTemplate(e.target.value)} />
         </div>
+        {channels.length === 0 && (
+          <div className="notify-empty">
+            还没有通知渠道。点下方「+ 添加渠道」选择类型（Webhook / Bark / Telegram / Server酱 / 钉钉 / 企业微信 / 飞书），
+            填好地址后可用「测试发送」验证。
+          </div>
+        )}
         {channels.map((c, i) => (
           <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10, marginBottom: 10 }}>
             <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
@@ -813,6 +819,7 @@ function NotifyModal({ flow, onClose, onSaved, onToast }) {
 
 function LogConfigModal({ flow, onClose, onSaved }) {
   const cur = flow.log && typeof flow.log === 'object' ? flow.log : {};
+  const [level, setLevel] = useState(cur.level || 'all');
   const [record, setRecord] = useState(cur.record || 'all');
   const [include, setInclude] = useState({
     reqHeaders: cur.include?.reqHeaders !== false,

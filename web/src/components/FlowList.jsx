@@ -182,17 +182,32 @@ export default function FlowList({ onOpen, onLogout }) {
 
   // 行内「···」菜单靠近视口底部时改为向上展开，避免被裁掉
   useEffect(() => {
+    // 点击时（details 尚未展开）先按位置判断方向，避免出现一帧的错位
+    const onClick = (e) => {
+      const s = e.target instanceof Element ? e.target.closest('details.row-menu > summary') : null;
+      if (!s) return;
+      const d = s.parentElement;
+      const r = s.getBoundingClientRect();
+      const MENU_H = 170;
+      if (r.bottom + MENU_H > window.innerHeight - 8) d.classList.add('up');
+      else d.classList.remove('up');
+    };
+    // 展开后再精确校正一次（菜单高度随内容变化）
     const onToggle = (e) => {
       const d = e.target;
       if (!(d instanceof HTMLElement) || !d.matches('details.row-menu')) return;
       const pop = d.querySelector('.menu-pop');
       if (!pop) return;
-      d.classList.remove('up');
       const r = pop.getBoundingClientRect();
       if (r.bottom > window.innerHeight - 8) d.classList.add('up');
+      else if (r.top >= 0) d.classList.remove('up');
     };
+    document.addEventListener('click', onClick, true);
     document.addEventListener('toggle', onToggle, true);
-    return () => document.removeEventListener('toggle', onToggle, true);
+    return () => {
+      document.removeEventListener('click', onClick, true);
+      document.removeEventListener('toggle', onToggle, true);
+    };
   }, []);
 
   // 当前登录身份（用户名 / 角色）

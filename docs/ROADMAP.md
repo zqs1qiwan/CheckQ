@@ -1,16 +1,16 @@
-# CheckQ 迭代路线图（v0.4）
+﻿# CheckQ 迭代路线图（v0.4）
 
 > 2026-11-10 · 目标：从「签到自动化」升级为「完整产品形态」。
 
 ## 当前状态（v0.3.x）
 
 - 引擎：10 种节点（http/condition/set/extract/delay/random-delay/log/notify/script/foreach），单链 DAG，500 步上限；
-- 存储：JSON 文件（flows/runs/templates/meta），原子写 + 400ms 节流；
+- 存储：JSON 文件（flows/runs/templates/meta/notifications），原子写 + 变更立即 flush + SIGTERM flush；
 - 调度：croner，每任务独立 cron/时区/抖动；
-- 通知：7 渠道原生集成（Webhook/Bark/Telegram/Server酱/钉钉/企业微信/飞书）；
+- 通知：12 渠道原生集成（站内/Webhook/Bark/Telegram/Server酱/PushPlus/钉钉/企业微信/飞书/Gotify/ntfy/邮件SMTP）+ 站内通知中心；
 - 日志：level 三档 + record 三档（all/log/log-final）+ 关键字摘要；
-- API：REST + X-API-Key；MCP：stdio 9 工具；
-- 任务：WorkBuddy 签到 + 成长中心 18 项任务全自动（生产 20 个任务）。
+- API：REST + X-API-Key；MCP：stdio 10 工具；
+- 任务：WorkBuddy 签到 + 成长中心 19 项任务全自动（生产 20 个任务）。
 
 ## P0（产品完整度）
 
@@ -20,7 +20,7 @@
 | 登录防爆破（5 次/10 分钟） | ✅ |
 | API Key 管理 | ✅ |
 | 使用引导（? 按钮 + 6 节） | ✅ |
-| 通知渠道 UI + 测试发送 | ✅（7 渠道 + 真实外网 webhook.site 验证） |
+| 通知渠道 UI + 测试发送 | ✅（12 渠道 + 真实外网 webhook.site 验证 + 站内通知落库） |
 | 日志 record 模式 + UI | ✅（all / log / log-final） |
 | 备份/恢复 API + 页面入口 | ✅（任务页「备份 / 恢复」） |
 | 存储可靠性（立即 flush / SIGTERM flush） | ✅ |

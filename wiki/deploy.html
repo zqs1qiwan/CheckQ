@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN" data-mode="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>部署与备份 · CheckQ 文档</title>
+<meta name="description" content="Docker、数据目录、备份恢复" />
+<link rel="stylesheet" href="./assets/style.css" />
+
+</head>
+<body>
+<div class="wrap">
+  <aside>
+    <div class="brand">Check<span>Q</span></div>
+    <div class="brand-sub">自动化签到引擎 · 文档</div>
+    <input id="search" type="search" placeholder="搜索文档…" autocomplete="off" />
+    <div id="results"></div>
+    <nav>
+<a class="" href="index.html">概览<em>CheckQ 是什么、能做什么</em></a>
+<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个签到</em></a>
+<a class="" href="tasks.html">任务与流程<em>节点、变量、调度、模板</em></a>
+<a class="" href="logs.html">日志与通知<em>干净日志、连续日志流、通知渠道</em></a>
+<a class="" href="security.html">账号与安全<em>多用户、2FA、凭据加密、访问控制</em></a>
+<a class="" href="api.html">API 与 MCP<em>开放 API、API Key、外部 Agent 接入</em></a>
+<a class="on" href="deploy.html">部署与备份<em>Docker、数据目录、备份恢复</em></a>
+<a class="" href="faq.html">常见问题<em>排障速查</em></a>
+<a class="" href="changelog.html">更新日志<em>版本变更（自动生成）</em></a>
+<a class="" href="reference-api.html">API 参考<em>全部端点</em></a>
+<a class="" href="reference-mcp.html">MCP 工具<em>工具清单与接入</em></a>
+<a class="" href="reference-security.html">安全说明<em>威胁与防护全表</em></a>
+<a class="" href="reference-agent.html">Agent 接入指南<em>给外部 Agent 什么</em></a>
+<a class="" href="reference-roadmap.html">路线图<em>版本计划</em></a>
+    </nav>
+    <div class="brand-sub" style="margin-top:18px"><a href="https://github.com/zqs1qiwan/checkq">GitHub 仓库 →</a></div>
+  </aside>
+  <main>
+<h1 id="部署与备份">部署与备份</h1>
+<h2 id="部署">部署</h2>
+<p>单容器（Docker），数据落在 <code>data/</code>（flows / runs / templates / meta / notifications），JSON 存储 + 原子写 + 立即落盘。</p>
+<pre class="code"><code>docker run -d --name checkq --restart unless-stopped -p 18888:8888 \
+  -v /path/checkq/data:/data -e TZ=Asia/Shanghai \
+  -e PORT=8888 -e DATA_DIR=/data checkq:latest</code></pre>
+<h2 id="数据目录">数据目录</h2>
+<div class="table-wrap"><table><thead><tr><th>文件</th><th>内容</th></tr></thead><tbody><tr><td>flows.json</td><td>任务定义（含加密后的敏感变量）</td></tr><tr><td>runs.json</td><td>运行记录</td></tr><tr><td>templates.json</td><td>模板</td></tr><tr><td>meta.json</td><td>账号、API Key 摘要、审计、界面偏好</td></tr><tr><td>notifications.json</td><td>站内通知</td></tr><tr><td>.secret</td><td>凭据加密密钥（600，务必与数据一起备份）</td></tr></tbody></table></div>
+<h2 id="备份与恢复">备份与恢复</h2>
+<ul><li>任务页「备份」→ 下载<strong>脱敏</strong>备份（敏感值清空，适合分享与存档）。</li><li>任务页「完整备份」→ 需再输一次当前密码，含明文凭据，用于自己迁移。</li><li>恢复：粘贴备份 JSON → 生成带「（恢复）」后缀的停用任务 → 手动启用。</li></ul>
+<blockquote>迁移到新机器时，请把 <code>data/.secret</code> 一并带走，否则已加密的凭据无法解密。</blockquote>
+    <div class="foot">CheckQ 文档 · 由 <code>tools/build-wiki.cjs</code> 生成 · <a href="https://github.com/zqs1qiwan/checkq/issues">反馈问题</a></div>
+  </main>
+</div>
+<script>
+(function () {
+  var input = document.getElementById('search');
+  var box = document.getElementById('results');
+  var index = [];
+  fetch('./search-index.json').then(function (r) { return r.json(); }).then(function (d) { index = d; });
+  function esc(s) { return s.replace(/[&<>]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]; }); }
+  function run() {
+    var q = input.value.trim().toLowerCase();
+    if (!q) { box.classList.remove('on'); box.innerHTML = ''; return; }
+    var hits = [];
+    for (var i = 0; i < index.length; i++) {
+      var it = index[i];
+      var pos = it.text.toLowerCase().indexOf(q);
+      if (pos < 0 && it.title.toLowerCase().indexOf(q) < 0) continue;
+      var start = Math.max(0, pos - 40);
+      var snippet = (pos >= 0 ? it.text.slice(start, start + 120) : it.text.slice(0, 120));
+      hits.push('<a href="' + it.file + '">' + esc(it.title) + '<em>' + esc(snippet) + '…</em></a>');
+      if (hits.length >= 8) break;
+    }
+    box.innerHTML = hits.join('') || '<a href="javascript:void(0)">没有匹配</a>';
+    box.classList.add('on');
+  }
+  input.addEventListener('input', run);
+  input.addEventListener('keydown', function (e) { if (e.key === 'Escape') { input.value = ''; run(); input.blur(); } });
+  document.addEventListener('click', function (e) { if (!box.contains(e.target) && e.target !== input) box.classList.remove('on'); });
+})();
+</script>
+</body>
+</html>

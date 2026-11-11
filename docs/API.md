@@ -4,6 +4,33 @@
 > 鉴权二选一：**Cookie Session**（`POST /api/login`）或 **X-API-Key**（`POST /api/system/apikey` 生成）。
 > Content-Type: `application/json`。所有响应 JSON；错误统一 `{ error: string }` + HTTP 状态码。
 
+
+## 0. 开放 API（给外部 Agent / 集成）
+
+| 项 | 值 |
+|---|---|
+| 基址 | `http://checkq.local:18888` |
+| 接口索引 | `GET /api`（免登录，返回认证方式与端点清单） |
+| 机器可读描述 | `GET /api/openapi.json`（OpenAPI 3.1，Agent 可自动生成客户端） |
+| 认证 | ① `x-api-key: <key>`（推荐）② 会话 Cookie `qsid` |
+| Key 生成 | 设置 → API Key（可命名、选作用域、设回收日期；明文只显示一次） |
+| 作用域 | `read` 查看 / `run` 运行任务 / `write` 改配置；权限不足返回 403 |
+| 回收日期 | 到期自动失效并从列表移除（过期请求返回 401「已过期并被回收」） |
+| 限流 | 登录 5 次/10 分钟（IP）+ 8 次/15 分钟（账号）；API 调用无固定限流 |
+
+最小示例：
+
+```bash
+# 1) 只读 + 可运行 的 Key（面板生成）
+curl -H "x-api-key: cq_xxxx" http://checkq.local:18888/api/flows
+# 2) 跑一次签到
+curl -X POST -H "x-api-key: cq_xxxx" http://checkq.local:18888/api/flows/<id>/run
+# 3) 读人话日志（连续多次运行）
+curl -H "x-api-key: cq_xxxx" "http://checkq.local:18888/api/flows/<id>/logs?limit=200"
+```
+
+完整说明见 `docs/AGENT-ACCESS.md`。
+
 ## 1. 鉴权
 
 ### POST /api/login

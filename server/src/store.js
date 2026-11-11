@@ -450,14 +450,18 @@ export class Store {
       id: k.id, name: k.name, prefix: k.prefix, createdAt: k.createdAt,
       lastUsedAt: k.lastUsedAt || null, userId: k.userId || null, disabled: !!k.disabled,
       scopes: Array.isArray(k.scopes) && k.scopes.length ? k.scopes : ['read', 'run', 'write'],
+      expiresAt: k.expiresAt || null,
+      expired: !!(k.expiresAt && k.expiresAt < Date.now()),
+      daysLeft: k.expiresAt ? Math.ceil((k.expiresAt - Date.now()) / 86400e3) : null,
     }));
   }
 
-  addApiKey({ name, hash, prefix, userId, scopes }) {
+  addApiKey({ name, hash, prefix, userId, scopes, expiresAt }) {
     const k = {
       id: crypto.randomUUID(), name: name || 'API Key', hash, prefix, userId: userId || null,
       createdAt: Date.now(), lastUsedAt: null, disabled: false,
       scopes: Array.isArray(scopes) && scopes.length ? scopes : ['read', 'run', 'write'],
+      expiresAt: expiresAt || null,
     };
     this.meta.apiKeys.push(k);
     this.flush();

@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { Store, hashPwd, verifyPwd } from './store.js';
 import { checkPassword, checkUsername, ROLES, PASSWORD_MIN, hashApiKey, newApiKey } from './auth.js';
 import { generateSecret, verifyTotp, generateRecoveryCodes, hashRecoveryCode, verifyRecoveryCode, otpauthUri } from './totp.js';
+import { buildOpenApi } from './openapi.js';
 import { Engine, redactVars } from './engine.js';
 import { validateFlow } from './model.js';
 import { importHar } from './har-import.js';
@@ -497,6 +498,12 @@ export function buildServer({ dataDir, port }) {
     if (auth) {
       const key = store.findApiKeyByHash(hashApiKey(auth));
       if (key) {
+        // 到期回收：过期 Key 直接失效并从库里清掉
+        if (key.expiresAt && key.expiresAt < Date.now()) {
+          store.revokeApiKey(key.id);
+          store.audit('apikey.expired', `名称=${key.name}`, '');
+          return reply.code(401).send({ error: `API Key 已过期并被回收（${key.name}）`, expired: true });
+        }
         // 作用域：read=查看 / run=运行任务 / write=增删改配置
         const scopes = Array.isArray(key.scopes) && key.scopes.length ? key.scopes : ['read', 'run', 'write'];
         const need = ['GET', 'HEAD'].includes(req.method) ? 'read'
@@ -527,7 +534,8 @@ export function buildServer({ dataDir, port }) {
     }
 
     // 3) 公开接口
-    const pub = path === '/api/login' || path === '/api/health' || path === '/api/system/bootstrap' || path === '/api/me' || !path.startsWith('/api/');
+    const pub = path === '/api/login' || path === '/api/health' || path === '/api/system/bootstrap' || path === '/api/me'
+      || path === '/api' || path === '/api/openapi.json' || !path.startsWith('/api/');
     if (pub) return;
     return reply.code(401).send({ error: '未登录' });
   });
@@ -680,6 +688,30 @@ export function buildServer({ dataDir, port }) {
   });
 
   app.get('/api/health', async () => ({ ok: true, version: '0.3.17' }));
+
+  // ---- 基础 API：索引与机器可读描述（外部 Agent 自助发现）----
+  app.get('/api', async () => ({
+    name: 'CheckQ API',
+    version: '0.3.17',
+    description: 'CheckQ 自动化签到引擎的对外 REST 接口',
+    auth: {
+      apiKey: { header: 'x-api-key', where: '设置 → API Key 生成（可设作用域与回收日期）', scopes: ['read', 'run', 'write'] },
+      session: { cookie: 'qsid', where: 'POST /api/login 登录后自动携带' },
+    },
+    openapi: '/api/openapi.json',
+    docs: 'docs/AGENT-ACCESS.md · docs/API.md',
+    agentGuide: '/api/openapi.json',
+    endpoints: {
+      flows: ['GET /api/flows', 'GET /api/flows/:id', 'PUT /api/flows/:id', 'POST /api/flows/:id/run', 'GET /api/flows/:id/logs'],
+      runs: ['GET /api/runs?flowId=', 'GET /api/runs/:id'],
+      templates: ['GET /api/templates', 'GET /api/templates/:id', 'POST /api/templates/:id/instantiate'],
+      meta: ['GET /api/health', 'GET /api/me', 'GET /api/system/stats', 'GET /api/system/push-targets', 'GET /api/notifications'],
+      keys: ['GET /api/system/apikeys', 'POST /api/system/apikeys', 'DELETE /api/system/apikeys/:id'],
+    },
+  }));
+
+  // OpenAPI 3.1（机器可读，供 Agent 自动生成客户端）
+  app.get('/api/openapi.json', async () => buildOpenApi());
 
   // 首次启动：还没有任何账号时，引导创建管理员（用户名 + 密码）
   app.get('/api/system/bootstrap', async () => ({
@@ -931,10 +963,19 @@ export function buildServer({ dataDir, port }) {
     const { name, scopes } = req.body || {};
     const wanted = Array.isArray(scopes) ? scopes.filter((s) => ['read', 'run', 'write'].includes(s)) : [];
     const useScopes = wanted.length ? wanted : ['read', 'run', 'write'];
+    // 回收日期：expiresAt（毫秒时间戳）；null = 永不过期
+    let expiresAt = null;
+    if (expiresAt !== undefined) { /* noop */ }
+    if (req.body && req.body.expiresAt) {
+      const d = new Date(req.body.expiresAt);
+      if (Number.isNaN(d.getTime())) return reply.code(400).send({ error: '回收日期格式无效（用 YYYY-MM-DD）' });
+      if (d.getTime() <= Date.now()) return reply.code(400).send({ error: '回收日期必须晚于现在' });
+      expiresAt = d.getTime();
+    }
     const { key, hash, prefix } = newApiKey();
-    const k = store.addApiKey({ name: String(name || 'API Key').slice(0, 40), hash, prefix, userId: req.user?.id || null, scopes: useScopes });
-    store.audit('apikey.create', `名称=${k.name} 权限=${useScopes.join('/')}`, req.user?.username || '');
-    return { ok: true, apiKey: key, key: { id: k.id, name: k.name, prefix: k.prefix, createdAt: k.createdAt, scopes: useScopes } };
+    const k = store.addApiKey({ name: String(name || 'API Key').slice(0, 40), hash, prefix, userId: req.user?.id || null, scopes: useScopes, expiresAt });
+    store.audit('apikey.create', `名称=${k.name} 权限=${useScopes.join('/')}${expiresAt ? ' 到期=' + new Date(expiresAt).toISOString().slice(0, 10) : ''}`, req.user?.username || '');
+    return { ok: true, apiKey: key, key: { id: k.id, name: k.name, prefix: k.prefix, createdAt: k.createdAt, scopes: useScopes, expiresAt } };
   });
   app.delete('/api/system/apikeys/:id', async (req, reply) => {
     if (!requireAdmin(req, reply)) return;

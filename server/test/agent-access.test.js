@@ -94,6 +94,61 @@ await check('吊销 key 后立即失效', async () => {
   return del.statusCode === 200 && use.statusCode === 401;
 });
 
+
+await check('API Key 可设回收日期（列表显示剩余天数）', async () => {
+  const soon = new Date(Date.now() + 3 * 86400e3).toISOString().slice(0, 10);
+  const r = await app.inject({ method: 'POST', url: '/api/system/apikeys', headers: H, payload: { name: 'temp-key', scopes: ['read'], expiresAt: soon } });
+  assert.strictEqual(r.statusCode, 200, r.body);
+  const list = await app.inject({ method: 'GET', url: '/api/system/apikeys', headers: { cookie } });
+  const k = list.json().keys.find((x) => x.name === 'temp-key');
+  return !!k && k.expiresAt && k.daysLeft >= 2 && k.daysLeft <= 3 && k.expired === false;
+});
+
+await check('回收日期非法/过期被拒', async () => {
+  const bad = await app.inject({ method: 'POST', url: '/api/system/apikeys', headers: H, payload: { name: 'bad', expiresAt: 'not-a-date' } });
+  const past = await app.inject({ method: 'POST', url: '/api/system/apikeys', headers: H, payload: { name: 'past', expiresAt: '2020-01-01' } });
+  return bad.statusCode === 400 && past.statusCode === 400;
+});
+
+await check('过期的 Key 立即失效并被回收', async () => {
+  // 直接造一把“已过期”的 key
+  const { hashApiKey } = await import('../src/auth.js');
+  const expired = 'cq_expired_test_key_0000';
+  const list = await app.inject({ method: 'GET', url: '/api/system/apikeys', headers: { cookie } });
+  const created = await app.inject({ method: 'POST', url: '/api/system/apikeys', headers: H, payload: { name: 'expire-me', scopes: ['read'] } });
+  const key = created.json().apiKey;
+  // 把它改成过期（直接改 store）
+  const store = server.store;
+  const rec = store.meta.apiKeys.find((k) => k.prefix === key.slice(0, 10));
+  rec.expiresAt = Date.now() - 1000;
+  store.flush();
+  const use = await app.inject({ method: 'GET', url: '/api/flows', headers: { 'x-api-key': key } });
+  const after = await app.inject({ method: 'GET', url: '/api/system/apikeys', headers: { cookie } });
+  const gone = !after.json().keys.some((k) => k.prefix === key.slice(0, 10));
+  return use.statusCode === 401 && /过期/.test(use.json().error || '') && gone;
+});
+
+await check('GET /api 提供基础 API 索引（免登录）', async () => {
+  const r = await app.inject({ method: 'GET', url: '/api' });
+  const j = r.json();
+  return r.statusCode === 200 && j.name === 'CheckQ API' && !!j.openapi && !!j.endpoints?.flows;
+});
+
+await check('GET /api/openapi.json 提供机器可读描述（免登录）', async () => {
+  const r = await app.inject({ method: 'GET', url: '/api/openapi.json' });
+  const j = r.json();
+  const paths = Object.keys(j.paths || {});
+  return r.statusCode === 200 && j.openapi.startsWith('3.1')
+    && paths.includes('/api/flows') && paths.includes('/api/flows/{id}/run') && paths.includes('/api/flows/{id}/logs')
+    && paths.includes('/api/system/apikeys');
+});
+
+await check('OpenAPI 描述里标注了 API Key 认证与作用域', async () => {
+  const r = await app.inject({ method: 'GET', url: '/api/openapi.json' });
+  const j = r.json();
+  return !!j.components?.securitySchemes?.apiKeyAuth && !!j['x-scopes']?.read && !!j['x-scopes']?.run && !!j['x-scopes']?.write;
+});
+
 await check('MCP 工具覆盖 agent 需要的操作', async () => {
   const src = fs.readFileSync('mcp/checkq-mcp.cjs', 'utf8');
   const need = ['flows_list', 'flow_get', 'flow_run', 'flow_logs', 'flow_update_vars', 'flow_update', 'flow_toggle', 'flow_create', 'flow_notify_test', 'templates_list', 'template_get', 'runs_list', 'run_get', 'stats', 'notifications_list', 'whoami', 'health'];

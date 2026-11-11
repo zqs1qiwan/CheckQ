@@ -47,6 +47,8 @@
 
 | 外部 Agent 接入（API Key 作用域 + MCP 17 工具 + 接入指南） | ✅ 2026-11-11（docs/AGENT-ACCESS.md） |
 
+| 开放 API 索引 + OpenAPI 描述 + Key 回收日期 | ✅ 2026-11-11（docs/AGENT-ACCESS.md） |
+
 ## P1（体验）
 
 | 项 | 说明 |

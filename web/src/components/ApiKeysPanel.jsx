@@ -21,6 +21,7 @@ export default function ApiKeysPanel({ onToast }) {
   const [keys, setKeys] = useState([]);
   const [name, setName] = useState('');
   const [scopes, setScopes] = useState(['read', 'run']);
+  const [expiresAt, setExpiresAt] = useState('');
   const [created, setCreated] = useState(null); // { apiKey, key }
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -31,7 +32,7 @@ export default function ApiKeysPanel({ onToast }) {
   const create = async () => {
     setBusy(true); setErr('');
     try {
-      const r = await api.createApiKey(name.trim() || 'Agent Key', scopes);
+      const r = await api.createApiKey(name.trim() || 'Agent Key', scopes, expiresAt || null);
       setCreated(r);
       setName('');
       load();
@@ -68,6 +69,10 @@ export default function ApiKeysPanel({ onToast }) {
             </label>
           ))}
         </div>
+        <div className="field">
+          <label>回收日期（可选，到期自动失效并从列表移除）</label>
+          <input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+        </div>
         <button className="primary" disabled={busy || !scopes.length} onClick={create}>{busy ? '生成中…' : '生成 API Key'}</button>
         <div className="hint" style={{ marginTop: 6 }}>
           明文只在生成时显示一次，服务端只存摘要；建议给外部 Agent 只勾「只读 + 可运行」。
@@ -93,10 +98,15 @@ export default function ApiKeysPanel({ onToast }) {
           <div key={k.id} className="acc-row">
             <span>
               {k.name} <code className="mono">{k.prefix}…</code>
-              <span className="users-uid"> · {scopeText(k.scopes)} · 创建 {fmt(k.createdAt)}{k.lastUsedAt ? ` · 最近使用 ${fmt(k.lastUsedAt)}` : ''}</span>
+              <span className="users-uid">
+                {' · '}{scopeText(k.scopes)}
+                {' · 创建 '}{fmt(k.createdAt)}
+                {k.expiresAt ? ` · ${k.expired ? '已过期' : `${k.daysLeft} 天后回收`}（${fmt(k.expiresAt)}）` : ' · 永不过期'}
+                {k.lastUsedAt ? ` · 最近使用 ${fmt(k.lastUsedAt)}` : ''}
+              </span>
             </span>
             <span className="acc-row-actions">
-              <button className="small danger" onClick={() => revoke(k)}>吊销</button>
+              <button className="small danger" onClick={() => revoke(k)}>立即回收</button>
             </span>
           </div>
         ))}

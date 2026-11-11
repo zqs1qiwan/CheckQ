@@ -49,7 +49,7 @@ export const api = {
   deleteUser: (id) => req('DELETE', `/api/system/users/${id}`),
   auditLog: (limit = 100) => req('GET', `/api/system/audit?limit=${limit}`),
   apiKeys: () => req('GET', '/api/system/apikeys'),
-  createApiKey: (name, scopes) => req('POST', '/api/system/apikeys', { name, scopes }),
+  createApiKey: (name, scopes, expiresAt) => req('POST', '/api/system/apikeys', { name, scopes, expiresAt }),
   revokeApiKey: (id) => req('DELETE', `/api/system/apikeys/${id}`),
   flows: () => req('GET', '/api/flows'),
   flow: (id) => req('GET', `/api/flows/${id}`),

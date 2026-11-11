@@ -22,3 +22,13 @@ server/data/
 .DS_Store
 .DS_*
 server/public
+# ---- 本地私有内容（项目金标准：仓库只放 CheckQ 本身）----
+AGENTS.md
+docs/agent-notes/
+docs/glados-*
+docs/workbuddy-*
+docs/GLaDOS.md
+docs/WORKBUDDY.md
+glados-*.md
+tools/wb-*.cjs
+*.local.json

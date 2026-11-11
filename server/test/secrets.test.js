@@ -34,7 +34,7 @@ const created = await app.inject({
   method: 'POST', url: '/api/flows', headers: H,
   payload: {
     name: '凭据测试', nodes: [], vars: { cookie: COOKIE_VAL, ua: 'Mozilla/5.0', site: 'example.com' },
-    notify: { onSuccess: true, channels: [{ type: 'telegram', token: TG_TOKEN, chat: 'CHAT-ID' }] },
+    notify: { onSuccess: true, channels: [{ type: 'telegram', token: TG_TOKEN, chat: '<chat-id>' }] },
   },
 });
 assert.strictEqual(created.statusCode, 200, created.body);

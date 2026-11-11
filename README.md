@@ -9,8 +9,8 @@ Docker 一行部署，导入浏览器 HAR 自动生成流程，条件分支 / �
 
 完整文档站：**<https://zqs1qiwan.github.io/checkq/>**
 
-- 入口：面板顶栏「说明书」图标 → 使用引导；「文档中心」图标 → 文档站
-- 站点由 `tools/build-wiki.cjs` 从 `docs/` 自动生成（`push` 到 main 时由 `.github/workflows/pages.yml` 自动发布）
+- 入口：面板顶栏「文档中心」图标 → 文档站（面板不再内置重复引导）
+- 站点只讲**框架功能**（不含任何具体签到脚本 —— 那属于模板市场）；`tools/build-wiki.cjs` 从 `docs/` 自动生成，带站内搜索与更新日志（`push` 到 main 时由 `.github/workflows/pages.yml` 自动发布）
 - 本地预览：`node tools/build-wiki.cjs` → 打开 `wiki/index.html`
 
 > 首次启用需在仓库 **Settings → Pages → Source** 选 **GitHub Actions**（之后每次 push 自动发布）。

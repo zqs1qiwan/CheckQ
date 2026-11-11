@@ -55,6 +55,8 @@
 
 | 设置页 GitHub 风格 + API 密钥页 token 化 + GitHub Pages 文档站 | ✅ 2026-11-11（wiki/，16 页） |
 
+| 首页任务/模板大 Tab + 菜单出界修复 + 文档站框架化（含站内搜索/更新日志） | ✅ 2026-11-11（zqs1qiwan.github.io/checkq） |
+
 ## P1（体验）
 
 | 项 | 说明 |

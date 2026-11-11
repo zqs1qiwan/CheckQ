@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN" data-mode="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agent 接入指南 · CheckQ 文档</title>
+<meta name="description" content="给外部 Agent 什么（自动同步）" />
+<link rel="stylesheet" href="./assets/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <aside>
+    <div class="brand">Check<span>Q</span></div>
+    <div class="brand-sub">自动化签到引擎 · 文档</div>
+    <nav>
+<a class="" href="index.html">概览<em>CheckQ 是什么、怎么用、去哪看</em></a>
+<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个签到任务</em></a>
+<a class="" href="tasks.html">任务与流程<em>节点类型、变量、调度、模板</em></a>
+<a class="" href="logs.html">日志与通知<em>干净日志、连续日志流、12 个通知渠道</em></a>
+<a class="" href="security.html">账号与安全<em>多用户、2FA、会话、凭据加密、IP 名单</em></a>
+<a class="" href="api.html">API 与 MCP<em>开放 API、API Key 权限、外部 Agent 接入</em></a>
+<a class="" href="glados.html">GLaDOS 签到<em>challenge 校验版流程与换 cookie 指引</em></a>
+<a class="" href="workbuddy.html">WorkBuddy 签到<em>签到 + 成长中心 + 任务自动完成</em></a>
+<a class="" href="faq.html">常见问题<em>排障速查</em></a>
+<a class="" href="reference-api.html">API 参考<em>全部端点（自动同步）</em></a>
+<a class="" href="reference-mcp.html">MCP 工具<em>17 个工具与接入（自动同步）</em></a>
+<a class="" href="reference-security.html">安全说明<em>威胁与防护全表（自动同步）</em></a>
+<a class="" href="reference-glados.html">GLaDOS 详解<em>challenge 机制与排障（自动同步）</em></a>
+<a class="" href="reference-workbuddy.html">WorkBuddy 详解<em>接口与任务清单（自动同步）</em></a>
+<a class="on" href="reference-agent.html">Agent 接入指南<em>给外部 Agent 什么（自动同步）</em></a>
+<a class="" href="reference-roadmap.html">路线图<em>版本计划（自动同步）</em></a>
+    </nav>
+    <div class="brand-sub" style="margin-top:18px"><a href="https://github.com/zqs1qiwan/CheckQ">GitHub 仓库 →</a></div>
+  </aside>
+  <main>
+<h1 id="外部-agent-接入-checkq-操作签到任务">外部 Agent 接入 CheckQ（操作签到任务）</h1>
+<blockquote>结论先说：<strong>两种方式都支持，推荐 MCP（工具化、语义清楚）；只用 REST 也完全够。</strong></blockquote>
+<blockquote>你要交给对方的<strong>只有两样东西</strong>：① CheckQ 基址（<code>http://checkq.local:18888</code>）② 一把 <strong>API Key</strong>（不要给账号密码！）。</blockquote>
+<hr />
+<h2 id="1-两种接入方式对比">1. 两种接入方式对比</h2>
+<div class="table-wrap"><table><thead><tr><th></th><th><strong>MCP（stdio）</strong></th><th><strong>REST API</strong></th></tr></thead><tbody><tr><td>适合</td><td>Claude Desktop / Cursor / OpenCode 等支持 MCP 的 Agent</td><td>任意能发 HTTP 的脚本 / Agent 框架</td></tr><tr><td>交接物</td><td>基址 + API Key（2 个环境变量）</td><td>基址 + API Key（1 个请求头）</td></tr><tr><td>语义</td><td>现成工具（跑签到/换 cookie/看日志…）</td><td>需自己拼 REST 路径</td></tr><tr><td>依赖</td><td>Node 18+（本仓库 <code>mcp/checkq-mcp.cjs</code>，零依赖）</td><td>无</td></tr><tr><td>建议</td><td><strong>首选</strong></td><td>需要精细控制时用</td></tr></tbody></table></div>
+<hr />
+<h2 id="2-给-agent-什么-推荐姿势">2. 给 Agent 什么（推荐姿势）</h2>
+<h3 id="2-1-先在面板里生成一把-受限-key">2.1 先在面板里生成一把「受限」Key</h3>
+<p>设置 → <strong>API Key</strong> → 填名称（如「签到 Agent」）→ 勾权限：</p>
+<div class="table-wrap"><table><thead><tr><th>权限</th><th>含义</th><th>建议</th></tr></thead><tbody><tr><td>只读</td><td>只能看任务、日志、统计</td><td>只需要观察时勾</td></tr><tr><td><strong>可运行</strong></td><td>可以触发任务运行（= 跑签到）</td><td><strong>Agent 要签到就必须勾</strong></td></tr><tr><td>可修改</td><td>可以改变量 / 调度 / 新建任务</td><td>需要「自动换 cookie」才勾</td></tr></tbody></table></div>
+<blockquote>明文只显示一次，服务端只存 sha256 摘要；随时可吊销。</blockquote>
+<blockquote><strong>不要把账号密码给 Agent</strong>（会拿到用户管理、2FA、完整备份等能力）。</blockquote>
+<h3 id="2-2-mcp-接入-推荐">2.2 MCP 接入（推荐）</h3>
+<p>把下面两行放进 Agent 的 MCP 配置（Claude Desktop 的 <code>claude_desktop_config.json</code>、Cursor 的 <code>mcp.json</code>、OpenCode 的 <code>opencode.json</code>）：</p>
+<pre class="code"><code>{
+  "mcpServers": {
+    "checkq": {
+      "command": "node",
+      "args": ["/绝对路径/CheckQ/mcp/checkq-mcp.cjs"],
+      "env": {
+        "CHECKQ_URL": "http://checkq.local:18888",
+        "CHECKQ_API_KEY": "cq_xxxxxxxxxxxxxxxxxxxx"
+      }
+    }
+  }
+}</code></pre>
+<blockquote>也可以用 <code>CHECKQ_PASSWORD</code> 代替 <code>CHECKQ_API_KEY</code>（会走登录流程），但<strong>不推荐给外部 Agent</strong>。</blockquote>
+<h3 id="2-6-ip-允许名单-黑名单-访问控制">2.6 IP 允许名单 / 黑名单（访问控制）</h3>
+<div class="table-wrap"><table><thead><tr><th>能力</th><th>位置</th><th>作用</th></tr></thead><tbody><tr><td><strong>Key 级允许名单</strong></td><td>设置 → API Key →「允许 IP」</td><td>只允许名单内的来源 IP 使用这把 Key（支持 CIDR，如 <code>192.168.1.0/24</code>）；名单外返回 403</td></tr><tr><td><strong>全局 IP 黑名单</strong></td><td>设置 → 账号安全 →「访问控制（IP 黑名单）」</td><td>被拉黑的 IP <strong>登录和 API Key 都被拦</strong>（与 qinglong / qiandao 的黑名单同级能力）</td></tr></tbody></table></div>
+<blockquote>⚠️ Docker 端口映射下，容器看到的来源 IP 是网关地址（通常 <code>172.17.0.1</code>），不是真实客户端 IP。</blockquote>
+<blockquote>因此 IP 名单依赖 <code>X-Forwarded-For</code>：CheckQ 优先取该头的第一个地址。请让调用方（Agent / 反代）带上它，或改用 <code>--network host</code> 部署。</blockquote>
+<h3 id="2-4-基础-api-不想用-mcp-时">2.4 基础 API（不想用 MCP 时）</h3>
+<ul><li><code>GET /api</code> → 接口索引（免登录）：认证方式、端点清单、文档位置；</li><li><code>GET /api/openapi.json</code> → <strong>OpenAPI 3.1</strong> 机器可读描述（免登录），Agent 可据此自动生成客户端/SDK；</li><li>完整端点见 <code>docs/API.md</code> §0 与本文第 5 节。</li></ul>
+<h3 id="2-5-key-的回收日期">2.5 Key 的回收日期</h3>
+<p>生成 Key 时可填「回收日期」：</p>
+<ul><li>到期后该 Key <strong>自动失效并从列表中移除</strong>（不是留着占位）；</li><li>过期后调用返回 <code>401 {"error":"API Key 已过期并被回收（&lt;名称&gt;）","expired":true}</code>；</li><li>也可以随时点「立即回收」手动吊销。</li></ul>
+<h3 id="2-3-rest-接入">2.3 REST 接入</h3>
+<p>所有请求带一个头即可：</p>
+<pre class="code"><code>curl -H "x-api-key: cq_xxxx" http://checkq.local:18888/api/flows</code></pre>
+<hr />
+<h2 id="3-agent-能做什么-mcp-工具清单-17-个">3. Agent 能做什么（MCP 工具清单，17 个）</h2>
+<div class="table-wrap"><table><thead><tr><th>工具</th><th>作用</th><th>需要权限</th></tr></thead><tbody><tr><td><code>health</code></td><td>连通性/版本自检</td><td>只读</td></tr><tr><td><code>whoami</code></td><td>当前身份与权限自检</td><td>只读</td></tr><tr><td><code>stats</code></td><td>任务数/今日运行/成功率/下次调度</td><td>只读</td></tr><tr><td><code>notifications_list</code></td><td>站内通知（含未读）</td><td>只读</td></tr><tr><td><code>flows_list</code></td><td>列出所有任务（含 cron/enabled/nextRunAt/上次结果）</td><td>只读</td></tr><tr><td><code>flow_get</code></td><td>任务完整定义（nodes/vars/log/notify）</td><td>只读</td></tr><tr><td><code>flow_logs</code></td><td><strong>连续日志流</strong>（多次运行的人话日志，最像 qinglong 面板）</td><td>只读</td></tr><tr><td><code>runs_list</code> / <code>run_get</code></td><td>历史运行记录 / 某次运行详情</td><td>只读</td></tr><tr><td><code>templates_list</code> / <code>template_get</code></td><td>模板列表 / 模板详情（变量名与默认值）</td><td>只读</td></tr><tr><td><strong><code>flow_run</code></strong></td><td><strong>立即跑一次签到</strong>，返回状态+摘要+人话日志</td><td>可运行</td></tr><tr><td><code>flow_update_vars</code></td><td><strong>换 cookie / token / ua</strong>（其余字段保留）</td><td>可修改</td></tr><tr><td><code>flow_update</code></td><td>改 name/cron/timezone/jitter/enabled/note</td><td>可修改</td></tr><tr><td><code>flow_toggle</code></td><td>启用/停用定时调度</td><td>可修改</td></tr><tr><td><code>flow_create</code></td><td>新建任务（可从模板克隆）</td><td>可修改</td></tr><tr><td><code>flow_notify_test</code></td><td>向已配置渠道发测试通知</td><td>可修改</td></tr></tbody></table></div>
+<blockquote><strong>刻意不提供</strong>：删除任务、删除模板、修改账号密码、导出含凭据的完整备份 —— 避免 Agent 误删或越权。</blockquote>
+<hr />
+<h2 id="4-外部-agent-的典型工作流">4. 外部 Agent 的典型工作流</h2>
+<pre class="code"><code>① whoami / health            确认连得上、权限够
+② flows_list                 找到目标签到任务（名字/cron/上次结果）
+③ flow_get                   看当前配置：cron 是否启用、变量里有没有 cookie
+④ flow_update_vars           cookie 过期 → 换新的 { "cookie": "..." }
+⑤ flow_run                   立刻跑一次
+⑥ flow_logs / run_get        读人话日志确认结果（成功/失败原因）
+⑦ flow_toggle                跑通后按需启用/停用定时</code></pre>
+<p>示例（让 Agent 做的事，自然语言即可）：</p>
+<blockquote>“用 checkq MCP 找到 GLaDOS 签到任务，把它的 cookie 换成 <code>xxx</code>，跑一次，把最后一条日志贴给我。”</blockquote>
+<hr />
+<h2 id="5-rest-端点速查-给写脚本的人">5. REST 端点速查（给写脚本的人）</h2>
+<div class="table-wrap"><table><thead><tr><th>需求</th><th>方法</th><th>路径</th><th>体</th></tr></thead><tbody><tr><td>列任务</td><td>GET</td><td><code>/api/flows</code></td><td>—</td></tr><tr><td>任务详情</td><td>GET</td><td><code>/api/flows/:id</code></td><td>—</td></tr><tr><td><strong>跑一次</strong></td><td>POST</td><td><code>/api/flows/:id/run</code></td><td><code>{}</code></td></tr><tr><td><strong>连续日志流</strong></td><td>GET</td><td><code>/api/flows/:id/logs?limit=200</code></td><td>—</td></tr><tr><td><strong>换变量</strong></td><td>PUT</td><td><code>/api/flows/:id</code></td><td><code>{"vars":{"cookie":"..."}}</code></td></tr><tr><td>改调度</td><td>PUT</td><td><code>/api/flows/:id</code></td><td><code>{"cron":"13 0 <em> </em> *","enabled":true}</code></td></tr><tr><td>历史运行</td><td>GET</td><td><code>/api/runs?flowId=&lt;id&gt;&amp;limit=30</code></td><td>—</td></tr><tr><td>某次运行详情</td><td>GET</td><td><code>/api/runs/:id</code></td><td>—</td></tr><tr><td>模板列表</td><td>GET</td><td><code>/api/templates</code></td><td>—</td></tr><tr><td>从模板建任务</td><td>POST</td><td><code>/api/templates/:id/instantiate</code></td><td><code>{"name":"...","vars":{}}</code></td></tr><tr><td>测试通知</td><td>POST</td><td><code>/api/flows/:id/notify-test</code></td><td><code>{}</code></td></tr><tr><td>运维统计</td><td>GET</td><td><code>/api/system/stats</code></td><td>—</td></tr><tr><td>站内通知</td><td>GET</td><td><code>/api/notifications</code></td><td>—</td></tr></tbody></table></div>
+<p>完整参考：<code>docs/API.md</code>；MCP 说明：<code>docs/MCP.md</code>。</p>
+<hr />
+<h2 id="6-安全边界-给-agent-的提示词里可以带上">6. 安全边界（给 Agent 的提示词里可以带上）</h2>
+<ul><li>只能通过 API Key 访问；<strong>没有账号密码就拿不到用户管理、2FA、完整备份</strong>；</li><li>敏感值（cookie/token/密码）<strong>落盘是加密的</strong>，但<strong>API 返回是明文</strong>（Agent 拿得到你给它的那个任务的凭据）→ 只把 key 给可信 Agent；</li><li>运行日志、审计日志里<strong>不会出现明文凭据</strong>（自动脱敏）；</li><li>Key 可随时在 设置 → API Key 里吊销；</li><li>建议给 Agent 的 Key 只勾「只读 + 可运行」，把「可修改」留给人工；</li><li>生产是局域网 HTTP，凭据在链路上是明文 —— 如果 Agent 与 CheckQ 之间跨不可信网络，请先上 HTTPS 反代。</li></ul>
+<hr />
+<h2 id="7-常见问题">7. 常见问题</h2>
+<div class="table-wrap"><table><thead><tr><th>现象</th><th>原因 / 处理</th></tr></thead><tbody><tr><td>Agent 报 <code>未登录</code>（401）</td><td>Key 写错/已吊销；或基址带错路径</td></tr><tr><td>Agent 报 <code>API Key 权限不足：需要 run</code></td><td>Key 只勾了「只读」→ 补勾「可运行」</td></tr><tr><td>Agent 跑得动但看不到日志</td><td>用 <code>flow_logs</code>（不是 <code>flow_get</code>，后者是配置）</td></tr><tr><td>Agent 换了 cookie 但没生效</td><td>变量名要对（<code>cookie</code> / <code>wbToken</code> / <code>ua</code>），可用 <code>flow_get</code> 确认变量名</td></tr><tr><td>想知道某任务上次结果</td><td><code>flows_list</code> 里带 <code>lastRun</code>；或 <code>runs_list</code></td></tr><tr><td>想让 Agent 也拿得到通知</td><td>任务的「通知渠道」里加 <code>inbox</code>（站内通知，零依赖）</td></tr></tbody></table></div>
+    <div class="foot">CheckQ 文档 · 由 <code>tools/build-wiki.cjs</code> 从 <code>docs/</code> 生成 · <a href="https://github.com/zqs1qiwan/CheckQ/issues">反馈问题</a></div>
+  </main>
+</div>
+</body>
+</html>

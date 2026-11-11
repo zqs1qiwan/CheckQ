@@ -124,6 +124,82 @@ export function IconMore({ size = 16, ...rest }) {
   );
 }
 
+
+export function IconBook({ size = 16, ...rest }) {
+  return (
+    <S size={size} {...rest}>
+      <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v15H6.5A2.5 2.5 0 0 0 4 20.5V5.5Z" />
+      <path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H19v3H6.5A2.5 2.5 0 0 1 4 20.5Z" />
+    </S>
+  );
+}
+
+export function IconKey({ size = 16, ...rest }) {
+  return (
+    <S size={size} {...rest}>
+      <circle cx="8" cy="14" r="3.5" />
+      <path d="m10.5 11.5 7-7 2 2-1.5 1.5L19 9.5 17.5 8" />
+    </S>
+  );
+}
+
+export function IconUsers({ size = 16, ...rest }) {
+  return (
+    <S size={size} {...rest}>
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M3.5 19.5c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" />
+      <path d="M16 5.5a3 3 0 0 1 0 5.6M17.5 14.6c1.7.6 2.8 2 3.2 4.4" />
+    </S>
+  );
+}
+
+export function IconShield({ size = 16, ...rest }) {
+  return (
+    <S size={size} {...rest}>
+      <path d="M12 3 5 6v6c0 4.2 2.9 7.4 7 9 4.1-1.6 7-4.8 7-9V6l-7-3Z" />
+      <path d="m9.5 12 1.8 1.8 3.4-3.6" />
+    </S>
+  );
+}
+
+export function IconSparkle({ size = 16, ...rest }) {
+  return (
+    <S size={size} {...rest}>
+      <path d="M12 3.5 13.6 9 19 10.5 13.6 12 12 17.5 10.4 12 5 10.5 10.4 9 12 3.5Z" />
+      <path d="M18.5 16.5 19.2 18.3 21 19 19.2 19.7 18.5 21.5 17.8 19.7 16 19 17.8 18.3 18.5 16.5Z" />
+    </S>
+  );
+}
+
+export function IconGear({ size = 16, ...rest }) {
+  return (
+    <S size={size} {...rest}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1v.3a2 2 0 1 1-4 0v-.2a1.6 1.6 0 0 0-2.8-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 4 13.9H3.7a2 2 0 1 1 0-4h.2a1.6 1.6 0 0 0 1.1-2.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 12 4.6V4.3a2 2 0 1 1 4 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7h.3a2 2 0 1 1 0 4h-.2a1.6 1.6 0 0 0-1.5 1.1Z" />
+    </S>
+  );
+}
+
+export function IconGlobe({ size = 16, ...rest }) {
+  return (
+    <S size={size} {...rest}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3.5 9h17M3.5 15h17" />
+      <path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18Z" />
+    </S>
+  );
+}
+
+
+export function IconCopy({ size = 16, ...rest }) {
+  return (
+    <S size={size} {...rest}>
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
+    </S>
+  );
+}
+
 export const ICONS = {
   bell: IconBell,
   help: IconHelp,
@@ -136,6 +212,14 @@ export const ICONS = {
   download: IconDownload,
   trash: IconTrash,
   more: IconMore,
+  book: IconBook,
+  key: IconKey,
+  users: IconUsers,
+  shield: IconShield,
+  sparkle: IconSparkle,
+  gear: IconGear,
+  globe: IconGlobe,
+  copy: IconCopy,
 };
 
 export default function Icon({ name, size = 16, ...rest }) {

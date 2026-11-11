@@ -4,7 +4,7 @@ import ThemeToggle from './ThemeToggle.jsx';
 import GuideModal from './GuideModal.jsx';
 import LogStream from './LogStream.jsx';
 import Modal from './Modal.jsx';
-import { IconBell, IconHelp, IconMore, IconDownload, IconTrash } from './Icons.jsx';
+import { IconBell, IconBook, IconKey, IconUsers, IconShield, IconSparkle, IconGear, IconGlobe } from './Icons.jsx';
 import { confirmDialog } from '../confirm.jsx';
 import AccountPanel from './AccountPanel.jsx';
 import UsersPanel from './UsersPanel.jsx';
@@ -346,7 +346,9 @@ export default function FlowList({ onOpen, onLogout }) {
         <button className="iconbtn bell-btn" onClick={() => setNotifOpen(true)} title="站内通知" aria-label="站内通知">
           <IconBell size={16} />{unread > 0 && <span className="bell-dot">{unread > 99 ? '99+' : unread}</span>}
         </button>
-        <button className="iconbtn" onClick={() => setGuideOpen(true)} title="使用引导：3 步上手 / 日志 / 通知 / 常见问题" aria-label="使用引导"><IconHelp size={16} /></button>
+        <button className="iconbtn" onClick={() => setGuideOpen(true)} title="使用说明" aria-label="使用说明"><IconBook size={16} /></button>
+        <a className="iconbtn" href="https://zqs1qiwan.github.io/CheckQ/" target="_blank" rel="noreferrer" title="文档中心" aria-label="文档中心"><IconGlobe size={16} /></a>
+        <button className="iconbtn" onClick={() => setModal('settings-api')} title="API 密钥" aria-label="API 密钥"><IconKey size={16} /></button>
         <input
           ref={fileRef} type="file" accept=".har,.json" style={{ display: 'none' }}
           onChange={(e) => { const f = e.target.files[0]; if (f) doImport(f); e.target.value = ''; }}
@@ -589,6 +591,10 @@ export default function FlowList({ onOpen, onLogout }) {
         <SettingsModal onClose={() => setModal(null)} />
       )}
 
+      {modal === 'settings-api' && (
+        <SettingsModal onClose={() => setModal(null)} initialTab="api" />
+      )}
+
       {notifOpen && (
         <NotificationsModal onClose={() => { setNotifOpen(false); api.notifications(1).then((r) => setUnread(r.unread || 0)).catch(() => {}); }} />
       )}
@@ -822,28 +828,22 @@ function NotificationsModal({ onClose }) {
   );
 }
 
-function SettingsModal({ onClose }) {
-  const [tab, setTab] = useState('general');
-  const [oldPw, setOldPw] = useState('');
-  const [newPw, setNewPw] = useState('');
+function SettingsModal({ onClose, initialTab }) {
+  const [tab, setTab] = useState(initialTab || 'general');
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
   const [me, setMe] = useState(null);
   useEffect(() => {
     api.me().then((r) => setMe(r.authenticated ? r.user : null)).catch(() => {});
   }, []);
-  const changePw = async () => {
-    setErr(''); setMsg('');
-    try { await api.changePassword(oldPw, newPw); setMsg('密码已改，请重新登录'); setOldPw(''); setNewPw(''); }
-    catch (e) { setErr(e.message); }
-  };
   const TABS = [
-    ['general', '通知与汇总'],
-    ['ai', 'AI 助手'],
-    ['security', '账号安全'],
-    ...(me?.role === 'admin' ? [['users', '用户管理']] : []),
-    ['api', 'API Key'],
+    { id: 'general', label: '通知与推送', desc: '每日汇总推送与模板', Icon: IconBell },
+    { id: 'ai', label: 'AI 助手', desc: '快速组装用的模型', Icon: IconSparkle },
+    { id: 'security', label: '账号安全', desc: '密码、两步验证、会话', Icon: IconShield },
+    ...(me?.role === 'admin' ? [{ id: 'users', label: '用户管理', desc: '账号与角色', Icon: IconUsers }] : []),
+    { id: 'api', label: 'API 密钥', desc: '外部程序接入', Icon: IconKey },
   ];
+  const cur = TABS.find((x) => x.id === tab) || TABS[0];
   return (
     <Modal
       title="设置"
@@ -851,25 +851,40 @@ function SettingsModal({ onClose }) {
       className="settings-modal"
       bodyClassName="settings-split"
     >
-        <div className="settings-nav">
-          {TABS.map(([id, label]) => (
-            <button key={id} className={`settings-tab${tab === id ? ' active' : ''}`} onClick={() => { setTab(id); setMsg(''); setErr(''); }}>{label}</button>
-          ))}
+      <nav className="settings-nav">
+        {TABS.map((x) => (
+          <button
+            key={x.id}
+            className={`settings-tab${tab === x.id ? ' active' : ''}`}
+            onClick={() => { setTab(x.id); setMsg(''); setErr(''); }}
+          >
+            <x.Icon size={16} />
+            <span className="settings-tab-text">
+              <b>{x.label}</b>
+              <em>{x.desc}</em>
+            </span>
+          </button>
+        ))}
+      </nav>
+      <div className="settings-panel">
+        <div className="settings-page-head">
+          <h2>{cur.label}</h2>
+          <p>{cur.desc}</p>
         </div>
-        <div className="settings-panel">
-          {tab === 'general' && <SettingsFlow onToast={(text) => { setMsg(text); setErr(''); }} />}
 
-          {tab === 'ai' && <AiSettings />}
+        {tab === 'general' && <SettingsFlow onToast={(text) => { setMsg(text); setErr(''); }} />}
 
-          {tab === 'security' && <AccountPanel onToast={(text) => { setMsg(text); setErr(''); }} />}
+        {tab === 'ai' && <AiSettings />}
 
-          {tab === 'users' && me?.role === 'admin' && <UsersPanel onToast={(text) => { setMsg(text); setErr(''); }} />}
+        {tab === 'security' && <AccountPanel onToast={(text) => { setMsg(text); setErr(''); }} />}
 
-          {tab === 'api' && <ApiKeysPanel onToast={(text) => { setMsg(text); setErr(''); }} />}
+        {tab === 'users' && me?.role === 'admin' && <UsersPanel onToast={(text) => { setMsg(text); setErr(''); }} />}
 
-          {msg && <p style={{ color: 'var(--ok)', fontSize: 12 }}>{msg}</p>}
-          {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
-        </div>
+        {tab === 'api' && <ApiKeysPanel onToast={(text) => { setMsg(text); setErr(''); }} />}
+
+        {msg && <p className="settings-msg">{msg}</p>}
+        {err && <p className="settings-msg err">{err}</p>}
+      </div>
     </Modal>
   );
 }

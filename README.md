@@ -4,6 +4,17 @@
 
 Docker 一行部署，导入浏览器 HAR 自动生成流程，条件分支 / 变量提取 / 失败重试全可视化，运行日志完整可见（请求、响应、每一步耗时）。
 
+
+## 📖 文档中心（GitHub Pages）
+
+完整文档站：**<https://zqs1qiwan.github.io/CheckQ/>**
+
+- 入口：面板顶栏「说明书」图标 → 使用引导；「文档中心」图标 → 文档站
+- 站点由 `tools/build-wiki.cjs` 从 `docs/` 自动生成（`push` 到 main 时由 `.github/workflows/pages.yml` 自动发布）
+- 本地预览：`node tools/build-wiki.cjs` → 打开 `wiki/index.html`
+
+> 首次启用需在仓库 **Settings → Pages → Source** 选 **GitHub Actions**（之后每次 push 自动发布）。
+
 ## 特性
 
 - **模板系统** — 调试好的流程一键「存为模板」，列表管理变量名与任务数；从模板创建任务自动克隆节点图，变量（cookie 等）各任务独立填写

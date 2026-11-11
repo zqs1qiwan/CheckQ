@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN" data-mode="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>日志与通知 · CheckQ 文档</title>
+<meta name="description" content="干净日志、连续日志流、12 个通知渠道" />
+<link rel="stylesheet" href="./assets/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <aside>
+    <div class="brand">Check<span>Q</span></div>
+    <div class="brand-sub">自动化签到引擎 · 文档</div>
+    <nav>
+<a class="" href="index.html">概览<em>CheckQ 是什么、怎么用、去哪看</em></a>
+<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个签到任务</em></a>
+<a class="" href="tasks.html">任务与流程<em>节点类型、变量、调度、模板</em></a>
+<a class="on" href="logs.html">日志与通知<em>干净日志、连续日志流、12 个通知渠道</em></a>
+<a class="" href="security.html">账号与安全<em>多用户、2FA、会话、凭据加密、IP 名单</em></a>
+<a class="" href="api.html">API 与 MCP<em>开放 API、API Key 权限、外部 Agent 接入</em></a>
+<a class="" href="glados.html">GLaDOS 签到<em>challenge 校验版流程与换 cookie 指引</em></a>
+<a class="" href="workbuddy.html">WorkBuddy 签到<em>签到 + 成长中心 + 任务自动完成</em></a>
+<a class="" href="faq.html">常见问题<em>排障速查</em></a>
+<a class="" href="reference-api.html">API 参考<em>全部端点（自动同步）</em></a>
+<a class="" href="reference-mcp.html">MCP 工具<em>17 个工具与接入（自动同步）</em></a>
+<a class="" href="reference-security.html">安全说明<em>威胁与防护全表（自动同步）</em></a>
+<a class="" href="reference-glados.html">GLaDOS 详解<em>challenge 机制与排障（自动同步）</em></a>
+<a class="" href="reference-workbuddy.html">WorkBuddy 详解<em>接口与任务清单（自动同步）</em></a>
+<a class="" href="reference-agent.html">Agent 接入指南<em>给外部 Agent 什么（自动同步）</em></a>
+<a class="" href="reference-roadmap.html">路线图<em>版本计划（自动同步）</em></a>
+    </nav>
+    <div class="brand-sub" style="margin-top:18px"><a href="https://github.com/zqs1qiwan/CheckQ">GitHub 仓库 →</a></div>
+  </aside>
+  <main>
+<h1 id="日志与通知">日志与通知</h1>
+<h2 id="干净日志-默认">干净日志（默认）</h2>
+<p>记录范围默认「仅 log 节点」：只有你写的日志节点出现，失败步骤始终保留。流程里没有日志节点时自动退回全步骤，避免空白。</p>
+<h2 id="调试模式">调试模式</h2>
+<ul><li>任务级：日志配置里勾「调试模式」→ 每次运行都记录请求/响应</li><li>单次级：编辑器日志坞勾「调试」→ 仅当次记录</li></ul>
+<h2 id="连续日志流">连续日志流</h2>
+<p>任务行「日志」→ 多次运行拍平成一条时间线，可「加载更早的记录」，每组可展开调试或导出 .log。</p>
+<h2 id="通知渠道-12-种">通知渠道（12 种）</h2>
+<p>站内通知 / Webhook / Bark / Telegram / Server酱 / PushPlus / 钉钉（加签）/ 企业微信 / 飞书（加签）/ Gotify / ntfy / 邮件 SMTP。</p>
+<ul><li>成功/失败可分别开启</li><li>模板支持 {{flow.name}} {{status}} {{message}} {{duration}} {{time}}</li><li>每日总推送：设置 → 通知与推送，勾选「推送单位」（任务），可定时推送或立即推送</li></ul>
+    <div class="foot">CheckQ 文档 · 由 <code>tools/build-wiki.cjs</code> 从 <code>docs/</code> 生成 · <a href="https://github.com/zqs1qiwan/CheckQ/issues">反馈问题</a></div>
+  </main>
+</div>
+</body>
+</html>

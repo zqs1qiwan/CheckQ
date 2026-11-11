@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN" data-mode="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>快速开始 · CheckQ 文档</title>
+<meta name="description" content="3 步跑通第一个签到任务" />
+<link rel="stylesheet" href="./assets/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <aside>
+    <div class="brand">Check<span>Q</span></div>
+    <div class="brand-sub">自动化签到引擎 · 文档</div>
+    <nav>
+<a class="" href="index.html">概览<em>CheckQ 是什么、怎么用、去哪看</em></a>
+<a class="on" href="quickstart.html">快速开始<em>3 步跑通第一个签到任务</em></a>
+<a class="" href="tasks.html">任务与流程<em>节点类型、变量、调度、模板</em></a>
+<a class="" href="logs.html">日志与通知<em>干净日志、连续日志流、12 个通知渠道</em></a>
+<a class="" href="security.html">账号与安全<em>多用户、2FA、会话、凭据加密、IP 名单</em></a>
+<a class="" href="api.html">API 与 MCP<em>开放 API、API Key 权限、外部 Agent 接入</em></a>
+<a class="" href="glados.html">GLaDOS 签到<em>challenge 校验版流程与换 cookie 指引</em></a>
+<a class="" href="workbuddy.html">WorkBuddy 签到<em>签到 + 成长中心 + 任务自动完成</em></a>
+<a class="" href="faq.html">常见问题<em>排障速查</em></a>
+<a class="" href="reference-api.html">API 参考<em>全部端点（自动同步）</em></a>
+<a class="" href="reference-mcp.html">MCP 工具<em>17 个工具与接入（自动同步）</em></a>
+<a class="" href="reference-security.html">安全说明<em>威胁与防护全表（自动同步）</em></a>
+<a class="" href="reference-glados.html">GLaDOS 详解<em>challenge 机制与排障（自动同步）</em></a>
+<a class="" href="reference-workbuddy.html">WorkBuddy 详解<em>接口与任务清单（自动同步）</em></a>
+<a class="" href="reference-agent.html">Agent 接入指南<em>给外部 Agent 什么（自动同步）</em></a>
+<a class="" href="reference-roadmap.html">路线图<em>版本计划（自动同步）</em></a>
+    </nav>
+    <div class="brand-sub" style="margin-top:18px"><a href="https://github.com/zqs1qiwan/CheckQ">GitHub 仓库 →</a></div>
+  </aside>
+  <main>
+<h1 id="快速开始">快速开始</h1>
+<h2 id="1-建任务">1. 建任务</h2>
+<p>顶栏「+ 新建任务」→ 画布自带「HTTP 请求 → 日志」两个节点 → 点 HTTP 节点填 URL 与请求头。</p>
+<h2 id="2-跑一次">2. 跑一次</h2>
+<p>顶栏「运行」。成功时日志只有一行人话；失败时点日志步骤看响应体。</p>
+<h2 id="3-定调度">3. 定调度</h2>
+<p>顶栏「调度」→ 填 cron（如 <code>13 0 <em> </em> *</code> = 每天 00:13）→ 启用。</p>
+<h2 id="4-收通知">4. 收通知</h2>
+<p>任务 ··· →「通知渠道」→ 选类型（站内通知零依赖）→ 填地址 →「测试发送」。</p>
+<h2 id="5-自动化-可选">5. 自动化（可选）</h2>
+<ul><li><strong>调试运行</strong>：任务 ··· →「调试运行」记录每步请求/响应并展开过程窗口</li><li><strong>连续日志流</strong>：任务行「日志」→ 多次运行滚动在一起，可上翻历史、导出</li><li><strong>外部 Agent</strong>：设置 → API 密钥 → 生成（只读 + 可运行），配合 <a href="/api.html">API 与 MCP</a></li></ul>
+    <div class="foot">CheckQ 文档 · 由 <code>tools/build-wiki.cjs</code> 从 <code>docs/</code> 生成 · <a href="https://github.com/zqs1qiwan/CheckQ/issues">反馈问题</a></div>
+  </main>
+</div>
+</body>
+</html>

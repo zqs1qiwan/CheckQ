@@ -2,104 +2,172 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { confirmDialog } from '../confirm.jsx';
 import Modal from './Modal.jsx';
+import { IconKey, IconCopy } from './Icons.jsx';
 
 const SCOPES = [
-  ['read', '只读', '只能查看任务、日志、统计'],
-  ['run', '可运行', '可触发任务运行（签到）'],
-  ['write', '可修改', '可改变量 / 调度 / 新建任务'],
+  ['read', '只读'],
+  ['run', '可运行'],
+  ['write', '可修改'],
 ];
 
-function scopeText(scopes) {
+function scopeBadges(scopes) {
   const s = scopes || [];
-  if (s.includes('write')) return '完全权限';
-  if (s.includes('run') && s.includes('read')) return '查看 + 运行';
-  if (s.includes('run')) return '仅运行';
-  return '只读';
+  if (s.includes('write')) return [{ id: 'write', label: '完全权限' }];
+  if (s.includes('run') && s.includes('read')) return [{ id: 'run', label: '查看 + 运行' }];
+  if (s.includes('run')) return [{ id: 'run', label: '仅运行' }];
+  return [{ id: 'read', label: '只读' }];
 }
 
-/** API Key 管理：可命名、可选作用域（给外部 Agent 用）、可吊销 */
+const fmt = (ts) => (ts ? new Date(ts).toLocaleString('zh-CN') : '—');
+
+/** API 密钥管理（GitHub token 风格）：一行一个密钥，右侧 ⋯ 菜单 */
 export default function ApiKeysPanel({ onToast }) {
   const [keys, setKeys] = useState([]);
+  const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [scopes, setScopes] = useState(['read', 'run']);
   const [expiresAt, setExpiresAt] = useState('');
   const [allowedIps, setAllowedIps] = useState('');
-  const [editing, setEditing] = useState(null); // { key, ips }
-  const [created, setCreated] = useState(null); // { apiKey, key }
+  const [created, setCreated] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
+  const [editing, setEditing] = useState(null);
+  const [menuFor, setMenuFor] = useState(null);
 
-  const load = () => api.apiKeys().then((r) => setKeys(r.keys || [])).catch((e) => setErr(e.message));
+  const load = () => api.apiKeys().then((r) => setKeys(r.keys || [])).catch(() => setKeys([]));
   useEffect(() => { load(); }, []);
 
   const create = async () => {
-    setBusy(true); setErr('');
+    setBusy(true);
     try {
-      const r = await api.createApiKey(name.trim() || 'Agent Key', scopes, expiresAt || null, allowedIps.split(/[\n,;\s]+/).filter(Boolean));
+      const r = await api.createApiKey(
+        name.trim() || 'API 密钥',
+        scopes,
+        expiresAt || null,
+        allowedIps.split(/[\n,;\s]+/).filter(Boolean),
+      );
       setCreated(r);
-      setName('');
-      setAllowedIps('');
+      setCreating(false);
+      setName(''); setAllowedIps(''); setExpiresAt('');
       load();
-      onToast('API Key 已生成（明文只显示这一次）');
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+    } catch (e) { onToast(e.message); } finally { setBusy(false); }
   };
 
   const revoke = async (k) => {
-    const ok = await confirmDialog({ title: '吊销 API Key', message: `吊销「${k.name}」？使用它的外部 Agent 会立即失效。`, confirmText: '吊销', danger: true });
+    setMenuFor(null);
+    const ok = await confirmDialog({ title: '回收密钥', message: `回收「${k.name}」？使用它的程序会立即失效。`, confirmText: '回收', danger: true });
     if (!ok) return;
-    try { await api.revokeApiKey(k.id); load(); onToast('已吊销'); }
+    try { await api.revokeApiKey(k.id); load(); onToast('已回收'); }
     catch (e) { onToast(e.message); }
   };
 
-  const toggleScope = (s) => {
-    setScopes((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
-  };
-
-  const fmt = (ts) => (ts ? new Date(ts).toLocaleString('zh-CN') : '—');
+  const toggleScope = (s) => setScopes((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
 
   return (
-    <div className="acc-panel">
-      <div className="acc-card">
-        <div className="acc-card-head">生成 API Key（给外部 Agent / 脚本用）</div>
-        <div className="field"><label>名称</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="如：签到 Agent" />
+    <div className="keys-panel">
+      <div className="page-head-row">
+        <div>
+          <h3 className="section-title">API 密钥</h3>
+          <p className="section-desc">用于调用 REST API 与 MCP。明文只在生成时显示一次。</p>
         </div>
-        <div className="field">
-          <label title="只读=只能查看；可运行=能触发任务；可修改=能改变量与调度">权限范围</label>
-          {SCOPES.map(([id, label, desc]) => (
-            <label key={id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-              <input type="checkbox" style={{ width: 'auto' }} checked={scopes.includes(id)} onChange={() => toggleScope(id)} />
-              {label} <span style={{ color: 'var(--muted)', fontSize: 11 }}>{desc}</span>
-            </label>
-          ))}
-        </div>
-        <div className="field">
-          <label title="到期后该 Key 自动失效并从列表移除">回收日期</label>
-          <input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
-        </div>
-        <div className="field">
-          <label title="每行一个 IP 或 CIDR；留空=不限制。来源 IP 取 X-Forwarded-For 优先，其次为连接来源">IP 允许名单</label>
-          <textarea className="mono" rows={2} value={allowedIps} onChange={(e) => setAllowedIps(e.target.value)} placeholder={'192.168.1.0/24\n10.0.0.5'} />
-        </div>
-        <button className="primary" disabled={busy || !scopes.length} onClick={create}>{busy ? '生成中…' : '生成 API Key'}</button>
-        {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
+        <button className="primary" onClick={() => setCreating(true)}>生成新密钥</button>
       </div>
 
       {created && (
-        <div className="acc-card">
-          <div className="acc-card-head" title="明文只显示这一次，服务端只存摘要">新 Key</div>
-          <pre className="mono" style={{ wordBreak: 'break-all', fontSize: 12, margin: 0 }}>{created.apiKey}</pre>
-          <button className="small" style={{ marginTop: 8 }} onClick={() => { navigator.clipboard?.writeText(created.apiKey); onToast('已复制'); }}>复制</button>
-          <div className="hint" style={{ marginTop: 6 }}>
-            请求头 <code className="mono">x-api-key: &lt;key&gt;</code>
+        <div className="key-reveal">
+          <div className="key-reveal-head">
+            <strong>密钥已生成</strong>
+            <span>仅显示这一次</span>
+          </div>
+          <div className="key-reveal-body">
+            <code className="mono">{created.apiKey}</code>
+            <button
+              className="small"
+              onClick={() => { navigator.clipboard?.writeText(created.apiKey); onToast('已复制'); }}
+            ><IconCopy size={13} /> 复制</button>
+          </div>
+          <div className="key-reveal-foot">
+            请求头 <code className="mono">x-api-key: {created.apiKey.slice(0, 12)}…</code>
+            <button className="small" onClick={() => setCreated(null)}>完成</button>
           </div>
         </div>
       )}
 
+      {keys.length === 0 ? (
+        <div className="empty">还没有 API 密钥</div>
+      ) : (
+        <div className="key-list">
+          {keys.map((k) => (
+            <div key={k.id} className="key-row">
+              <span className="key-icon"><IconKey size={16} /></span>
+              <div className="key-main">
+                <div className="key-title">
+                  <b>{k.name}</b>
+                  {scopeBadges(k.scopes).map((s) => <span key={s.id} className={`chip chip-${s.id}`}>{s.label}</span>)}
+                  {k.allowedIps?.length ? <span className="chip chip-mute">IP 限 {k.allowedIps.length}</span> : null}
+                </div>
+                <div className="key-meta">
+                  <code className="mono">{k.prefix}…</code>
+                  <span>创建 {fmt(k.createdAt)}</span>
+                  <span>{k.expiresAt ? (k.expired ? '已过期' : `${k.daysLeft} 天后回收`) : '永不过期'}</span>
+                  <span>{k.lastUsedAt ? `最近使用 ${fmt(k.lastUsedAt)}` : '未使用'}</span>
+                </div>
+              </div>
+              <div className="key-ops">
+                <button className="small" onClick={() => { setMenuFor(menuFor === k.id ? null : k.id); }}>⋯</button>
+                {menuFor === k.id && (
+                  <div className="key-menu">
+                    <button onClick={() => { setEditing({ key: k, ips: (k.allowedIps || []).join('\n') }); setMenuFor(null); }}>允许 IP</button>
+                    <button onClick={() => { setMenuFor(null); onToast('请删除后重新生成'); }}>重新生成</button>
+                    <button className="danger-text" onClick={() => revoke(k)}>立即回收</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {creating && (
+        <Modal
+          title="生成 API 密钥"
+          onClose={() => setCreating(false)}
+          width={480}
+          footer={
+            <>
+              <button onClick={() => setCreating(false)}>取消</button>
+              <button className="primary" disabled={busy || !scopes.length} onClick={create}>{busy ? '生成中…' : '生成'}</button>
+            </>
+          }
+        >
+          <div className="field">
+            <label>名称</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="如：签到 Agent" autoFocus />
+          </div>
+          <div className="field">
+            <label title="只读=只能查看；可运行=能触发任务；可修改=能改变量与调度">权限范围</label>
+            <div className="chip-picker">
+              {SCOPES.map(([id, label]) => (
+                <label key={id} className={`chip-toggle${scopes.includes(id) ? ' on' : ''}`}>
+                  <input type="checkbox" style={{ width: 'auto' }} checked={scopes.includes(id)} onChange={() => toggleScope(id)} />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="field">
+            <label title="到期后该密钥自动失效并从列表移除">回收日期</label>
+            <input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+          </div>
+          <div className="field">
+            <label title="每行一个 IP 或 CIDR；留空=不限制。来源 IP 取 X-Forwarded-For 优先，其次为连接来源">IP 允许名单</label>
+            <textarea className="mono" rows={2} value={allowedIps} onChange={(e) => setAllowedIps(e.target.value)} placeholder={'192.168.1.0/24'} />
+          </div>
+        </Modal>
+      )}
+
       {editing && (
         <Modal
-          title={`IP 允许名单 · ${editing.key.name}`}
-
+          title={`允许 IP · ${editing.key.name}`}
           onClose={() => setEditing(null)}
           width={480}
           footer={
@@ -111,7 +179,7 @@ export default function ApiKeysPanel({ onToast }) {
                   await api.updateApiKey(editing.key.id, { allowedIps: ips });
                   setEditing(null);
                   load();
-                  onToast('允许名单已更新');
+                  onToast('已更新');
                 } catch (e) { onToast(e.message); }
               }}>保存</button>
             </>
@@ -119,34 +187,10 @@ export default function ApiKeysPanel({ onToast }) {
         >
           <div className="field">
             <label title="每行一个 IP 或 CIDR；留空=不限制">允许的 IP / CIDR</label>
-            <textarea className="mono" rows={5} value={editing.ips} onChange={(e) => setEditing({ ...editing, ips: e.target.value })} placeholder={'192.168.1.0/24\n10.0.0.5'} />
+            <textarea className="mono" rows={5} value={editing.ips} onChange={(e) => setEditing({ ...editing, ips: e.target.value })} placeholder={'192.168.1.0/24'} />
           </div>
-
         </Modal>
       )}
-
-      <div className="acc-card">
-        <div className="acc-card-head">已生成的 Key（{keys.length}）</div>
-        {keys.length === 0 && <div className="hint">还没有 API Key</div>}
-        {keys.map((k) => (
-          <div key={k.id} className="acc-row">
-            <span>
-              {k.name} <code className="mono">{k.prefix}…</code>
-              <span className="users-uid">
-                {' · '}{scopeText(k.scopes)}
-                {' · 创建 '}{fmt(k.createdAt)}
-                {k.expiresAt ? ` · ${k.expired ? '已过期' : `${k.daysLeft} 天后回收`}（${fmt(k.expiresAt)}）` : ' · 永不过期'}
-                {k.allowedIps?.length ? ` · IP 限 ${k.allowedIps.length} 条` : ' · IP 不限'}
-                {k.lastUsedAt ? ` · 最近使用 ${fmt(k.lastUsedAt)}` : ''}
-              </span>
-            </span>
-            <span className="acc-row-actions">
-              <button className="small" onClick={() => setEditing({ key: k, ips: (k.allowedIps || []).join('\n') })}>允许 IP</button>
-              <button className="small danger" onClick={() => revoke(k)}>立即回收</button>
-            </span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

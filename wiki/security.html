@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN" data-mode="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>账号与安全 · CheckQ 文档</title>
+<meta name="description" content="多用户、2FA、会话、凭据加密、IP 名单" />
+<link rel="stylesheet" href="./assets/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <aside>
+    <div class="brand">Check<span>Q</span></div>
+    <div class="brand-sub">自动化签到引擎 · 文档</div>
+    <nav>
+<a class="" href="index.html">概览<em>CheckQ 是什么、怎么用、去哪看</em></a>
+<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个签到任务</em></a>
+<a class="" href="tasks.html">任务与流程<em>节点类型、变量、调度、模板</em></a>
+<a class="" href="logs.html">日志与通知<em>干净日志、连续日志流、12 个通知渠道</em></a>
+<a class="on" href="security.html">账号与安全<em>多用户、2FA、会话、凭据加密、IP 名单</em></a>
+<a class="" href="api.html">API 与 MCP<em>开放 API、API Key 权限、外部 Agent 接入</em></a>
+<a class="" href="glados.html">GLaDOS 签到<em>challenge 校验版流程与换 cookie 指引</em></a>
+<a class="" href="workbuddy.html">WorkBuddy 签到<em>签到 + 成长中心 + 任务自动完成</em></a>
+<a class="" href="faq.html">常见问题<em>排障速查</em></a>
+<a class="" href="reference-api.html">API 参考<em>全部端点（自动同步）</em></a>
+<a class="" href="reference-mcp.html">MCP 工具<em>17 个工具与接入（自动同步）</em></a>
+<a class="" href="reference-security.html">安全说明<em>威胁与防护全表（自动同步）</em></a>
+<a class="" href="reference-glados.html">GLaDOS 详解<em>challenge 机制与排障（自动同步）</em></a>
+<a class="" href="reference-workbuddy.html">WorkBuddy 详解<em>接口与任务清单（自动同步）</em></a>
+<a class="" href="reference-agent.html">Agent 接入指南<em>给外部 Agent 什么（自动同步）</em></a>
+<a class="" href="reference-roadmap.html">路线图<em>版本计划（自动同步）</em></a>
+    </nav>
+    <div class="brand-sub" style="margin-top:18px"><a href="https://github.com/zqs1qiwan/CheckQ">GitHub 仓库 →</a></div>
+  </aside>
+  <main>
+<h1 id="账号与安全">账号与安全</h1>
+<h2 id="账号">账号</h2>
+<ul><li>多用户 + 角色（admin / operator / viewer 只读）</li><li>用户名 + 密码登录；密码 scrypt 加盐哈希，明文不落盘</li><li>修改用户名/密码：设置 → 账号安全（改用户名需当前密码，改完强制重登）</li></ul>
+<h2 id="两步验证">两步验证</h2>
+<p>TOTP（Google Authenticator / Authy / Aegis），启用后给 10 个一次性恢复码（只显示一次，服务端只存摘要）。</p>
+<h2 id="会话与-api-key">会话与 API Key</h2>
+<ul><li>会话：httpOnly + SameSite=Strict，7 天绝对 + 24h 空闲，可查看与吊销</li><li>API Key：可命名、按作用域发放（只读/可运行/可修改）、可设回收日期、到期自动回收</li><li>IP 名单：每把 Key 可设允许名单（CIDR）；全局黑名单同时拦登录与 API Key</li></ul>
+<h2 id="凭据存储">凭据存储</h2>
+<p>cookie / token / SMTP 密码等以 AES-256-GCM 加密落盘；密钥在 <code>data/.secret</code>（600）或环境变量 <code>CHECKQ_SECRET</code>。备份默认脱敏，完整备份需再输一次密码。</p>
+<h2 id="web-加固">Web 加固</h2>
+<p>CSP / X-Frame-Options / nosniff / Referrer-Policy，写操作校验 Origin 同源（CSRF），登录按 IP 与账号双层限流。</p>
+    <div class="foot">CheckQ 文档 · 由 <code>tools/build-wiki.cjs</code> 从 <code>docs/</code> 生成 · <a href="https://github.com/zqs1qiwan/CheckQ/issues">反馈问题</a></div>
+  </main>
+</div>
+</body>
+</html>

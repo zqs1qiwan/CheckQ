@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN" data-mode="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>安全说明 · CheckQ 文档</title>
+<meta name="description" content="威胁与防护全表（自动同步）" />
+<link rel="stylesheet" href="./assets/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <aside>
+    <div class="brand">Check<span>Q</span></div>
+    <div class="brand-sub">自动化签到引擎 · 文档</div>
+    <nav>
+<a class="" href="index.html">概览<em>CheckQ 是什么、怎么用、去哪看</em></a>
+<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个签到任务</em></a>
+<a class="" href="tasks.html">任务与流程<em>节点类型、变量、调度、模板</em></a>
+<a class="" href="logs.html">日志与通知<em>干净日志、连续日志流、12 个通知渠道</em></a>
+<a class="" href="security.html">账号与安全<em>多用户、2FA、会话、凭据加密、IP 名单</em></a>
+<a class="" href="api.html">API 与 MCP<em>开放 API、API Key 权限、外部 Agent 接入</em></a>
+<a class="" href="glados.html">GLaDOS 签到<em>challenge 校验版流程与换 cookie 指引</em></a>
+<a class="" href="workbuddy.html">WorkBuddy 签到<em>签到 + 成长中心 + 任务自动完成</em></a>
+<a class="" href="faq.html">常见问题<em>排障速查</em></a>
+<a class="" href="reference-api.html">API 参考<em>全部端点（自动同步）</em></a>
+<a class="" href="reference-mcp.html">MCP 工具<em>17 个工具与接入（自动同步）</em></a>
+<a class="on" href="reference-security.html">安全说明<em>威胁与防护全表（自动同步）</em></a>
+<a class="" href="reference-glados.html">GLaDOS 详解<em>challenge 机制与排障（自动同步）</em></a>
+<a class="" href="reference-workbuddy.html">WorkBuddy 详解<em>接口与任务清单（自动同步）</em></a>
+<a class="" href="reference-agent.html">Agent 接入指南<em>给外部 Agent 什么（自动同步）</em></a>
+<a class="" href="reference-roadmap.html">路线图<em>版本计划（自动同步）</em></a>
+    </nav>
+    <div class="brand-sub" style="margin-top:18px"><a href="https://github.com/zqs1qiwan/CheckQ">GitHub 仓库 →</a></div>
+  </aside>
+  <main>
+<h1 id="checkq-安全说明-v0-4-3">CheckQ 安全说明（v0.4.3）</h1>
+<blockquote>覆盖：账号体系、密码存储、TOTP 两步验证、会话、权限、已知风险与自查结论、运维手册。</blockquote>
+<h2 id="1-账号体系">1. 账号体系</h2>
+<div class="table-wrap"><table><thead><tr><th>项</th><th>说明</th></tr></thead><tbody><tr><td>账号</td><td>多用户，存 <code>meta.json</code> 的 <code>users[]</code>；每账号含用户名 / 显示名 / 角色 / 密码哈希 / 2FA / 恢复码 / 失败计数 / 最后登录</td></tr><tr><td>角色</td><td><code>admin</code>（全部，含用户管理）/ <code>operator</code>（不能管账号与用户）/ <code>viewer</code>（<strong>只读</strong>，任何写操作 403）</td></tr><tr><td>登录</td><td>用户名 + 密码；启用了 2FA 的账号再要 6 位动态码或一次性恢复码</td></tr><tr><td>兼容</td><td>只传密码也能登录（唯一账号时自动匹配）；旧版 <code>meta.passwordHash</code> 在启动时<strong>自动迁移</strong>为 <code>admin</code> 用户</td></tr><tr><td>首次启动</td><td>无任何账号时进入「创建管理员」：用户名 + 强密码（≥10 位、两类字符、不在弱口令表、不含用户名）</td></tr></tbody></table></div>
+<h2 id="2-密码存储">2. 密码存储</h2>
+<ul><li>算法：<strong>scrypt</strong>（N=16384, r=8, p=1, 32 字节输出），每账号 <strong>16 字节随机盐</strong>，存储格式 <code>salt:hash</code>（hex）；</li><li>比较：<code>crypto.timingSafeEqual</code> 常量时间；<strong>用户不存在时也会执行一次等价 scrypt</strong>，避免用响应时间枚举用户名；</li><li><strong>明文密码永不落盘</strong>：旧版的 <code>meta.plainHint</code>（曾把随机生成的初始密码明文写进 meta.json）已删除，初始密码只在启动日志里打印一次；</li><li>改密后：其它设备的会话立即失效；新密码不能与当前密码相同；</li><li>生产实测：<code>meta.json</code> 内 <code>root has passwordHash: false | plainHint: false</code>，<code>passwordHash 格式: scrypt salt:hash ✓</code>，<code>明文密码出现在 meta: false</code>。</li></ul>
+<h2 id="3-两步验证-totp-rfc-6238">3. 两步验证（TOTP，RFC 6238）</h2>
+<ul><li>参数：HMAC-SHA1 / 30 秒 / 6 位，兼容 Google Authenticator、Authy、Aegis、1Password 等；</li><li>实现：<code>server/src/totp.js</code>（零依赖，含 base32 编解码与 <code>otpauth://</code> URI 生成）；</li><li>绑定流程：<strong>账号密码 → 生成密钥（此时未启用）→ 验证器录入 → 输入 6 位码确认 → 启用</strong>；</li><li>恢复码：启用时生成 10 个一次性码，<strong>明文只显示一次</strong>，服务端只存 sha256 摘要，用后即废；</li><li>关闭 / 重置恢复码：都需要「账号密码 + 当前动态码」；</li><li>管理员可在「用户管理」重置他人 2FA（用户丢失验证器时用），该动作进审计。</li></ul>
+<h2 id="4-会话与鉴权">4. 会话与鉴权</h2>
+<div class="table-wrap"><table><thead><tr><th>项</th><th>说明</th></tr></thead><tbody><tr><td>会话 Cookie</td><td><code>qsid</code>，<strong>httpOnly + SameSite=Strict</strong>，7 天绝对有效期 + 24 小时空闲失效</td></tr><tr><td>服务端存储</td><td>按用户记录（创建时间 / 最近活跃 / IP / UA），可列出、可吊销、可「退出所有设备」</td></tr><tr><td>停用 / 删号 / 改密 / 重置 2FA</td><td>立即吊销该用户所有会话</td></tr><tr><td>API Key</td><td>多把、可命名；<strong>服务端只存 sha256 摘要</strong>，明文只在创建时返回一次；可单独吊销；带 <code>x-api-key</code> 头访问</td></tr><tr><td>登录限流</td><td>按 IP：10 分钟内 5 次失败即 429；按账号：连续 8 次失败锁定 15 分钟</td></tr></tbody></table></div>
+<h2 id="5-权限矩阵">5. 权限矩阵</h2>
+<div class="table-wrap"><table><thead><tr><th>能力</th><th>admin</th><th>operator</th><th>viewer</th><th>API Key</th></tr></thead><tbody><tr><td>查看任务 / 运行记录 / 统计</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>增删改任务、运行、导入导出</td><td>✅</td><td>✅</td><td>❌</td><td>✅</td></tr><tr><td>通知渠道 / 模板 / 批量操作</td><td>✅</td><td>✅</td><td>❌</td><td>✅</td></tr><tr><td>系统设置（AI、提示级别、每日总推送）</td><td>✅</td><td>✅</td><td>❌</td><td>✅</td></tr><tr><td>账号安全（自己的密码 / 2FA / 会话）</td><td>✅</td><td>✅</td><td>❌</td><td>❌</td></tr><tr><td>用户管理（建号 / 角色 / 停用 / 重置密码与 2FA / 删除）</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td></tr><tr><td>审计日志</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td></tr></tbody></table></div>
+<h2 id="6-web-安全加固">6. Web 安全加固</h2>
+<ul><li><strong>响应头</strong>（每个响应）：<code>X-Content-Type-Options: nosniff</code>、<code>X-Frame-Options: DENY</code>、<code>Referrer-Policy: same-origin</code>、<code>Permissions-Policy</code>、<code>Cross-Origin-Opener-Policy: same-origin</code>、CSP（<code>default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'</code>）；</li><li><strong>CSRF</strong>：写操作（POST/PUT/DELETE）校验 <code>Origin</code> 必须同源，跨站一律 403（浏览器表单/图片攻击不带同源 Origin）；会话 Cookie 同时 <code>SameSite=Strict</code>；</li><li><strong>CSP 与内联样式</strong>：组件里存在少量内联 <code>style</code>，因此 <code>style-src</code> 保留 <code>'unsafe-inline'</code>；<code>script-src</code> 严格 <code>'self'</code>（无内联脚本、无第三方 CDN）；</li><li><strong>注入面</strong>：HTTP 节点的 URL/头/体为用户自有配置，属于「用户对自己目标的主动请求」，不属于服务端注入；引擎内不使用 <code>eval</code> 渲染模板（表达式走白名单函数 + jexl 沙箱，1s 超时）；</li><li><strong>敏感信息脱敏</strong>：运行日志里的 cookie / authorization 头自动脱敏（保留前 12 字符），变量快照同样脱敏。</li></ul>
+<h3 id="6-1-ip-访问控制-v0-4-3">6.1 IP 访问控制（v0.4.3）</h3>
+<div class="table-wrap"><table><thead><tr><th>能力</th><th>说明</th></tr></thead><tbody><tr><td>Key 级 <strong>IP 允许名单</strong></td><td>每把 API Key 可设来源 IP / CIDR 列表（空=不限）；名单外 → 403「IP 不在该 API Key 的允许名单内」</td></tr><tr><td>全局 <strong>IP 黑名单</strong></td><td>设置 → 账号安全 →「访问控制」；被拉黑的 IP <strong>登录与 API Key 同时被拦</strong>（403）</td></tr><tr><td>实现</td><td><code>server/src/iprange.js</code>：IPv4/IPv6 + CIDR 解析匹配，IPv4-mapped IPv6 归一，非法条目忽略</td></tr><tr><td>来源 IP 判定</td><td>优先 <code>X-Forwarded-For</code> 第一个地址，其次 <code>req.ip</code>；⚠️ Docker 端口映射下容器只看到网关地址，需调用方带 XFF 或改用 <code>--network host</code></td></tr></tbody></table></div>
+<h2 id="7-自查-已发现并修复的问题">7. 自查：已发现并修复的问题</h2>
+<div class="table-wrap"><table><thead><tr><th>#</th><th>问题</th><th>严重度</th><th>处理</th></tr></thead><tbody><tr><td>1</td><td><code>meta.plainHint</code> 明文保存初始密码</td><td>高</td><td>已删除；初始密码只在启动日志打印一次</td></tr><tr><td>2</td><td>单一共享密码（无身份、无法单独吊销）</td><td>高</td><td>已升级为多用户 + 角色 + 会话吊销</td></tr><tr><td>3</td><td>改密码不清除会话</td><td>高</td><td>已改为「改密后其它设备立即失效」</td></tr><tr><td>4</td><td><code>POST /api/logout</code> 清空<strong>所有</strong>用户的会话</td><td>中</td><td>已改为只登出当前会话；另提供「退出所有设备」</td></tr><tr><td>5</td><td>API Key 明文存盘</td><td>中</td><td>改为只存 sha256 摘要 + 前缀展示</td></tr><tr><td>6</td><td>无 2FA</td><td>中</td><td>已实现 TOTP + 恢复码</td></tr><tr><td>7</td><td>无安全响应头 / 无 CSRF 防护</td><td>中</td><td>已加 CSP/XFO/nosniff + Origin 同源校验</td></tr><tr><td>8</td><td>用户名可被枚举（错误信息 + 响应时间不同）</td><td>中</td><td>统一错误文案 + 用户不存在时同样执行 scrypt</td></tr><tr><td>9</td><td>登录失败只按 IP 限流，可绕过</td><td>低</td><td>增加账号级失败计数与锁定</td></tr><tr><td>10</td><td>会话无过期/无空闲超时</td><td>低</td><td>绝对 7 天 + 空闲 24 小时</td></tr><tr><td>11</td><td><code>verifyPwd</code> 对畸形 hash 可能抛异常</td><td>低</td><td>改为安全兜底（假比较后返回 false）</td></tr><tr><td>12</td><td>无审计日志</td><td>低</td><td>新增审计（登录/改密/2FA/用户/API Key 等，保留 500 条）</td></tr><tr><td>13</td><td>密码策略仅 8 位</td><td>低</td><td>提升为 ≥10 位 + 两类字符 + 弱口令库 + 禁含用户名</td></tr><tr><td>14</td><td>Cookie <code>sameSite=lax</code></td><td>低</td><td>改为 <code>strict</code> + <code>httpOnly</code></td></tr></tbody></table></div>
+<h2 id="8-与-qinglong-qiandao-的做法对照-2026-11-调研">8. 与 qinglong / qiandao 的做法对照（2026-11 调研）</h2>
+<blockquote>调研对象：<code>whyour/qinglong</code>（develop 分支 <code>back/api/user.ts</code>、<code>back/services/user.ts</code>、<code>back/shared/password.ts</code>、<code>src/pages/setting/security.tsx</code>）与 <code>binux/qiandao</code>（<code>web/handlers/login.py</code>、<code>libs/mcrypto.py</code>）。</blockquote>
+<h3 id="7-1-qinglong-青龙">7.1 qinglong（青龙）</h3>
+<div class="table-wrap"><table><thead><tr><th>能力</th><th>qinglong 做法</th><th>CheckQ 做法</th></tr></thead><tbody><tr><td>账号模型</td><td><strong>单账号</strong>：用户名密码存在系统配置里（<code>authConfig</code>）</td><td><strong>多用户 + 角色</strong>（admin/operator/viewer），存在 <code>meta.users[]</code></td></tr><tr><td>改用户名密码</td><td>设置 → 安全设置 →「修改用户名密码」表单（用户名 + 新密码，<strong>不校验旧密码</strong>），保存后清空 token 强制重新登录</td><td>设置 → 账号安全 →「修改用户名 / 显示名」（改用户名<strong>需当前密码</strong>）+「修改密码」（需旧密码）；改用户名后吊销全部会话强制重新登录</td></tr><tr><td>密码哈希</td><td>scrypt，格式 <code>scrypt$salt$hash</code>，64 字节输出（<code>shared/password.ts</code>）</td><td>scrypt N=16384 + 16 字节盐，<code>salt:hash</code>，32 字节输出（<code>server/src/auth.js</code>）</td></tr><tr><td>两步验证</td><td><code>/user/two-factor/init</code> 返回 <code>{secret, url}</code>，前端显示 <strong>QR Code</strong> + 密钥，三步向导（装 App → 扫码 → 输 6 位码）；启用/禁用</td><td><code>/api/system/2fa/enroll</code> 返回 <code>{secret, uri}</code> + 一次性恢复码；<strong>不显示二维码</strong>（避免把密钥交给第三方二维码服务），提供 <code>otpauth://</code> 链接与 Base32 密钥，可被 Aegis/Authy 手动粘贴导入</td></tr><tr><td>2FA 登录</td><td>两步式：先登录返回 420，再调 <code>/user/two-factor/login</code> 带 code；用 <code>lastTwoFactorStep</code> 防同一 30 秒窗口重放</td><td>单次登录请求里带 <code>code</code>；恢复码一次性消费；窗口 ±30s 校验</td></tr><tr><td>登录限流</td><td><code>LoginThrottle</code>：失败次数 + 退避秒数，返回 410 + 等待时间</td><td>IP 5 次/10 分钟 + 账号 8 次锁定 15 分钟，返回 429</td></tr><tr><td>登录日志</td><td>独立页面「登录日志」（时间/IP/归属地/平台/成败）</td><td>审计日志（含 login.ok / login.fail），管理员可看</td></tr><tr><td>IP 黑名单</td><td><code>GET/PUT/DELETE /user/ip-blacklist</code></td><td>未做（局域网单用户场景，暂不需要）</td></tr><tr><td>通知</td><td>登录成功/失败也会推送到通知渠道</td><td>任务成功/失败推送；<strong>登录事件尚未推送</strong>（可作为下一步）</td></tr><tr><td>头像</td><td>支持上传裁剪</td><td>未做（不影响安全）</td></tr></tbody></table></div>
+<h3 id="7-2-qiandao-签到">7.2 qiandao（签到）</h3>
+<div class="table-wrap"><table><thead><tr><th>能力</th><th>qiandao 做法</th><th>CheckQ 做法</th></tr></thead><tbody><tr><td>账号标识</td><td><strong>邮箱</strong>（注册 + 邮箱验证链接，30 天有效）</td><td>用户名（3-32 位）；无邮件服务，故不做邮箱验证</td></tr><tr><td>找回密码</td><td>邮件发重置链接（1 小时有效，带加密签名 + mtime 校验）</td><td>无邮件服务 → <strong>当前密码确认</strong>；或管理员在「用户管理」重置；或容器内命令重置（见 §9）</td></tr><tr><td>密码哈希</td><td>PBKDF2 + 16 字节随机盐，输出 32 字节</td><td>scrypt（更强、更抗 GPU），盐 16 字节，输出 32 字节</td></tr><tr><td>Cookie</td><td>httponly，https 下加 secure</td><td>httponly + SameSite=Strict，https 需在反代层加 secure</td></tr><tr><td>失败处理</td><td>登录失败计数 <code>evil(+5)</code>，有次数限制</td><td>IP + 账号双层限流/锁定</td></tr><tr><td>角色</td><td>user 表有 role 字段</td><td>admin / operator / viewer，viewer 写操作直接 403</td></tr></tbody></table></div>
+<h3 id="7-3-结论与取舍">7.3 结论与取舍</h3>
+<ul><li><strong>我们比两者多</strong>：多用户 + 角色、只读账号、审计日志、会话可吊销、CSRF/安全头、API Key 只存摘要、一次性恢复码；</li><li><strong>我们少（有意为之）</strong>：邮箱验证/找回（无邮件服务）、二维码（避免密钥外泄）、IP 黑名单、头像；</li><li><strong>已按 qinglong 的交互补齐</strong>：可自助修改用户名（原本只有改密码），改用户名后强制重新登录；</li><li><strong>可借鉴的后续项</strong>：登录成功/失败也走通知渠道（qinglong 有）、API Key 分平台（qinglong 按平台分组 token）。</li></ul>
+<h2 id="9-修改用户名-密码怎么做-面板操作">9. 修改用户名 / 密码怎么做（面板操作）</h2>
+<div class="table-wrap"><table><thead><tr><th>想做什么</th><th>面板路径</th><th>说明</th></tr></thead><tbody><tr><td>改用户名</td><td>设置 → 账号安全 → 「修改用户名 / 显示名」</td><td>填新用户名 + 当前密码 → 保存；<strong>所有设备立即登出</strong>，需用新用户名重新登录</td></tr><tr><td>改显示名</td><td>同上</td><td>只影响面板展示，可随时改，不需密码</td></tr><tr><td>改密码</td><td>设置 → 账号安全 → 「修改密码」</td><td>需当前密码 + 新密码（≥10 位、两类字符）；其它设备会话立即失效</td></tr><tr><td>开启两步验证</td><td>设置 → 账号安全 → 「两步验证」→ 开始绑定</td><td>复制密钥或 <code>otpauth://</code> 链接到验证器 App → 输入 6 位码 → 保存恢复码</td></tr><tr><td>忘了两步验证码</td><td>恢复码登录；或管理员在 设置 → 用户管理 → 重置2FA</td><td>管理员重置后该用户需重新绑定</td></tr><tr><td>忘了密码（仍已登录）</td><td>设置 → 账号安全 → 修改密码</td><td>—</td></tr><tr><td>忘了密码（已登出）</td><td>管理员重置；或用容器命令重置（见 §9）</td><td>局域网部署无公网找回通道</td></tr></tbody></table></div>
+<p>API 对照：</p>
+<div class="table-wrap"><table><thead><tr><th>需求</th><th>方法</th><th>路径</th><th>请求体</th></tr></thead><tbody><tr><td>改用户名/显示名</td><td>PUT</td><td><code>/api/system/account</code></td><td><code>{ username?, displayName?, currentPassword? }</code></td></tr><tr><td>改密码</td><td>POST</td><td><code>/api/system/password</code></td><td><code>{ oldPassword, newPassword }</code></td></tr><tr><td>当前身份</td><td>GET</td><td><code>/api/me</code></td><td>—</td></tr><tr><td>开启 2FA</td><td>POST</td><td><code>/api/system/2fa/enroll</code> → <code>/api/system/2fa/confirm</code></td><td><code>{ password }</code> → <code>{ code }</code></td></tr><tr><td>关闭 2FA</td><td>POST</td><td><code>/api/system/2fa/disable</code></td><td><code>{ password, code }</code></td></tr></tbody></table></div>
+<h2 id="10-仍存在的风险与建议-需要你决策-外部动作">10. 仍存在的风险与建议（需要你决策/外部动作）</h2>
+<div class="table-wrap"><table><thead><tr><th>风险</th><th>说明</th><th>建议</th></tr></thead><tbody><tr><td>明文 HTTP 传输</td><td>生产是局域网 <code>http://checkq.local:18888</code>，Cookie 与密码在链路上是明文</td><td>上 HTTPS（反代 + 自签或内网证书），并在反代层加 HSTS</td></tr><tr><td>单机 JSON 存储</td><td><code>meta.json</code> 明文可读（只有哈希），但<strong>拥有该文件 = 可离线爆破哈希</strong></td><td>限制文件权限（600）、对 <code>meta.json</code> 加密或用系统 keyring；同时 <code>data/</code> 目录不进版本库</td></tr><tr><td>无 Passkey / WebAuthn</td><td>目前是密码 + TOTP</td><td>下一步可加 WebAuthn（PRD P2）</td></tr><tr><td>无异地备份</td><td><code>data/</code> 目录是唯一数据源</td><td>用「设置 → 备份」定期导出并加密保存到别处</td></tr><tr><td>审计日志只在本机</td><td>可被有 root 的人改</td><td>严重场景可外送到日志系统</td></tr><tr><td>会话存内存</td><td>重启容器后所有会话失效（需重新登录）</td><td>这是刻意的取舍（无会话落盘）；如需常驻可改为持久化会话表</td></tr></tbody></table></div>
+<h2 id="11-运维手册">11. 运维手册</h2>
+<pre class="code"><code># 忘记密码 / 忘记 2FA（容器内直接重置管理员密码）
+ssh root@checkq.local 'docker exec checkq node -e "
+  const fs=require(\"fs\"); const p=\"/data/meta.json\";
+  const m=JSON.parse(fs.readFileSync(p,\"utf8\"));
+  const {hashPwd}=require(\"/app/src/auth.js\");
+  const u=m.users.find(x=&gt;x.username===\"admin\");
+  u.passwordHash=hashPwd(\"NewStrongPassword#2026\");
+  u.totp=null; u.recoveryCodes=[]; u.failedLogins=0; u.lockedUntil=null;
+  fs.writeFileSync(p, JSON.stringify(m));
+  console.log(\"admin password reset; 2fa cleared\");
+" &amp;&amp; docker restart checkq'</code></pre>
+<p>其它常见操作：</p>
+<ul><li><strong>改自己的密码</strong>：设置 → 账号安全 → 修改密码（需旧密码，改后其它设备失效）；</li><li><strong>给同事建号</strong>：设置 → 用户管理 → 新建账号（选角色 operator/viewer）；</li><li><strong>同事离职</strong>：用户管理 → 停用（会话立即失效）；</li><li><strong>绑定 2FA</strong>：设置 → 账号安全 → 两步验证 → 开始绑定（保存密钥与恢复码）；</li><li><strong>加 API Key 给外部脚本</strong>：设置 → API Key → 生成（明文只显示一次）。</li></ul>
+<h2 id="12-签到凭据-cookie-token-脚本-怎么存-怎么保安全">12. 签到凭据（cookie / token / 脚本）怎么存、怎么保安全</h2>
+<blockquote>调研对象：<code>binux/qiandao</code>（<code>db/user.py</code>、<code>db/task.py</code>、<code>web/handlers/task.py</code>、<code>libs/mcrypto.py</code>）、<code>whyour/qinglong</code>（<code>back/services/env.ts</code>、<code>back/config/index.ts</code>）。</blockquote>
+<h3 id="13-1-三个产品怎么存-签到资源">13.1 三个产品怎么存「签到资源」</h3>
+<div class="table-wrap"><table><thead><tr><th>维度</th><th>qiandao（签到）</th><th>qinglong（青龙）</th><th>CheckQ（本项目）</th></tr></thead><tbody><tr><td>凭据载体</td><td>每个任务的 <code>init_env</code>（cookie/变量）</td><td>「环境变量」表（JD_COOKIE 等）+ 导出 <code>.env</code></td><td>流程变量 <code>flow.vars</code> + 通知渠道 <code>flow.notify.channels</code></td></tr><tr><td><strong>静态加密</strong></td><td>✅ <strong>AES-CBC 加密入库</strong>；密钥 = 用户 <code>userkey</code>（由密码 PBKDF2 派生，再用全局 <code>aes_key</code> 加密保存）</td><td>❌ <strong>明文入库</strong>，并额外导出明文 <code>shell/preload/env.sh</code> / <code>env.js</code> / <code>env.py</code> 给脚本 <code>source</code></td><td>✅ <strong>AES-256-GCM 加密落盘</strong>（<code>enc:v1:</code>），密钥在 <code>data/.secret</code>（600）或环境变量 <code>CHECKQ_SECRET</code></td></tr><tr><td>密钥与密码绑定</td><td>✅ 绑定（改密码 ⇒ 旧 cookie 密文解不开，需重填）</td><td>❌ 无（明文）</td><td>❌ 不绑定（改密码不影响凭据），但<strong>改密码会吊销全部会话</strong></td></tr><tr><td>脚本/代码</td><td>模板 <code>tpl['tpl']</code> 也加密存储</td><td>脚本是<strong>文件</strong>（<code>data/scripts/</code>），非秘密</td><td>脚本节点代码在 <code>flows.json</code>（明文，代码不是秘密）</td></tr><tr><td>共享模板</td><td>公共模板用<strong>全局同一把</strong>密钥（弱一点）</td><td>公共 env 明文</td><td>模板默认变量导出时<strong>脱敏</strong></td></tr><tr><td>日志脱敏</td><td>失败信息入库（<code>tasklog.msg</code>）</td><td>有日志系统</td><td>✅ 运行日志/变量快照自动脱敏（cookie/authorization 保留前 12 字符）</td></tr><tr><td>备份</td><td>DB 备份</td><td><code>data.tgz</code>（含明文 env）</td><td>✅ <strong>备份默认脱敏</strong>；完整备份需再输一次当前密码</td></tr><tr><td>密钥文件保护</td><td><code>userkey</code> 用全局 <code>aes_key</code> 加密</td><td><code>auth.json</code>/<code>env.sh</code> 在 <code>blackFileList</code>（脚本不可读写）</td><td><code>data/.secret</code> 600 权限，不在任何 API 返回里</td></tr></tbody></table></div>
+<h3 id="13-2-我们的做法-已实现">13.2 我们的做法（已实现）</h3>
+<p><strong>加密范围</strong>（<code>server/src/secret.js</code>）：</p>
+<ul><li><strong>变量</strong>：名字命中 <code>cookie|token|sess|auth|password|passwd|secret|api_key|credential|jwt|bearer|refresh</code>，或值形态像凭据（长 base64/hex、JWT <code>eyJ…</code>、含 <code>sess=</code>/<code>token=</code> 的 cookie 串）→ 加密；</li><li><strong>通知渠道</strong>：<code>token / key / pass / password / secret / url / user</code> 等字段 → 加密（Telegram bot token、SMTP 密码、webhook URL 里的签名都在内）；</li><li><strong>不加密</strong>：普通变量（如 <code>ua</code>、<code>site</code>）、流程图、脚本代码、日志记录 —— 保持可读、可 diff、可 grep。</li></ul>
+<p><strong>工作方式</strong>：</p>
+<ul><li>内存里保持<strong>明文</strong>（面板要能编辑、引擎要能渲染 <code>{{var}}</code>），<strong>写盘前加密、读盘自动解密</strong>；</li><li>旧版本数据是明文 → 读入时原样读出，下次写入自动变成密文（<strong>渐进迁移</strong>，无需手工迁移）；</li><li>AES-256-GCM 带认证标签：密文被篡改会解密失败（返回空值而不是泄露密文）。</li></ul>
+<p><strong>密钥管理</strong>：</p>
+<ul><li>优先用环境变量 <code>CHECKQ_SECRET</code>（≥8 位，内部按 sha256 派生 32 字节密钥）；</li><li>否则首次启动生成 <code>data/.secret</code>（32 字节随机，权限 600），<strong>永不入库、不进备份、不出现在任何 API 响应里</strong>；</li><li>⚠️ 换密钥后旧密文解不开（返回空值）→ 需要重新填一次 cookie；换密钥前请先用「完整备份」留档。</li></ul>
+<p><strong>导出与分享</strong>：</p>
+<ul><li><code>GET /api/system/backup</code> → <strong>脱敏</strong>（敏感变量清空、渠道密钥 <code>***</code>），可安全分享/存档；</li><li><code>POST /api/system/backup { password }</code> → <strong>含明文凭据</strong>的完整包，用于自己迁移（需再次输密码，防误下载/误分享）；</li><li><code>GET /api/templates/:id/export</code> → 模板变量里的敏感项清空；</li><li>面板「备份 / 完整备份」两个按钮对应上面两档。</li></ul>
+<p><strong>运行时保护</strong>：</p>
+<ul><li>运行日志与变量快照对 <code>cookie</code>/<code>authorization</code> 等头自动脱敏；</li><li>登录日志不记录凭据；审计日志只记动作与账号，不记值；</li><li>数据目录文件权限已收紧为 <code>600</code>（<code>meta.json / flows.json / runs.json / templates.json / notifications.json</code>）。</li></ul>
+<h3 id="13-3-与两者相比-我们更强-更弱的地方">13.3 与两者相比，我们更强 / 更弱的地方</h3>
+<p><strong>更强</strong>：</p>
+<ol><li>凭据静态加密（AES-256-GCM）+ 认证标签 —— qiandao 用的是 AES-CBC（无认证标签），qinglong 干脆明文；</li><li>备份默认脱敏，完整备份需二次密码 —— 两者的备份都含明文凭据；</li><li>密钥独立于用户密码（改密码不会作废 cookie），并可从环境注入（便于集中管理）；</li><li>密钥文件 600 且不暴露在任何接口。</li></ol>
+<p><strong>更弱 / 取舍</strong>：</p>
+<ol><li>不做邮箱验证与邮件找回（没有邮件服务）；</li><li>不显示 2FA 二维码（避免把 TOTP 密钥交给第三方二维码服务）；</li><li>加密只覆盖「流程变量 + 通知渠道」，<strong>运行历史里的响应体仍可能有站点返回的凭据</strong>（如某些站点在响应里回显 token）—— 已做日志级脱敏，但不是全量加密；</li><li>加密发生在应用层，<strong>磁盘备份/快照工具（如 NAS 快照）仍能看到密文</strong>，只有拿到 <code>.secret</code> 才能解 —— 这一点与 qiandao 相同（密钥与密文同机）。</li></ol>
+<h3 id="13-4-建议的后续动作-可选">13.4 建议的后续动作（可选）</h3>
+<div class="table-wrap"><table><thead><tr><th>建议</th><th>价值</th><th>成本</th></tr></thead><tbody><tr><td>独立「凭据中心」：把 cookie/token 抽成全局凭据库，流程只引用凭据名</td><td>多任务共用一份 cookie、轮换一处生效</td><td>中（需改引擎变量解析 + 面板）</td></tr><tr><td>凭据轮换提醒（按创建时间提示"该换 cookie 了"）</td><td>减少签到突然失败</td><td>小</td></tr><tr><td>登录成功/失败也走通知渠道（qinglong 的做法）</td><td>安全可观测</td><td>小</td></tr><tr><td>加密范围扩到 <code>runs.json</code> 里的响应体</td><td>全链路静态加密</td><td>中（大文件加密开销 + 检索变难）</td></tr><tr><td>密钥托管到系统 keyring / KMS</td><td>密钥与数据分离</td><td>高（部署形态相关）</td></tr></tbody></table></div>
+<h2 id="13-自测">13. 自测</h2>
+<pre class="code"><code>cd server &amp;&amp; node test/auth.test.js     # 39 项：登录/2FA/会话/用户管理/安全头/CSRF/审计
+cd server &amp;&amp; for f in test/*.test.js; do node $f; done   # 全量 272 项</code></pre>
+    <div class="foot">CheckQ 文档 · 由 <code>tools/build-wiki.cjs</code> 从 <code>docs/</code> 生成 · <a href="https://github.com/zqs1qiwan/CheckQ/issues">反馈问题</a></div>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN" data-mode="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>常见问题 · CheckQ 文档</title>
+<meta name="description" content="排障速查" />
+<link rel="stylesheet" href="./assets/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <aside>
+    <div class="brand">Check<span>Q</span></div>
+    <div class="brand-sub">自动化签到引擎 · 文档</div>
+    <nav>
+<a class="" href="index.html">概览<em>CheckQ 是什么、怎么用、去哪看</em></a>
+<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个签到任务</em></a>
+<a class="" href="tasks.html">任务与流程<em>节点类型、变量、调度、模板</em></a>
+<a class="" href="logs.html">日志与通知<em>干净日志、连续日志流、12 个通知渠道</em></a>
+<a class="" href="security.html">账号与安全<em>多用户、2FA、会话、凭据加密、IP 名单</em></a>
+<a class="" href="api.html">API 与 MCP<em>开放 API、API Key 权限、外部 Agent 接入</em></a>
+<a class="" href="glados.html">GLaDOS 签到<em>challenge 校验版流程与换 cookie 指引</em></a>
+<a class="" href="workbuddy.html">WorkBuddy 签到<em>签到 + 成长中心 + 任务自动完成</em></a>
+<a class="on" href="faq.html">常见问题<em>排障速查</em></a>
+<a class="" href="reference-api.html">API 参考<em>全部端点（自动同步）</em></a>
+<a class="" href="reference-mcp.html">MCP 工具<em>17 个工具与接入（自动同步）</em></a>
+<a class="" href="reference-security.html">安全说明<em>威胁与防护全表（自动同步）</em></a>
+<a class="" href="reference-glados.html">GLaDOS 详解<em>challenge 机制与排障（自动同步）</em></a>
+<a class="" href="reference-workbuddy.html">WorkBuddy 详解<em>接口与任务清单（自动同步）</em></a>
+<a class="" href="reference-agent.html">Agent 接入指南<em>给外部 Agent 什么（自动同步）</em></a>
+<a class="" href="reference-roadmap.html">路线图<em>版本计划（自动同步）</em></a>
+    </nav>
+    <div class="brand-sub" style="margin-top:18px"><a href="https://github.com/zqs1qiwan/CheckQ">GitHub 仓库 →</a></div>
+  </aside>
+  <main>
+<h1 id="常见问题">常见问题</h1>
+<div class="table-wrap"><table><thead><tr><th>现象</th><th>处理</th></tr></thead><tbody><tr><td>找不到入口节点</td><td>流程成环，所有节点都有入线</td></tr><tr><td>HTTP 400</td><td>不一定是错误，断言通过即可继续；点日志步骤看响应体</td></tr><tr><td>超时</td><td>HTTP 节点超时填秒（30），不是毫秒</td></tr><tr><td>变量未定义</td><td>日志配置开启变量快照，或看运行记录里的「未定义变量」</td></tr><tr><td>提示太吵</td><td>设置 → 通知与推送 → 界面提示 → 仅错误</td></tr><tr><td>日志太啰嗦</td><td>任务 ··· → 日志配置 → 记录范围「仅 log 节点」</td></tr><tr><td>忘记密码</td><td>管理员重置；或按 <code>docs/SECURITY.md</code> 的容器命令重置</td></tr><tr><td>忘记两步验证码</td><td>用恢复码；管理员可在「用户管理」重置 2FA</td></tr><tr><td>日志窗口滚动带跑背景</td><td>已修复：打开弹窗会锁定背景滚动</td></tr></tbody></table></div>
+    <div class="foot">CheckQ 文档 · 由 <code>tools/build-wiki.cjs</code> 从 <code>docs/</code> 生成 · <a href="https://github.com/zqs1qiwan/CheckQ/issues">反馈问题</a></div>
+  </main>
+</div>
+</body>
+</html>

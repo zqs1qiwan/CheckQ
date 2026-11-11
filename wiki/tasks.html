@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN" data-mode="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>任务与流程 · CheckQ 文档</title>
+<meta name="description" content="节点类型、变量、调度、模板" />
+<link rel="stylesheet" href="./assets/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <aside>
+    <div class="brand">Check<span>Q</span></div>
+    <div class="brand-sub">自动化签到引擎 · 文档</div>
+    <nav>
+<a class="" href="index.html">概览<em>CheckQ 是什么、怎么用、去哪看</em></a>
+<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个签到任务</em></a>
+<a class="on" href="tasks.html">任务与流程<em>节点类型、变量、调度、模板</em></a>
+<a class="" href="logs.html">日志与通知<em>干净日志、连续日志流、12 个通知渠道</em></a>
+<a class="" href="security.html">账号与安全<em>多用户、2FA、会话、凭据加密、IP 名单</em></a>
+<a class="" href="api.html">API 与 MCP<em>开放 API、API Key 权限、外部 Agent 接入</em></a>
+<a class="" href="glados.html">GLaDOS 签到<em>challenge 校验版流程与换 cookie 指引</em></a>
+<a class="" href="workbuddy.html">WorkBuddy 签到<em>签到 + 成长中心 + 任务自动完成</em></a>
+<a class="" href="faq.html">常见问题<em>排障速查</em></a>
+<a class="" href="reference-api.html">API 参考<em>全部端点（自动同步）</em></a>
+<a class="" href="reference-mcp.html">MCP 工具<em>17 个工具与接入（自动同步）</em></a>
+<a class="" href="reference-security.html">安全说明<em>威胁与防护全表（自动同步）</em></a>
+<a class="" href="reference-glados.html">GLaDOS 详解<em>challenge 机制与排障（自动同步）</em></a>
+<a class="" href="reference-workbuddy.html">WorkBuddy 详解<em>接口与任务清单（自动同步）</em></a>
+<a class="" href="reference-agent.html">Agent 接入指南<em>给外部 Agent 什么（自动同步）</em></a>
+<a class="" href="reference-roadmap.html">路线图<em>版本计划（自动同步）</em></a>
+    </nav>
+    <div class="brand-sub" style="margin-top:18px"><a href="https://github.com/zqs1qiwan/CheckQ">GitHub 仓库 →</a></div>
+  </aside>
+  <main>
+<h1 id="任务与流程">任务与流程</h1>
+<h2 id="节点类型">节点类型</h2>
+<div class="table-wrap"><table><thead><tr><th>类型</th><th>用途</th></tr></thead><tbody><tr><td>HTTP 请求</td><td>方法/URL/头/体/断言/超时/后端(fetch·curl)/编码/代理/重试</td></tr><tr><td>条件判断</td><td>jexl 表达式分流</td></tr><tr><td>赋值</td><td>变量或表达式求值</td></tr><tr><td>提取</td><td>正则 / JSON 路径 / 响应头 / Set-Cookie</td></tr><tr><td>延迟 / 随机延迟</td><td>固定或区间等待（避开整点风控）</td></tr><tr><td>日志</td><td>输出人话日志（默认唯一可见的日志）</td></tr><tr><td>通知</td><td>流程内自定义推送</td></tr><tr><td>脚本</td><td>JS 沙箱（vars/last/steps 只读，1s 超时）</td></tr><tr><td>遍历</td><td>数组逐项循环（上限 50 轮）</td></tr></tbody></table></div>
+<h2 id="变量">变量</h2>
+<ul><li>流程变量在编辑器「流程变量」面板维护；敏感值（cookie/token/密码）<strong>落盘加密</strong>，API 返回明文以便编辑</li><li>模板语法：<code>{{var}}</code>、<code>{{x|urlencode}}</code>、<code>{{x|num}}</code>、<code>{{x|sha256}}</code>、<code>{{now:%Y-%m-%d}}</code></li><li>表达式：<code>=last.json.code == 0</code>（<code>vars.xxx</code> 取变量）</li></ul>
+<h2 id="调度">调度</h2>
+<ul><li>cron + 时区 + 抖动（0-N 分钟）；空 cron = 只手动运行</li><li>调度弹窗里可随时启用/停用</li></ul>
+<h2 id="模板">模板</h2>
+<ul><li>任务 ··· →「存为模板」；模板携带节点/连线/变量/日志/通知</li><li>从模板创建任务时可覆盖变量（如各自的 cookie）</li><li>模板导出自动脱敏敏感默认值</li></ul>
+    <div class="foot">CheckQ 文档 · 由 <code>tools/build-wiki.cjs</code> 从 <code>docs/</code> 生成 · <a href="https://github.com/zqs1qiwan/CheckQ/issues">反馈问题</a></div>
+  </main>
+</div>
+</body>
+</html>

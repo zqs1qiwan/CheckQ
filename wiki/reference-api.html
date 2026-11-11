@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN" data-mode="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>API 参考 · CheckQ 文档</title>
+<meta name="description" content="全部端点（自动同步）" />
+<link rel="stylesheet" href="./assets/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <aside>
+    <div class="brand">Check<span>Q</span></div>
+    <div class="brand-sub">自动化签到引擎 · 文档</div>
+    <nav>
+<a class="" href="index.html">概览<em>CheckQ 是什么、怎么用、去哪看</em></a>
+<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个签到任务</em></a>
+<a class="" href="tasks.html">任务与流程<em>节点类型、变量、调度、模板</em></a>
+<a class="" href="logs.html">日志与通知<em>干净日志、连续日志流、12 个通知渠道</em></a>
+<a class="" href="security.html">账号与安全<em>多用户、2FA、会话、凭据加密、IP 名单</em></a>
+<a class="" href="api.html">API 与 MCP<em>开放 API、API Key 权限、外部 Agent 接入</em></a>
+<a class="" href="glados.html">GLaDOS 签到<em>challenge 校验版流程与换 cookie 指引</em></a>
+<a class="" href="workbuddy.html">WorkBuddy 签到<em>签到 + 成长中心 + 任务自动完成</em></a>
+<a class="" href="faq.html">常见问题<em>排障速查</em></a>
+<a class="on" href="reference-api.html">API 参考<em>全部端点（自动同步）</em></a>
+<a class="" href="reference-mcp.html">MCP 工具<em>17 个工具与接入（自动同步）</em></a>
+<a class="" href="reference-security.html">安全说明<em>威胁与防护全表（自动同步）</em></a>
+<a class="" href="reference-glados.html">GLaDOS 详解<em>challenge 机制与排障（自动同步）</em></a>
+<a class="" href="reference-workbuddy.html">WorkBuddy 详解<em>接口与任务清单（自动同步）</em></a>
+<a class="" href="reference-agent.html">Agent 接入指南<em>给外部 Agent 什么（自动同步）</em></a>
+<a class="" href="reference-roadmap.html">路线图<em>版本计划（自动同步）</em></a>
+    </nav>
+    <div class="brand-sub" style="margin-top:18px"><a href="https://github.com/zqs1qiwan/CheckQ">GitHub 仓库 →</a></div>
+  </aside>
+  <main>
+<h1 id="checkq-rest-api-ai-ready-参考">CheckQ REST API — AI-ready 参考</h1>
+<blockquote>本文面向 Agent / MCP / 外部脚本。所有端点相对基址 <code>http://&lt;host&gt;:&lt;port&gt;</code>（默认 <code>8888</code>）。</blockquote>
+<blockquote>鉴权二选一：<strong>Cookie Session</strong>（<code>POST /api/login</code>）或 <strong>X-API-Key</strong>（<code>POST /api/system/apikey</code> 生成）。</blockquote>
+<blockquote>Content-Type: <code>application/json</code>。所有响应 JSON；错误统一 <code>{ error: string }</code> + HTTP 状态码。</blockquote>
+<h2 id="0-开放-api-给外部-agent-集成">0. 开放 API（给外部 Agent / 集成）</h2>
+<div class="table-wrap"><table><thead><tr><th>项</th><th>值</th></tr></thead><tbody><tr><td>基址</td><td><code>http://checkq.local:18888</code></td></tr><tr><td>接口索引</td><td><code>GET /api</code>（免登录，返回认证方式与端点清单）</td></tr><tr><td>机器可读描述</td><td><code>GET /api/openapi.json</code>（OpenAPI 3.1，Agent 可自动生成客户端）</td></tr><tr><td>认证</td><td>① <code>x-api-key: &lt;key&gt;</code>（推荐）② 会话 Cookie <code>qsid</code></td></tr><tr><td>Key 生成</td><td>设置 → API Key（可命名、选作用域、设回收日期；明文只显示一次）</td></tr><tr><td>作用域</td><td><code>read</code> 查看 / <code>run</code> 运行任务 / <code>write</code> 改配置；权限不足返回 403</td></tr><tr><td>回收日期</td><td>到期自动失效并从列表移除（过期请求返回 401「已过期并被回收」）</td></tr><tr><td>限流</td><td>登录 5 次/10 分钟（IP）+ 8 次/15 分钟（账号）；API 调用无固定限流</td></tr><tr><td>IP 名单</td><td>每把 Key 可设 <strong>IP 允许名单</strong>（CIDR）；另有<strong>全局 IP 黑名单</strong>（登录与 API Key 同时生效）；不名单外返回 403</td></tr></tbody></table></div>
+<p>最小示例：</p>
+<pre class="code"><code># 1) 只读 + 可运行 的 Key（面板生成）
+curl -H "x-api-key: cq_xxxx" http://checkq.local:18888/api/flows
+# 2) 跑一次签到
+curl -X POST -H "x-api-key: cq_xxxx" http://checkq.local:18888/api/flows/&lt;id&gt;/run
+# 3) 读人话日志（连续多次运行）
+curl -H "x-api-key: cq_xxxx" "http://checkq.local:18888/api/flows/&lt;id&gt;/logs?limit=200"</code></pre>
+<p>完整说明见 <code>docs/AGENT-ACCESS.md</code>。</p>
+<h2 id="1-鉴权">1. 鉴权</h2>
+<h3 id="post-api-login">POST /api/login</h3>
+<pre class="code"><code>{ "password": "..." }</code></pre>
+<p>响应：<code>{ ok: true }</code> + <code>Set-Cookie: qsid=...</code>（7 天有效）。登录失败 5 次/10 分钟 → 429。</p>
+<h3 id="post-api-logout">POST /api/logout</h3>
+<p>清除会话。</p>
+<h3 id="x-api-key-推荐给-agent-mcp">X-API-Key（推荐给 Agent/MCP）</h3>
+<pre class="code"><code>X-API-Key: &lt;key&gt;</code></pre>
+<p>通过 <code>POST /api/system/apikey</code>（需已登录）生成；重新生成后旧 Key 立即失效。<code>GET /api/system/settings</code> 返回 <code>{ hasApiKey, apiKey: "abcd1234…" }</code>（仅前 8 位）。</p>
+<h3 id="get-api-health">GET /api/health</h3>
+<pre class="code"><code>{ "ok": true, "version": "0.3.17" }</code></pre>
+<p>无需鉴权。</p>
+<h2 id="2-通用字段">2. 通用字段</h2>
+<ul><li><strong>Flow</strong>：<code>{ id, name, note, cron, timezone, enabled, jitterMinutes, vars, nodes, edges, notify, log, tplId, createdAt, updatedAt, lastRun, nextRunAt }</code></li><li><strong>Node</strong>：<code>{ id, type, name, x, y, config }</code></li><li><strong>Log config</strong>：<code>{ level: "all"|"failure"|"summary", record: "all"|"log"|"log-final", include: {reqHeaders,reqBody,resBody,varsSnapshot}, resBodyLimit, keywords: [{name,regex,from,into,stepId,negate}] }</code></li><li><strong>Run</strong>：<code>{ id, flowId, trigger, startedAt, finishedAt, status, durationMs, summary, vars, logs, finalMessage }</code></li><li><strong>StepLog</strong>：<code>{ stepId, index, name, type, ok, message, ms, missing, asserts, keywords, detail }</code></li></ul>
+<h2 id="3-端点清单">3. 端点清单</h2>
+<h3 id="系统">系统</h3>
+<div class="table-wrap"><table><thead><tr><th>方法</th><th>路径</th><th>说明</th></tr></thead><tbody><tr><td>GET</td><td>/api/health</td><td>健康</td></tr><tr><td>GET</td><td>/api/system/settings</td><td><code>{ hasApiKey, apiKey }</code></td></tr><tr><td>POST</td><td>/api/system/password</td><td><code>{ oldPassword, newPassword }</code></td></tr><tr><td>POST</td><td>/api/system/apikey</td><td>生成/重新生成 API Key，返回 <code>{ apiKey }</code></td></tr><tr><td>GET</td><td>/api/system/stats</td><td><code>{ flows, enabledScheduled, templates, todayRuns, todaySuccess, todayFailed, successRate, nextRunAt, queuedFlows, queueCount, runningCount, dailySummary }</code></td></tr><tr><td>GET/PUT</td><td>/api/system/ai</td><td>AI 助手配置（baseUrl/apiKey/model，key 打码回显）</td></tr><tr><td>POST</td><td>/api/ai/generate</td><td><code>{ sentence }</code> → LLM 生成流程草稿（≤6 节点，http URL 必填，草稿 enabled:false）</td></tr><tr><td>GET/PUT</td><td>/api/system/daily-summary-config</td><td>每日汇总定时配置</td></tr><tr><td>GET</td><td>/api/notifications?limit=</td><td>站内通知列表 <code>{ items, unread, total }</code></td></tr><tr><td>POST</td><td>/api/notifications/read</td><td>标记已读（body <code>{ ids? }</code>，省略=全部）</td></tr><tr><td>DELETE</td><td>/api/notifications</td><td>清空站内通知</td></tr><tr><td>POST</td><td>/api/system/daily-summary</td><td><code>{ flowId }</code> 立即发送汇总</td></tr><tr><td>GET/POST</td><td>/api/system/backup</td><td>导出/导入全部数据（restore 以新 ID 导入，停用）</td></tr></tbody></table></div>
+<h3 id="任务-flows">任务 (Flows)</h3>
+<div class="table-wrap"><table><thead><tr><th>方法</th><th>路径</th><th>说明</th></tr></thead><tbody><tr><td>GET</td><td>/api/flows</td><td>列表（摘要：id/name/note/cron/timezone/enabled/jitterMinutes/varsCount/nodesCount/tplId/lastRun/nextRunAt）</td></tr><tr><td>POST</td><td>/api/flows</td><td>创建（body = Flow 对象；空 nodes 允许，仅草稿）</td></tr><tr><td>GET</td><td>/api/flows/:id</td><td>详情（含 nodes/edges/vars/log/notify）</td></tr><tr><td>PUT</td><td>/api/flows/:id</td><td>更新（部分字段合并）</td></tr><tr><td>DELETE</td><td>/api/flows/:id</td><td>删除</td></tr><tr><td>POST</td><td>/api/flows/:id/run</td><td><code>{ stream?: bool }</code> 运行；stream=true → SSE（start/log/done）</td></tr><tr><td>POST</td><td>/api/flows/:id/clone</td><td>克隆为「·副本 N」，enabled:false</td></tr><tr><td>POST</td><td>/api/flows/:id/curl</td><td>生成等价 curl 命令（变量代入）</td></tr><tr><td>POST</td><td>/api/flows/batch</td><td>`{ action: run</td><td>enable</td><td>disable</td><td>delete, ids: [] }`</td></tr><tr><td>POST</td><td>/api/flows/:id/notify-test</td><td>测试通知渠道</td></tr></tbody></table></div>
+<h3 id="运行记录">运行记录</h3>
+<div class="table-wrap"><table><thead><tr><th>方法</th><th>路径</th><th>说明</th></tr></thead><tbody><tr><td>GET</td><td>/api/runs?flowId=&amp;limit=</td><td>列表（默认 limit 30，上限 200）</td></tr><tr><td>GET</td><td>/api/runs/:id</td><td>单条详情（完整 logs）</td></tr></tbody></table></div>
+<h3 id="模板">模板</h3>
+<div class="table-wrap"><table><thead><tr><th>方法</th><th>路径</th><th>说明</th></tr></thead><tbody><tr><td>GET</td><td>/api/templates</td><td>列表</td></tr><tr><td>POST</td><td>/api/templates</td><td>从流程创建模板 <code>{ flowId, name }</code></td></tr><tr><td>GET</td><td>/api/templates/:id</td><td>详情</td></tr><tr><td>PUT</td><td>/api/templates/:id</td><td>更新</td></tr><tr><td>DELETE</td><td>/api/templates/:id</td><td>删除</td></tr><tr><td>POST</td><td>/api/templates/:id/instantiate</td><td><code>{ vars? }</code> 实例化为任务</td></tr><tr><td>POST</td><td>/api/templates/:id/instantiate-csv</td><td>CSV 批量实例化</td></tr><tr><td>GET</td><td>/api/templates/:id/export</td><td>导出 JSON</td></tr><tr><td>POST</td><td>/api/templates/from-url</td><td>从 URL 导入模板索引</td></tr></tbody></table></div>
+<h3 id="导入">导入</h3>
+<div class="table-wrap"><table><thead><tr><th>方法</th><th>路径</th><th>说明</th></tr></thead><tbody><tr><td>POST</td><td>/api/import/curl</td><td><code>{ curl: "..." }</code> → 节点链</td></tr><tr><td>POST</td><td>/api/import/har</td><td>HAR 导入</td></tr></tbody></table></div>
+<h3 id="其他">其他</h3>
+<div class="table-wrap"><table><thead><tr><th>方法</th><th>路径</th><th>说明</th></tr></thead><tbody><tr><td>POST</td><td>/api/cookie-capture</td><td>浏览器登录抓 Cookie 回填</td></tr><tr><td>POST</td><td>/api/browser-login/start</td><td>启动浏览器登录</td></tr><tr><td>POST</td><td>/api/browser-login/capture</td><td>捕获 Cookie</td></tr></tbody></table></div>
+<h2 id="4-sse-运行协议">4. SSE 运行协议</h2>
+<p><code>POST /api/flows/:id/run</code> with <code>{ "stream": true }</code>：</p>
+<pre class="code"><code>event: start
+data: {"flowId":"...","name":"..."}
+
+event: log
+data: { "index":1, "name":"...", "type":"http", "ok":true, "message":"...", "ms":120, ... }
+
+event: done
+data: { "id":"run-xxx", "status":"success", "durationMs":..., "summary":"...", "logs":[...], "vars":{...} }</code></pre>
+<h3 id="账号-agent-接入">账号 / Agent 接入</h3>
+<div class="table-wrap"><table><thead><tr><th>方法</th><th>路径</th><th>说明</th></tr></thead><tbody><tr><td>GET</td><td>/api/me</td><td>当前登录身份（用户名/角色/是否启用 2FA）</td></tr><tr><td>PUT</td><td>/api/system/account</td><td>修改自己的用户名 / 显示名（改用户名需当前密码，改完强制重登）</td></tr><tr><td>POST</td><td>/api/system/password</td><td>修改自己的密码（需旧密码，改后其它会话失效）</td></tr><tr><td>GET</td><td>/api/system/sessions</td><td>我的会话列表</td></tr><tr><td>DELETE</td><td>/api/system/sessions/:id</td><td>吊销某个会话</td></tr><tr><td>POST</td><td>/api/system/logout-all</td><td>退出所有设备</td></tr><tr><td>GET</td><td>/api/system/users</td><td>用户列表（管理员）</td></tr><tr><td>POST</td><td>/api/system/users</td><td>新建用户（管理员）</td></tr><tr><td>PUT</td><td>/api/system/users/:id</td><td>改角色 / 停用（管理员）</td></tr><tr><td>POST</td><td>/api/system/users/:id/password</td><td>重置他人密码（管理员）</td></tr><tr><td>POST</td><td>/api/system/users/:id/2fa/reset</td><td>重置他人 2FA（管理员）</td></tr><tr><td>GET</td><td>/api/system/audit</td><td>审计日志（管理员）</td></tr><tr><td>GET</td><td>/api/system/apikeys</td><td>API Key 列表（含作用域）</td></tr><tr><td>POST</td><td>/api/system/apikeys</td><td>生成 API Key（可指定 scopes: read/run/write）</td></tr><tr><td>DELETE</td><td>/api/system/apikeys/:id</td><td>吊销 API Key</td></tr><tr><td>PUT</td><td>/api/system/apikeys/:id</td><td>改 Key（scopes / allowedIps / expiresAt / name）</td></tr><tr><td>GET</td><td>/api/system/ip-blocklist</td><td>全局 IP 黑名单（管理员）</td></tr><tr><td>PUT</td><td>/api/system/ip-blocklist</td><td>加入黑名单（body: { ip }，支持 CIDR）</td></tr><tr><td>DELETE</td><td>/api/system/ip-blocklist/:ip</td><td>移出黑名单</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>GET</th><th>/api/system/push-targets</th><th>可推送单位（带通知渠道的任务）</th></tr></thead><tbody><tr><td>GET</td><td>/api/system/backup</td><td>脱敏备份（凭据已清空）</td></tr><tr><td>POST</td><td>/api/system/backup</td><td>完整备份（需当前密码，含明文凭据）</td></tr></tbody></table></div>
+<h2 id="5-节点类型-8-种">5. 节点类型 (8 种)</h2>
+<div class="table-wrap"><table><thead><tr><th>type</th><th>config 关键字段</th></tr></thead><tbody><tr><td>http</td><td>method, url, headers[{name,value,enabled}], body, timeout(秒), backend(fetch\</td><td>curl), charset, proxy{url}, retry{times,backoffMs,retryOn}, asserts[]</td></tr><tr><td>condition</td><td>expr (jexl)</td></tr><tr><td>set</td><td>name, value</td></tr><tr><td>extract</td><td>mode(json\</td><td>header\</td><td>setCookie), path, name, optional</td></tr><tr><td>delay</td><td>seconds</td></tr><tr><td>random-delay</td><td>min, max</td></tr><tr><td>log</td><td>text (支持 <code>{{var}}</code> / <code>{{last.status}}</code>)</td></tr><tr><td>notify</td><td>channel(webhook\</td><td>telegram\</td><td>bark), message</td></tr><tr><td>script</td><td>code (JS 沙箱，vars/last/steps 可读，1s 超时)</td></tr><tr><td>foreach</td><td>source, itemVar, indexVar</td></tr><tr><td>delay</td><td>seconds</td></tr></tbody></table></div>
+<p>断言 asserts：<code>{ res: [regex], from: "content"|"status", negate }</code> 或 <code>{ expr, expect }</code>。</p>
+<h3 id="通知渠道-flow-notify-channels-12-种">通知渠道（flow.notify.channels[]，12 种）</h3>
+<div class="table-wrap"><table><thead><tr><th>type</th><th>关键字段</th></tr></thead><tbody><tr><td>inbox</td><td>title（站内通知，无需外部服务）</td></tr><tr><td>webhook</td><td>url</td></tr><tr><td>bark</td><td>url, title, group</td></tr><tr><td>telegram</td><td>token, chat</td></tr><tr><td>serverchan</td><td>key, title</td></tr><tr><td>pushplus</td><td>token, title</td></tr><tr><td>dingtalk</td><td>url, secret?, title</td></tr><tr><td>wecom</td><td>url</td></tr><tr><td>feishu</td><td>url, secret?</td></tr><tr><td>gotify</td><td>url, token, priority</td></tr><tr><td>ntfy</td><td>url, topic, priority</td></tr><tr><td>email</td><td>host, port, user, pass, from, to, subject</td></tr></tbody></table></div>
+<h2 id="6-模板变量语法">6. 模板变量语法</h2>
+<p><code>{{var}}</code>、过滤器 <code>{{x|urlencode}}</code>、函数 <code>timestamp</code> / <code>now:%Y-%m-%d</code>、jexl 表达式 <code>{{last.json.code == 0}}</code>。</p>
+<h2 id="7-错误码">7. 错误码</h2>
+<div class="table-wrap"><table><thead><tr><th>HTTP</th><th>含义</th></tr></thead><tbody><tr><td>400</td><td>参数/校验失败（validateFlow、空流程等）</td></tr><tr><td>401</td><td>未登录 / API Key 无效</td></tr><tr><td>404</td><td>资源不存在</td></tr><tr><td>429</td><td>登录防爆破（5 次/10 分钟）</td></tr><tr><td>500</td><td>引擎异常（成环、节点类型未知等）</td></tr></tbody></table></div>
+<h2 id="8-agent-调用最小示例">8. Agent 调用最小示例</h2>
+<pre class="code"><code># 1. 生成 API Key（先用密码登录一次）
+curl -s -c cq.txt -X POST http://host:8888/api/login -H 'Content-Type: application/json' -d '{"password":"..."}'
+curl -s -b cq.txt -X POST http://host:8888/api/system/apikey
+
+# 2. 用 Key 跑任务
+curl -s -H 'X-API-Key: &lt;key&gt;' http://host:8888/api/flows
+curl -s -H 'X-API-Key: &lt;key&gt;' -X POST http://host:8888/api/flows/&lt;id&gt;/run</code></pre>
+    <div class="foot">CheckQ 文档 · 由 <code>tools/build-wiki.cjs</code> 从 <code>docs/</code> 生成 · <a href="https://github.com/zqs1qiwan/CheckQ/issues">反馈问题</a></div>
+  </main>
+</div>
+</body>
+</html>

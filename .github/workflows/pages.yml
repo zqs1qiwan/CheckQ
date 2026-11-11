@@ -1,0 +1,48 @@
+name: 文档站 (GitHub Pages)
+
+# 把 docs/ 与 tools/build-wiki.cjs 生成的静态站发布到 GitHub Pages
+# 开启：仓库 Settings → Pages → Source: GitHub Actions
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/build-wiki.cjs'
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 构建文档站
+        run: node tools/build-wiki.cjs
+      - name: 校验产物
+        run: test -f wiki/index.html && test -f wiki/assets/style.css
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: wiki
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

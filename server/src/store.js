@@ -18,9 +18,11 @@ export class Store {
     this.runsFile = path.join(dataDir, 'runs.json');
     this.metaFile = path.join(dataDir, 'meta.json');
     this.templatesFile = path.join(dataDir, 'templates.json');
+    this.notificationsFile = path.join(dataDir, 'notifications.json');
     this.flows = this.#load(this.flowsFile, []);
     this.runs = this.#load(this.runsFile, []);
     this.templates = this.#load(this.templatesFile, []);
+    this.notifications = this.#load(this.notificationsFile, []);
     this.meta = this.#load(this.metaFile, {});
     if (!this.meta.passwordHash) {
       const pwd = process.env.ADMIN_PASSWORD || crypto.randomBytes(9).toString('base64url');
@@ -52,6 +54,7 @@ export class Store {
     this.#save(this.flowsFile, this.flows);
     this.#save(this.runsFile, this.runs);
     this.#save(this.templatesFile, this.templates);
+    this.#save(this.notificationsFile, this.notifications);
     this.#save(this.metaFile, this.meta);
   }
 
@@ -261,6 +264,48 @@ export class Store {
 
   getRun(id) {
     return this.runs.find((r) => r.id === id) || null;
+  }
+
+  // ---- notifications（站内通知，qinglong 风格“应用内消息”） ----
+  addNotification({ title, content, level = 'info', flowId = null, flowName = '' }) {
+    const n = {
+      id: crypto.randomUUID(),
+      title: String(title || 'CheckQ 通知').slice(0, 200),
+      content: String(content || '').slice(0, 8000),
+      level: ['info', 'success', 'fail'].includes(level) ? level : 'info',
+      flowId, flowName,
+      read: false,
+      createdAt: Date.now(),
+    };
+    this.notifications.unshift(n);
+    if (this.notifications.length > 200) this.notifications = this.notifications.slice(0, 200);
+    this.flush();
+    return n;
+  }
+
+  listNotifications(limit = 50) {
+    return {
+      items: this.notifications.slice(0, Math.max(1, Math.min(200, Number(limit) || 50))),
+      unread: this.notifications.filter((n) => !n.read).length,
+      total: this.notifications.length,
+    };
+  }
+
+  markNotificationsRead(ids) {
+    const set = Array.isArray(ids) && ids.length ? new Set(ids) : null;
+    let n = 0;
+    for (const item of this.notifications) {
+      if (!item.read && (!set || set.has(item.id))) { item.read = true; n++; }
+    }
+    this.flush();
+    return n;
+  }
+
+  clearNotifications() {
+    const n = this.notifications.length;
+    this.notifications = [];
+    this.flush();
+    return n;
   }
 
   /** 运维统计（首页健康条）：任务/调度/今日运行/成功率/下次触发 */

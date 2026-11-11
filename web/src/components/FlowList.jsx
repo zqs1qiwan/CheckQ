@@ -159,6 +159,8 @@ export default function FlowList({ onOpen, onLogout }) {
   const [filter, setFilter] = useState('all'); // all | scheduled | recent-failed
   const [stats, setStats] = useState(null);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
   const [selected, setSelected] = useState(new Set());
   const [batchBusy, setBatchBusy] = useState(false);
   const [batchMode, setBatchMode] = useState(false); // 批量管理开关：勾选列默认隐藏，不干扰日常阅读
@@ -177,6 +179,15 @@ export default function FlowList({ onOpen, onLogout }) {
   // 首次访问自动打开一次使用引导
   useEffect(() => {
     try { if (!localStorage.getItem('checkq-guide-seen')) setGuideOpen(true); } catch {}
+  }, []);
+
+  // 站内通知未读数（30s 轮询，失败静默）
+  useEffect(() => {
+    let alive = true;
+    const tick = () => api.notifications(1).then((r) => { if (alive) setUnread(r.unread || 0); }).catch(() => {});
+    tick();
+    const timer = setInterval(tick, 30000);
+    return () => { alive = false; clearInterval(timer); };
   }, []);
 
   // 搜索 + 筛选（PRD 4.4）
@@ -320,6 +331,9 @@ export default function FlowList({ onOpen, onLogout }) {
           </div>
         </details>
         <ThemeToggle />
+        <button className="iconbtn bell-btn" onClick={() => setNotifOpen(true)} title="站内通知" aria-label="站内通知">
+          🔔{unread > 0 && <span className="bell-dot">{unread > 99 ? '99+' : unread}</span>}
+        </button>
         <button className="iconbtn" onClick={() => setGuideOpen(true)} title="使用引导：3 步上手 / 日志 / 通知 / 常见问题" aria-label="使用引导">?</button>
         <input
           ref={fileRef} type="file" accept=".har,.json" style={{ display: 'none' }}
@@ -554,6 +568,10 @@ export default function FlowList({ onOpen, onLogout }) {
 
       {modal === 'settings' && (
         <SettingsModal onClose={() => setModal(null)} />
+      )}
+
+      {notifOpen && (
+        <NotificationsModal onClose={() => { setNotifOpen(false); api.notifications(1).then((r) => setUnread(r.unread || 0)).catch(() => {}); }} />
       )}
 
       {guideOpen && (
@@ -849,6 +867,47 @@ function CsvImportModal({ tpl, onClose, onDone }) {
 }
 
 /** 系统设置：改密 + API Key */
+function NotificationsModal({ onClose }) {
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = () => api.notifications(100).then(setData).catch(() => setData({ items: [], unread: 0, total: 0 }));
+  useEffect(() => { load(); }, []);
+  const markAll = async () => { setBusy(true); try { await api.markNotificationsRead(); await load(); } finally { setBusy(false); } };
+  const clearAll = async () => {
+    if (!confirm('清空全部站内通知？')) return;
+    setBusy(true);
+    try { await api.clearNotifications(); await load(); } finally { setBusy(false); }
+  };
+  const fmt = (ts) => new Date(ts).toLocaleString('zh-CN');
+  return (
+    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal notif-modal">
+        <h3>站内通知{data ? `（${data.total} 条 · 未读 ${data.unread}）` : ''}</h3>
+        <p className="notif-hint">任务通知渠道选「站内通知」时，消息会出现在这里；无需任何外部服务。</p>
+        <div className="notif-list">
+          {data && data.items.length === 0 && <div className="notif-empty">还没有通知。到任务的「通知渠道」里添加「站内通知」，运行后即可在这里看到结果。</div>}
+          {data && data.items.map((n) => (
+            <div key={n.id} className={`notif-item${n.read ? '' : ' unread'}`}>
+              <div className="notif-item-head">
+                <span className={`dot ${n.level}`} />
+                <strong>{n.title}</strong>
+                <span className="notif-time">{fmt(n.createdAt)}</span>
+              </div>
+              <div className="notif-content">{n.content}</div>
+              {n.flowName && <div className="notif-flow">来自任务：{n.flowName}</div>}
+            </div>
+          ))}
+        </div>
+        <div className="btn-row" style={{ marginTop: 12 }}>
+          <button className="primary" onClick={markAll} disabled={busy || !data?.unread}>全部已读</button>
+          <button className="danger" onClick={clearAll} disabled={busy || !data?.total}>清空</button>
+          <button onClick={onClose}>关闭</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SettingsModal({ onClose }) {
   const [tab, setTab] = useState('general');
   const [oldPw, setOldPw] = useState('');

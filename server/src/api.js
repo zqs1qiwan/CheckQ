@@ -1,4 +1,4 @@
-/**
+﻿/**
  * CheckQ API server — Fastify
  * 认证: cookie session + 可选 X-API-Key（自动化）
  * run 接口: 同步返回完整结果（流程通常 < 60s）
@@ -11,6 +11,8 @@ import multipart from '@fastify/multipart';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import net from 'node:net';
+import tls from 'node:tls';
 import { fileURLToPath } from 'node:url';
 
 import { Store, hashPwd, verifyPwd } from './store.js';
@@ -111,7 +113,7 @@ export function buildServer({ dataDir, port }) {
     const fire = (run.status === 'success' && n.onSuccess) || (run.status === 'failed' && n.onFailure);
     if (!fire || !n.channels?.length) return;
     const text = renderNotifyTemplate(n, flow, run);
-    return sendToChannels(n.channels, text);
+    return sendToChannels(n.channels, text, { flowId: flow.id, flowName: flow.name, status: run.status });
   }
 
   runner.sendDailySummary = async () => {
@@ -123,7 +125,7 @@ export function buildServer({ dataDir, port }) {
     }
     const s = store.stats();
     const text = `每日汇总：今日 ${s.todayRuns} 次（成功 ${s.todaySuccess} / 失败 ${s.todayFailed}，成功率 ${s.successRate ?? '—'}%）；任务 ${s.flows}，调度中 ${s.enabledScheduled}，下次 ${s.nextRunAt ? new Date(s.nextRunAt).toLocaleString('zh-CN') : '—'}`;
-    const results = await sendToChannels(target.notify.channels, text);
+    const results = await sendToChannels(target.notify.channels, text, { flowId: target.id, flowName: target.name, status: 'success' });
     console.log(`[CheckQ] dailySummary 已发送 ${results.filter((x) => x.ok).length}/${results.length} 渠道`);
     return { text, results };
   };
@@ -203,13 +205,47 @@ export function buildServer({ dataDir, port }) {
     }
   });
 
-  async function sendToChannels(channels, text) {
+  async function sendToChannels(channels, text, ctx = {}) {
     const results = [];
     for (const ch of channels || []) {
       try {
         if (ch.type === 'webhook') {
           const res = await fetch(ch.url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: text, signal: AbortSignal.timeout(15000) });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } else if (ch.type === 'inbox') {
+          store.addNotification({
+            title: ch.title || `${ctx.flowName || 'CheckQ'} ${ctx.status === 'failed' ? '失败' : '通知'}`,
+            content: text, level: ctx.status === 'failed' ? 'fail' : 'success',
+            flowId: ctx.flowId || null, flowName: ctx.flowName || '',
+          });
+        } else if (ch.type === 'pushplus') {
+          const res = await fetch('https://www.pushplus.plus/send', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ token: String(ch.token || '').trim(), title: ch.title || 'CheckQ 通知', content: text, template: ch.template || 'txt' }),
+            signal: AbortSignal.timeout(15000),
+          });
+          const j = await res.json().catch(() => ({}));
+          if (!res.ok || (j.code !== undefined && j.code !== 200)) throw new Error(`HTTP ${res.status} code=${j.code} ${j.msg || ''}`);
+        } else if (ch.type === 'gotify') {
+          const base = String(ch.url || '').replace(/\/+$/, '');
+          const res = await fetch(`${base}/message?token=${encodeURIComponent(ch.token || '')}`, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ title: ch.title || 'CheckQ', message: text, priority: Number(ch.priority) || 5 }),
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } else if (ch.type === 'ntfy') {
+          const base = String(ch.url || 'https://ntfy.sh').replace(/\/+$/, '');
+          const topic = String(ch.topic || '').trim();
+          if (!topic) throw new Error('缺少 topic');
+          const res = await fetch(`${base}/${encodeURIComponent(topic)}`, {
+            method: 'POST',
+            headers: { 'content-type': 'text/plain; charset=utf-8', Title: ch.title || 'CheckQ', Priority: String(ch.priority || 'default') },
+            body: text, signal: AbortSignal.timeout(15000),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } else if (ch.type === 'email') {
+          await smtpSend(ch, ch.subject || ch.title || '[CheckQ] 通知', text);
         } else if (ch.type === 'telegram') {
           const res = await fetch(`https://api.telegram.org/bot${ch.token}/sendMessage`, {
             method: 'POST', headers: { 'content-type': 'application/json' },
@@ -280,6 +316,100 @@ export function buildServer({ dataDir, port }) {
     const sign = encodeURIComponent(crypto.createHmac('sha256', ch.secret).update(`${ts}\n${ch.secret}`).digest('base64'));
     const sep = url.includes('?') ? '&' : '?';
     return `${url}${sep}timestamp=${ts}&sign=${sign}`;
+  }
+
+  /**
+   * 极简 SMTP 发信（零依赖）：支持 465 隐式 TLS / 587 STARTTLS / AUTH LOGIN。
+   * ch: { host, port, secure, user, pass, from, to }
+   */
+  function smtpSend(ch, subject, text) {
+    const host = String(ch.host || '').trim();
+    const port = Number(ch.port) || 465;
+    const from = String(ch.from || ch.user || '').trim();
+    const to = String(ch.to || '').trim();
+    if (!host || !from || !to) return Promise.reject(new Error('缺少 host/from/to'));
+    const implicitTLS = ch.secure === true || (ch.secure !== false && port === 465);
+
+    return new Promise((resolve, reject) => {
+      let socket = implicitTLS
+        ? tls.connect({ host, port, servername: host })
+        : net.connect({ host, port });
+      let buf = '';
+      let collect = [];
+      const waiters = [];
+      let settled = false;
+
+      const fail = (err) => { if (settled) return; settled = true; try { socket.destroy(); } catch {} reject(err); };
+      const done = (val) => { if (settled) return; settled = true; try { socket.end(); } catch {} resolve(val); };
+
+      const attach = (s) => {
+        s.setEncoding('utf8');
+        s.setTimeout(20000, () => fail(new Error('SMTP 超时')));
+        s.on('data', (d) => { buf += d; pump(); });
+        s.on('error', fail);
+      };
+      const pump = () => {
+        let idx;
+        while ((idx = buf.indexOf('\r\n')) !== -1) {
+          const line = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          if (/^\d{3}-/.test(line)) { collect.push(line); continue; }
+          const full = [...collect, line].join('\n');
+          collect = [];
+          const w = waiters.shift();
+          if (w) w(null, full);
+        }
+      };
+      const read = () => new Promise((res, rej) => {
+        waiters.push((e, v) => (e ? rej(e) : res(v)));
+        // 超时兜底
+        setTimeout(() => { const i = waiters.indexOf(waiters[waiters.length - 1]); if (i === -1 && !settled) rej(new Error('SMTP 响应超时')); }, 20000);
+      });
+      const cmd = async (line) => { socket.write(line + '\r\n'); return read(); };
+      const expect = (resp, code, what) => {
+        if (!resp || !resp.startsWith(String(code))) throw new Error(`${what} 失败: ${String(resp || '').split('\n').pop()}`);
+        return resp;
+      };
+
+      attach(socket);
+      (async () => {
+        expect(await read(), 220, '连接');
+        let ehlo = await cmd('EHLO checkq.local');
+        if (!implicitTLS && /STARTTLS/i.test(ehlo)) {
+          expect(await cmd('STARTTLS'), 220, 'STARTTLS');
+          const plain = socket;
+          plain.removeAllListeners('data');
+          socket = tls.connect({ socket: plain, servername: host });
+          attach(socket);
+          ehlo = await cmd('EHLO checkq.local');
+        }
+        if (ch.user) {
+          expect(await cmd('AUTH LOGIN'), 334, 'AUTH LOGIN');
+          expect(await cmd(Buffer.from(String(ch.user)).toString('base64')), 334, 'AUTH 用户名');
+          expect(await cmd(Buffer.from(String(ch.pass || '')).toString('base64')), 235, 'AUTH 密码');
+        }
+        expect(await cmd(`MAIL FROM:<${from}>`), 250, 'MAIL FROM');
+        for (const rcpt of to.split(/[,;]\s*/).filter(Boolean)) expect(await cmd(`RCPT TO:<${rcpt}>`), 250, 'RCPT TO');
+        expect(await cmd('DATA'), 354, 'DATA');
+        const bodyB64 = Buffer.from(text, 'utf8').toString('base64').replace(/(.{76})/g, '$1\r\n');
+        const msg = [
+          `From: <${from}>`,
+          `To: <${to}>`,
+          `Subject: =?UTF-8?B?${Buffer.from(subject, 'utf8').toString('base64')}?=`,
+          `Date: ${new Date().toUTCString()}`,
+          'MIME-Version: 1.0',
+          'Content-Type: text/plain; charset=UTF-8',
+          'Content-Transfer-Encoding: base64',
+          '',
+          bodyB64,
+          '.',
+        ].join('\r\n');
+        socket.write(msg + '\r\n');
+        expect(await read(), 250, '发送正文');
+        await cmd('QUIT').catch(() => '');
+        done('sent');
+      })().catch(fail);
+    });
   }
 
   const scheduler = new Scheduler(store, runner);
@@ -435,7 +565,7 @@ export function buildServer({ dataDir, port }) {
     if (!n.channels?.length) return reply.code(400).send({ error: '该任务未配置通知渠道' });
     const testRun = { status: 'success', finalMessage: '测试通知（CheckQ）', durationMs: 0, startedAt: Date.now(), logs: [] };
     const text = renderNotifyTemplate({ ...n, template: n.template || '测试通知：[CheckQ] {{flow.name}} {{status}}' }, f, testRun);
-    const results = await sendToChannels(n.channels, text);
+    const results = await sendToChannels(n.channels, text, { flowId: f.id, flowName: f.name, status: 'success' });
     const failed = results.filter((r) => !r.ok);
     if (failed.length) return reply.code(502).send({ error: `部分渠道失败：${failed.map((x) => `${x.type}:${x.error}`).join('；')}`, results });
     return { ok: true, results, text };
@@ -449,7 +579,7 @@ export function buildServer({ dataDir, port }) {
       const n = target.notify || {};
       if (!n.channels?.length) return reply.code(400).send({ error: '该任务未配置通知渠道' });
       const text = `每日汇总：今日 ${s.todayRuns} 次（成功 ${s.todaySuccess} / 失败 ${s.todayFailed}，成功率 ${s.successRate ?? '—'}%）；任务 ${s.flows}，调度中 ${s.enabledScheduled}，下次 ${s.nextRunAt ? new Date(s.nextRunAt).toLocaleString('zh-CN') : '—'}`;
-      const results = await sendToChannels(n.channels, text);
+      const results = await sendToChannels(n.channels, text, { flowId: target.id, flowName: target.name, status: 'success' });
       return { ok: results.every((r) => r.ok), text, results };
     }
     return { ok: true, stats: s };
@@ -717,8 +847,16 @@ export function buildServer({ dataDir, port }) {
   // ---- runs ----
   app.get('/api/system/stats', async () => {
     const s = store.stats();
-    return { ...s, queuedFlows: [...runningFlows, ...queuedSet], queueCount: queuedSet.size, runningCount: runningFlows.size, dailySummary: store.meta.dailySummary || null };
+    return { ...s, queuedFlows: [...runningFlows, ...queuedSet], queueCount: queuedSet.size, runningCount: runningFlows.size, dailySummary: store.meta.dailySummary || null, unreadNotifications: store.listNotifications(1).unread };
   });
+
+  // 站内通知（inbox 渠道）：列表 / 已读 / 清空
+  app.get('/api/notifications', async (req) => store.listNotifications((req.query || {}).limit));
+  app.post('/api/notifications/read', async (req) => {
+    const { ids } = req.body || {};
+    return { ok: true, updated: store.markNotificationsRead(ids) };
+  });
+  app.delete('/api/notifications', async () => ({ ok: true, cleared: store.clearNotifications() }));
 
   app.get('/api/system/daily-summary-config', async () => store.meta.dailySummary || { enabled: false, time: '08:00', timezone: 'Asia/Shanghai', targetFlowId: null });
   app.put('/api/system/daily-summary-config', async (req, reply) => {

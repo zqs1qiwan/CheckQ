@@ -40,13 +40,17 @@ check('登录成功', login.statusCode === 200);
 const cookie = (login.headers['set-cookie'] || '').split(';')[0];
 
 const channels = [
+  { type: 'inbox', title: '站内测试' },
   { type: 'webhook', url: 'http://127.0.0.1:9/echo' },
   { type: 'bark', url: 'https://day.app/abc', title: 'CheckQ' },
   { type: 'telegram', token: '123:abc', chat: '-100123' },
   { type: 'serverchan', key: 'SCT123' },
+  { type: 'pushplus', token: 'PP123', title: 'CheckQ' },
   { type: 'dingtalk', url: 'https://oapi.dingtalk.com/robot/send?access_token=x', secret: 'SEC123' },
   { type: 'wecom', url: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=x' },
   { type: 'feishu', url: 'https://open.feishu.cn/open-apis/bot/v2/hook/x', secret: 'SEC456' },
+  { type: 'gotify', url: 'https://gotify.example.com', token: 'GT123', priority: 8 },
+  { type: 'ntfy', url: 'https://ntfy.sh', topic: 'checkq-test', priority: 'high' },
 ];
 
 const created = await app.inject({
@@ -59,7 +63,7 @@ const flow = created.json();
 const r = await app.inject({ method: 'POST', url: `/api/flows/${flow.id}/notify-test`, headers: { cookie } });
 check('notify-test 返回 200', r.statusCode === 200, r.body);
 const results = r.json().results || [];
-check('7 个渠道全部 ok', results.length === 7 && results.every((x) => x.ok), JSON.stringify(results));
+check('11 个渠道全部 ok', results.length === 11 && results.every((x) => x.ok), JSON.stringify(results));
 
 const byHost = (h) => calls.find((c) => c.url.includes(h));
 const webhook = byHost('127.0.0.1:9');
@@ -76,6 +80,14 @@ const wc = byHost('qyapi.weixin.qq.com');
 check('wecom markdown content', wc && wc.opts.body.includes('notify-test') && wc.opts.body.includes('markdown'), wc && wc.opts.body);
 const feishu = byHost('open.feishu.cn');
 check('feishu text + 签名', feishu && feishu.opts.body.includes('notify-test') && feishu.url.includes('sign='), feishu && feishu.url);
+const pp = byHost('pushplus.plus');
+check('pushplus token+content', pp && pp.opts.body.includes('PP123') && pp.opts.body.includes('notify-test'), pp && pp.opts.body);
+const gt = byHost('gotify.example.com');
+check('gotify /message?token + priority', gt && gt.url.includes('/message?token=GT123') && gt.opts.body.includes('"priority":8'), gt && gt.url + ' ' + (gt && gt.opts.body));
+const ntfy = byHost('ntfy.sh');
+check('ntfy topic + Title header', ntfy && ntfy.url.endsWith('/checkq-test') && ntfy.opts.headers && ntfy.opts.headers.Title === 'CheckQ', ntfy && ntfy.url + ' ' + JSON.stringify(ntfy && ntfy.opts.headers));
+const inbox = server.store.listNotifications(5);
+check('inbox 站内通知落库', inbox.total === 1 && inbox.items[0].content.includes('notify-test'), JSON.stringify(inbox));
 
 // 失败渠道要回 502
 calls.length = 0;

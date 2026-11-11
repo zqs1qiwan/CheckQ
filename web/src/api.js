@@ -111,4 +111,7 @@ export const api = {
   browserLoginCapture: (flowId, tabId) => req('POST', '/api/browser-login/capture', { flowId, tabId }),
   backup: () => req('GET', '/api/system/backup'),
   restore: (body) => req('POST', '/api/system/restore', body),
+  notifications: (limit = 50) => req('GET', `/api/notifications?limit=${limit}`),
+  markNotificationsRead: (ids) => req('POST', '/api/notifications/read', ids ? { ids } : {}),
+  clearNotifications: () => req('DELETE', '/api/notifications'),
 };

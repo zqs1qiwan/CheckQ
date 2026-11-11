@@ -723,22 +723,32 @@ function NotifyModal({ flow, onClose, onSaved, onToast }) {
   const [testResult, setTestResult] = useState(null);
 
   const TYPES = [
+    ['inbox', '站内通知（无需外部服务）'],
     ['webhook', 'Webhook（通用 JSON）'],
     ['bark', 'Bark（iOS）'],
     ['telegram', 'Telegram Bot'],
     ['serverchan', 'Server酱 Turbo'],
+    ['pushplus', 'PushPlus（微信）'],
     ['dingtalk', '钉钉机器人'],
     ['wecom', '企业微信机器人'],
     ['feishu', '飞书机器人'],
+    ['gotify', 'Gotify（自建推送）'],
+    ['ntfy', 'ntfy（自建/公共）'],
+    ['email', '邮件（SMTP）'],
   ];
   const FIELDS = {
+    inbox: [['title', '标题（可选）']],
     webhook: [['url', 'URL']],
     bark: [['url', '服务器 URL'], ['title', '标题'], ['group', '分组（可选）']],
     telegram: [['token', 'Bot Token'], ['chat', 'Chat ID']],
     serverchan: [['key', 'SendKey'], ['title', '标题']],
+    pushplus: [['token', 'PushPlus Token'], ['title', '标题']],
     dingtalk: [['url', 'Webhook URL'], ['secret', '加签密钥（可选）'], ['title', '标题']],
     wecom: [['url', 'Webhook URL']],
     feishu: [['url', 'Webhook URL'], ['secret', '签名密钥（可选）']],
+    gotify: [['url', '服务器地址（如 https://gotify.example.com）'], ['token', 'App Token'], ['priority', '优先级（1-10）']],
+    ntfy: [['url', '服务器（默认 https://ntfy.sh）'], ['topic', 'Topic'], ['priority', '优先级（min/low/default/high/urgent）']],
+    email: [['host', 'SMTP 服务器'], ['port', '端口（465/587）'], ['user', '用户名'], ['pass', '密码/授权码'], ['from', '发件人'], ['to', '收件人（多个用逗号）'], ['subject', '主题']],
   };
 
   const patch = (i, k, v) => setChannels(channels.map((c, j) => (j === i ? { ...c, [k]: v } : c)));
@@ -777,8 +787,8 @@ function NotifyModal({ flow, onClose, onSaved, onToast }) {
         </div>
         {channels.length === 0 && (
           <div className="notify-empty">
-            还没有通知渠道。点下方「+ 添加渠道」选择类型（Webhook / Bark / Telegram / Server酱 / 钉钉 / 企业微信 / 飞书），
-            填好地址后可用「测试发送」验证。
+            还没有通知渠道。点下方「+ 添加渠道」选择类型（站内通知 / Webhook / Bark / Telegram / Server酱 / PushPlus / 钉钉 / 企业微信 / 飞书 / Gotify / ntfy / 邮件），
+            填好地址后可用「测试发送」验证。站内通知不需要任何外部服务，消息会显示在首页 🔔。
           </div>
         )}
         {channels.map((c, i) => (

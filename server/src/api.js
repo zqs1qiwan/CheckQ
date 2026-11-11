@@ -614,6 +614,19 @@ export function buildServer({ dataDir, port }) {
 
   // 当前登录信息（供前端显示用户名/角色）
   app.get('/api/me', async (req) => {
+    // API Key 调用方（外部 Agent）：返回 key 身份与权限范围
+    if (req.apiKey) {
+      return {
+        authenticated: true,
+        via: 'api-key',
+        apiKey: { prefix: req.apiKey.prefix, name: req.apiKey.name, scopes: req.apiKeyScopes || [] },
+        permissions: {
+          read: true,
+          run: (req.apiKeyScopes || []).includes('run'),
+          write: (req.apiKeyScopes || []).includes('write'),
+        },
+      };
+    }
     const sess = currentSession(req);
     if (!sess) return { authenticated: false };
     const user = store.getUser(sess.userId);

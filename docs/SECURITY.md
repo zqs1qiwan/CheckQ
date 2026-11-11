@@ -173,7 +173,77 @@ ssh root@checkq.local 'docker exec checkq node -e "
 - **绑定 2FA**：设置 → 账号安全 → 两步验证 → 开始绑定（保存密钥与恢复码）；
 - **加 API Key 给外部脚本**：设置 → API Key → 生成（明文只显示一次）。
 
-## 12. 自测
+## 12. 签到凭据（cookie / token / 脚本）怎么存、怎么保安全
+
+> 调研对象：`binux/qiandao`（`db/user.py`、`db/task.py`、`web/handlers/task.py`、`libs/mcrypto.py`）、`whyour/qinglong`（`back/services/env.ts`、`back/config/index.ts`）。
+
+### 13.1 三个产品怎么存「签到资源」
+
+| 维度 | qiandao（签到） | qinglong（青龙） | CheckQ（本项目） |
+|---|---|---|---|
+| 凭据载体 | 每个任务的 `init_env`（cookie/变量） | 「环境变量」表（JD_COOKIE 等）+ 导出 `.env` | 流程变量 `flow.vars` + 通知渠道 `flow.notify.channels` |
+| **静态加密** | ✅ **AES-CBC 加密入库**；密钥 = 用户 `userkey`（由密码 PBKDF2 派生，再用全局 `aes_key` 加密保存） | ❌ **明文入库**，并额外导出明文 `shell/preload/env.sh` / `env.js` / `env.py` 给脚本 `source` | ✅ **AES-256-GCM 加密落盘**（`enc:v1:`），密钥在 `data/.secret`（600）或环境变量 `CHECKQ_SECRET` |
+| 密钥与密码绑定 | ✅ 绑定（改密码 ⇒ 旧 cookie 密文解不开，需重填） | ❌ 无（明文） | ❌ 不绑定（改密码不影响凭据），但**改密码会吊销全部会话** |
+| 脚本/代码 | 模板 `tpl['tpl']` 也加密存储 | 脚本是**文件**（`data/scripts/`），非秘密 | 脚本节点代码在 `flows.json`（明文，代码不是秘密） |
+| 共享模板 | 公共模板用**全局同一把**密钥（弱一点） | 公共 env 明文 | 模板默认变量导出时**脱敏** |
+| 日志脱敏 | 失败信息入库（`tasklog.msg`） | 有日志系统 | ✅ 运行日志/变量快照自动脱敏（cookie/authorization 保留前 12 字符） |
+| 备份 | DB 备份 | `data.tgz`（含明文 env） | ✅ **备份默认脱敏**；完整备份需再输一次当前密码 |
+| 密钥文件保护 | `userkey` 用全局 `aes_key` 加密 | `auth.json`/`env.sh` 在 `blackFileList`（脚本不可读写） | `data/.secret` 600 权限，不在任何 API 返回里 |
+
+### 13.2 我们的做法（已实现）
+
+**加密范围**（`server/src/secret.js`）：
+- **变量**：名字命中 `cookie|token|sess|auth|password|passwd|secret|api_key|credential|jwt|bearer|refresh`，或值形态像凭据（长 base64/hex、JWT `eyJ…`、含 `sess=`/`token=` 的 cookie 串）→ 加密；
+- **通知渠道**：`token / key / pass / password / secret / url / user` 等字段 → 加密（Telegram bot token、SMTP 密码、webhook URL 里的签名都在内）；
+- **不加密**：普通变量（如 `ua`、`site`）、流程图、脚本代码、日志记录 —— 保持可读、可 diff、可 grep。
+
+**工作方式**：
+- 内存里保持**明文**（面板要能编辑、引擎要能渲染 `{{var}}`），**写盘前加密、读盘自动解密**；
+- 旧版本数据是明文 → 读入时原样读出，下次写入自动变成密文（**渐进迁移**，无需手工迁移）；
+- AES-256-GCM 带认证标签：密文被篡改会解密失败（返回空值而不是泄露密文）。
+
+**密钥管理**：
+- 优先用环境变量 `CHECKQ_SECRET`（≥8 位，内部按 sha256 派生 32 字节密钥）；
+- 否则首次启动生成 `data/.secret`（32 字节随机，权限 600），**永不入库、不进备份、不出现在任何 API 响应里**；
+- ⚠️ 换密钥后旧密文解不开（返回空值）→ 需要重新填一次 cookie；换密钥前请先用「完整备份」留档。
+
+**导出与分享**：
+- `GET /api/system/backup` → **脱敏**（敏感变量清空、渠道密钥 `***`），可安全分享/存档；
+- `POST /api/system/backup { password }` → **含明文凭据**的完整包，用于自己迁移（需再次输密码，防误下载/误分享）；
+- `GET /api/templates/:id/export` → 模板变量里的敏感项清空；
+- 面板「备份 / 完整备份」两个按钮对应上面两档。
+
+**运行时保护**：
+- 运行日志与变量快照对 `cookie`/`authorization` 等头自动脱敏；
+- 登录日志不记录凭据；审计日志只记动作与账号，不记值；
+- 数据目录文件权限已收紧为 `600`（`meta.json / flows.json / runs.json / templates.json / notifications.json`）。
+
+### 13.3 与两者相比，我们更强 / 更弱的地方
+
+**更强**：
+1. 凭据静态加密（AES-256-GCM）+ 认证标签 —— qiandao 用的是 AES-CBC（无认证标签），qinglong 干脆明文；
+2. 备份默认脱敏，完整备份需二次密码 —— 两者的备份都含明文凭据；
+3. 密钥独立于用户密码（改密码不会作废 cookie），并可从环境注入（便于集中管理）；
+4. 密钥文件 600 且不暴露在任何接口。
+
+**更弱 / 取舍**：
+1. 不做邮箱验证与邮件找回（没有邮件服务）；
+2. 不显示 2FA 二维码（避免把 TOTP 密钥交给第三方二维码服务）；
+3. 加密只覆盖「流程变量 + 通知渠道」，**运行历史里的响应体仍可能有站点返回的凭据**（如某些站点在响应里回显 token）—— 已做日志级脱敏，但不是全量加密；
+4. 加密发生在应用层，**磁盘备份/快照工具（如 NAS 快照）仍能看到密文**，只有拿到 `.secret` 才能解 —— 这一点与 qiandao 相同（密钥与密文同机）。
+
+### 13.4 建议的后续动作（可选）
+
+| 建议 | 价值 | 成本 |
+|---|---|---|
+| 独立「凭据中心」：把 cookie/token 抽成全局凭据库，流程只引用凭据名 | 多任务共用一份 cookie、轮换一处生效 | 中（需改引擎变量解析 + 面板） |
+| 凭据轮换提醒（按创建时间提示"该换 cookie 了"） | 减少签到突然失败 | 小 |
+| 登录成功/失败也走通知渠道（qinglong 的做法） | 安全可观测 | 小 |
+| 加密范围扩到 `runs.json` 里的响应体 | 全链路静态加密 | 中（大文件加密开销 + 检索变难） |
+| 密钥托管到系统 keyring / KMS | 密钥与数据分离 | 高（部署形态相关） |
+
+
+## 13. 自测
 
 ```bash
 cd server && node test/auth.test.js     # 39 项：登录/2FA/会话/用户管理/安全头/CSRF/审计

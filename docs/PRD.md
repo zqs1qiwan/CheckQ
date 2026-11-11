@@ -576,6 +576,8 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 | API Key | 多把可命名，服务端只存 sha256 摘要，明文只显示一次，可吊销 | ✅ v0.4.3 |
 | 用户管理 | 建号 / 改角色 / 停用 / 重置密码 / 重置 2FA / 删除（管理员）；全部进审计 | ✅ v0.4.3 |
 | 审计日志 | 登录、登出、改密、2FA、用户管理、API Key 等关键动作留痕（保留 500 条） | ✅ v0.4.3 |
+| 凭据静态加密 | 流程变量 / 通知渠道里的 cookie、token、SMTP 密码等用 **AES-256-GCM** 加密后落盘（`enc:v1:`），密钥在 `data/.secret`(600) 或 `CHECKQ_SECRET`；读盘自动解密、写盘自动加密，旧明文渐进迁移 | ✅ v0.4.3 |
+| 备份脱敏 | 「备份」默认脱敏（敏感值清空、渠道密钥 ***）；「完整备份」需再输当前密码才导出明文包 | ✅ v0.4.3 |
 | 安全响应头 | CSP / X-Frame-Options / nosniff / Referrer-Policy / Permissions-Policy | ✅ v0.4.3 |
 | CSRF 防护 | 写操作校验 `Origin` 同源 + Cookie SameSite=Strict | ✅ v0.4.3 |
 | 登录限流 | 按 IP 5 次/10 分钟；按账号 8 次锁定 15 分钟 | ✅ v0.4.3 |

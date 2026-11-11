@@ -1365,13 +1365,34 @@ export function buildServer({ dataDir, port }) {
   });
 
   // 备份/恢复：导出 flows/runs/templates（meta 密码不导出）；恢复以新 ID 导入避免覆盖
+  // 备份（默认脱敏：cookie/token/密码等一律清空，适合分享与存档）
   app.get('/api/system/backup', async () => ({
     version: '0.3.17',
     exportedAt: new Date().toISOString(),
-    flows: store.flows,
+    masked: true,
+    note: '敏感凭据已脱敏；如需完整迁移请用 POST /api/system/backup（需当前密码）',
+    flows: store.flows.map((f) => store.maskedFlow(f)),
     runs: store.runs,
-    templates: store.templates,
+    templates: store.templates.map((t) => store.maskedTemplate(t)),
   }));
+
+  // 完整备份（含凭据）：需要再次输入当前密码，防止误下载/误分享
+  app.post('/api/system/backup', async (req, reply) => {
+    const me = req.user;
+    if (!me) return reply.code(401).send({ error: '未登录' });
+    const { password } = req.body || {};
+    if (!verifyPwd(password || '', me.passwordHash)) return reply.code(401).send({ error: '当前密码不正确' });
+    store.audit('backup.full', '导出含凭据的完整备份', me.username);
+    return {
+      version: '0.3.17',
+      exportedAt: new Date().toISOString(),
+      masked: false,
+      note: '包含明文凭据，请妥善保管',
+      flows: store.flows,
+      runs: store.runs,
+      templates: store.templates,
+    };
+  });
 
   app.post('/api/system/restore', async (req, reply) => {
     const b = req.body || {};

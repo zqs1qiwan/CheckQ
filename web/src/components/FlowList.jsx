@@ -436,7 +436,7 @@ export default function FlowList({ onOpen, onLogout }) {
           <button className={`small ${batchMode ? 'primary' : ''}`} onClick={() => { setBatchMode((v) => !v); setSelected(new Set()); }}>
             ☑ 批量{batchMode ? '退出' : '管理'}
           </button>
-          <button className="small" onClick={async () => {
+          <button className="small" title="下载脱敏备份（cookie/token 等凭据已清空，适合分享与存档）" onClick={async () => {
             try {
               const data = await api.backup();
               const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -445,9 +445,10 @@ export default function FlowList({ onOpen, onLogout }) {
               a.download = `checkq-backup-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`;
               a.click();
               URL.revokeObjectURL(a.href);
-              setToast({ kind: 'ok', text: '备份已下载（密码不含在内）' });
+              setToast({ kind: 'ok', text: '备份已下载（凭据已脱敏）' });
             } catch (e) { setToast({ kind: 'fail', text: e.message }); }
           }}>备份</button>
+          <button className="small" title="完整备份（含明文凭据，需输入当前密码）" onClick={() => setModal('backup-full')}>完整备份</button>
           <button className="small" onClick={() => setModal('restore')}>恢复</button>
           <input
             style={{ width: 180, minWidth: 120, flex: '0 1 180px', fontSize: 13, padding: '4px 8px' }}
@@ -580,6 +581,8 @@ export default function FlowList({ onOpen, onLogout }) {
       {modal?.type === 'template-editor' && (
         <TemplateEditorModal tpl={modal.tpl} onDone={() => { setModal(null); load(); }} />
       )}
+
+      {modal === 'backup-full' && <BackupFullModal onClose={() => setModal(null)} />}
 
       {modal === 'restore' && (
         <RestoreModal onClose={() => setModal(null)} onDone={() => { setModal(null); load(); }} />
@@ -1128,6 +1131,47 @@ function TemplateEditorModal({ tpl, onDone }) {
           </div>
         </div>
         {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
+    </Modal>
+  );
+}
+
+/** 完整备份（含明文凭据）：需再次输入当前密码 */
+function BackupFullModal({ onClose }) {
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const submit = async () => {
+    setBusy(true); setErr('');
+    try {
+      const data = await api.backupFull(password);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `checkq-backup-full-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      onClose();
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <Modal
+      title="完整备份（含凭据）"
+      subtitle="会包含明文的 cookie / token / 密码，请立即保存到安全位置，勿外发"
+      onClose={onClose}
+      width={440}
+      footer={
+        <>
+          <button onClick={onClose}>取消</button>
+          <button className="primary" disabled={busy || !password} onClick={submit}>{busy ? '导出中…' : '确认导出'}</button>
+        </>
+      }
+    >
+      <div className="field">
+        <label>当前密码</label>
+        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+      </div>
+      {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
+      <div className="hint">日常用「备份」即可（凭据已脱敏，可安全分享）；只有迁移到另一台机器时才需要完整备份。</div>
     </Modal>
   );
 }

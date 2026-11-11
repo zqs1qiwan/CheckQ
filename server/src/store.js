@@ -8,6 +8,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { Cron } from 'croner';
 import { hashPwd, checkPassword } from './auth.js';
+import { secretKey, encryptSecrets, decryptSecrets, maskSecrets } from './secret.js';
 
 export class Store {
   #persistTimer = null;
@@ -20,9 +21,12 @@ export class Store {
     this.metaFile = path.join(dataDir, 'meta.json');
     this.templatesFile = path.join(dataDir, 'templates.json');
     this.notificationsFile = path.join(dataDir, 'notifications.json');
-    this.flows = this.#load(this.flowsFile, []);
+    // 敏感凭据静态加密密钥（CHECKQ_SECRET 或 data/.secret）
+    this.secretKey = secretKey(dataDir);
+    // 磁盘上可能是密文（旧版本是明文），读入时统一解密到内存
+    this.flows = this.#load(this.flowsFile, []).map((f) => decryptSecrets(this.secretKey, f));
     this.runs = this.#load(this.runsFile, []);
-    this.templates = this.#load(this.templatesFile, []);
+    this.templates = this.#load(this.templatesFile, []).map((x) => decryptSecrets(this.secretKey, x));
     this.notifications = this.#load(this.notificationsFile, []);
     this.meta = this.#load(this.metaFile, {});
 
@@ -91,11 +95,21 @@ export class Store {
   }
 
   #flushNow() {
-    this.#save(this.flowsFile, this.flows);
+    // 写盘前加密敏感凭据（内存里保持明文，API 返回给前端时才解密）
+    this.#save(this.flowsFile, this.flows.map((f) => encryptSecrets(this.secretKey, f)));
     this.#save(this.runsFile, this.runs);
-    this.#save(this.templatesFile, this.templates);
+    this.#save(this.templatesFile, this.templates.map((x) => encryptSecrets(this.secretKey, x)));
     this.#save(this.notificationsFile, this.notifications);
     this.#save(this.metaFile, this.meta);
+  }
+
+  /** 导出/备份用：脱敏后的 flow（敏感值替换为 *** / 空） */
+  maskedFlow(f) {
+    return maskSecrets(f);
+  }
+
+  maskedTemplate(t) {
+    return maskSecrets(t);
   }
 
   /** 立即落盘（跳过 400ms 节流窗口）；进程退出前调用，避免重启丢配置 */

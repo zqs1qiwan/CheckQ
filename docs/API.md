@@ -114,6 +114,30 @@ event: done
 data: { "id":"run-xxx", "status":"success", "durationMs":..., "summary":"...", "logs":[...], "vars":{...} }
 ```
 
+
+### 账号 / Agent 接入
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | /api/me | 当前登录身份（用户名/角色/是否启用 2FA） |
+| PUT | /api/system/account | 修改自己的用户名 / 显示名（改用户名需当前密码，改完强制重登） |
+| POST | /api/system/password | 修改自己的密码（需旧密码，改后其它会话失效） |
+| GET | /api/system/sessions | 我的会话列表 |
+| DELETE | /api/system/sessions/:id | 吊销某个会话 |
+| POST | /api/system/logout-all | 退出所有设备 |
+| GET | /api/system/users | 用户列表（管理员） |
+| POST | /api/system/users | 新建用户（管理员） |
+| PUT | /api/system/users/:id | 改角色 / 停用（管理员） |
+| POST | /api/system/users/:id/password | 重置他人密码（管理员） |
+| POST | /api/system/users/:id/2fa/reset | 重置他人 2FA（管理员） |
+| GET | /api/system/audit | 审计日志（管理员） |
+| GET | /api/system/apikeys | API Key 列表（含作用域） |
+| POST | /api/system/apikeys | 生成 API Key（可指定 scopes: read/run/write） |
+| DELETE | /api/system/apikeys/:id | 吊销 API Key |
+| GET | /api/system/push-targets | 可推送单位（带通知渠道的任务） |
+| GET | /api/flows/:id/logs | 连续日志流（多次运行的人话日志） |
+| GET | /api/system/backup | 脱敏备份（凭据已清空） |
+| POST | /api/system/backup | 完整备份（需当前密码，含明文凭据） |
+
 ## 5. 节点类型 (8 种)
 
 | type | config 关键字段 |

@@ -8,6 +8,7 @@ import { IconBell, IconHelp, IconMore, IconDownload, IconTrash } from './Icons.j
 import { confirmDialog } from '../confirm.jsx';
 import AccountPanel from './AccountPanel.jsx';
 import UsersPanel from './UsersPanel.jsx';
+import ApiKeysPanel from './ApiKeysPanel.jsx';
 import { toast as globalToast, setToastLevel, getToastLevel } from '../toast.js';
 
 function fmtTime(ts) {
@@ -835,20 +836,13 @@ function SettingsModal({ onClose }) {
   const [newPw, setNewPw] = useState('');
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
-  const [key, setKey] = useState('');
-  const [hasKey, setHasKey] = useState(false);
   const [me, setMe] = useState(null);
   useEffect(() => {
-    api.systemSettings().then((s) => setHasKey(s.hasApiKey)).catch(() => {});
     api.me().then((r) => setMe(r.authenticated ? r.user : null)).catch(() => {});
   }, []);
   const changePw = async () => {
     setErr(''); setMsg('');
     try { await api.changePassword(oldPw, newPw); setMsg('密码已改，请重新登录'); setOldPw(''); setNewPw(''); }
-    catch (e) { setErr(e.message); }
-  };
-  const genKey = async () => {
-    try { const r = await api.genApiKey(); setKey(r.apiKey); setHasKey(true); }
     catch (e) { setErr(e.message); }
   };
   const TABS = [
@@ -880,14 +874,7 @@ function SettingsModal({ onClose }) {
 
           {tab === 'users' && me?.role === 'admin' && <UsersPanel onToast={(text) => { setMsg(text); setErr(''); }} />}
 
-          {tab === 'api' && (
-            <div className="field">
-              <label>API Key（{hasKey ? '已生成' : '未生成'}）</label>
-              <p style={{ color: 'var(--muted)', fontSize: 12, margin: '0 0 8px' }}>供外部脚本 / MCP 调用 REST API 使用，重新生成后旧 Key 立即失效。</p>
-              {key && <pre className="mono" style={{ wordBreak: 'break-all', fontSize: 12 }}>{key}</pre>}
-              <button className="small" onClick={genKey}>{hasKey ? '重新生成' : '生成 API Key'}</button>
-            </div>
-          )}
+          {tab === 'api' && <ApiKeysPanel onToast={(text) => { setMsg(text); setErr(''); }} />}
 
           {msg && <p style={{ color: 'var(--ok)', fontSize: 12 }}>{msg}</p>}
           {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}

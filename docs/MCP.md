@@ -19,7 +19,14 @@ node mcp/checkq-mcp.cjs
 | CHECKQ_PASSWORD | 二选一 | 登录密码（服务端会换 cookie） |
 | CHECKQ_API_KEY | 二选一 | X-API-Key（推荐，免登录、免会话过期） |
 
-## 3. 工具定义（10 个）
+## 2.5 鉴权方式（给外部 Agent 用）
+
+- 推荐 `CHECKQ_API_KEY`：面板「设置 → API Key」生成，**可按作用域发放**（只读 / 可运行 / 可修改）；
+- 也支持 `CHECKQ_PASSWORD`（走登录流程）—— **不要把账号密码给外部 Agent**；
+- 只读 Key 调用运行类工具会返回 403「API Key 权限不足：需要 run」；
+- 详见 `docs/AGENT-ACCESS.md`。
+
+## 3. 工具定义（17 个）
 
 | 工具 | 参数 | 说明 |
 |---|---|---|
@@ -33,6 +40,13 @@ node mcp/checkq-mcp.cjs
 | templates_list | {} | 模板列表 |
 | stats | {} | 运维健康统计 |
 | notifications_list | { limit? } | 站内通知列表（含未读数） |
+| whoami | {} | 当前身份与权限自检 |
+| flow_logs | { id, limit? } | 连续日志流（多次运行的人话日志，最像 qinglong 面板） |
+| flow_update | { id, name?, cron?, timezone?, jitterMinutes?, enabled?, note? } | 改任务基础配置 |
+| flow_toggle | { id, enabled } | 启用/停用定时调度 |
+| flow_create | { name, cron?, vars?, templateId?, enabled? } | 新建任务（可从模板克隆） |
+| flow_notify_test | { id } | 向已配置渠道发测试通知 |
+| template_get | { id } | 模板详情（变量名与默认值） |
 
 ## 4. JSON-RPC 示例
 

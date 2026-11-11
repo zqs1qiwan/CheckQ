@@ -508,8 +508,20 @@ export function buildServer({ dataDir, port }) {
     const auth = req.headers['x-api-key'];
     if (auth) {
       const key = store.findApiKeyByHash(hashApiKey(auth));
-      if (key) { req.apiKey = key; return; }
-      // 兼容旧的单条 meta.apiKey
+      if (key) {
+        // 作用域：read=查看 / run=运行任务 / write=增删改配置
+        const scopes = Array.isArray(key.scopes) && key.scopes.length ? key.scopes : ['read', 'run', 'write'];
+        const path = req.url.split('?')[0];
+        const need = ['GET', 'HEAD'].includes(req.method) ? 'read'
+          : (/^\/api\/flows\/[^/]+\/run$/.test(path) ? 'run' : 'write');
+        if (!scopes.includes(need)) {
+          return reply.code(403).send({ error: `API Key 权限不足：需要 ${need}，当前仅 ${scopes.join('/') || '无'}` });
+        }
+        req.apiKey = key;
+        req.apiKeyScopes = scopes;
+        return;
+      }
+      // 兼容旧的单条 meta.apiKey（全权限）
       if (store.meta.apiKey && auth === store.meta.apiKey) { req.legacyApiKey = true; return; }
     }
     return reply.code(401).send({ error: '未登录' });
@@ -898,11 +910,13 @@ export function buildServer({ dataDir, port }) {
   });
   app.post('/api/system/apikeys', async (req, reply) => {
     if (!requireAdmin(req, reply)) return;
-    const { name } = req.body || {};
+    const { name, scopes } = req.body || {};
+    const wanted = Array.isArray(scopes) ? scopes.filter((s) => ['read', 'run', 'write'].includes(s)) : [];
+    const useScopes = wanted.length ? wanted : ['read', 'run', 'write'];
     const { key, hash, prefix } = newApiKey();
-    const k = store.addApiKey({ name: String(name || 'API Key').slice(0, 40), hash, prefix, userId: req.user?.id || null });
-    store.audit('apikey.create', `名称=${k.name}`, req.user?.username || '');
-    return { ok: true, apiKey: key, key: { id: k.id, name: k.name, prefix: k.prefix, createdAt: k.createdAt } };
+    const k = store.addApiKey({ name: String(name || 'API Key').slice(0, 40), hash, prefix, userId: req.user?.id || null, scopes: useScopes });
+    store.audit('apikey.create', `名称=${k.name} 权限=${useScopes.join('/')}`, req.user?.username || '');
+    return { ok: true, apiKey: key, key: { id: k.id, name: k.name, prefix: k.prefix, createdAt: k.createdAt, scopes: useScopes } };
   });
   app.delete('/api/system/apikeys/:id', async (req, reply) => {
     if (!requireAdmin(req, reply)) return;

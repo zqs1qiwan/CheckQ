@@ -46,22 +46,65 @@ async function api(method, path, body) {
 }
 
 const TOOLS = [
-  { name: 'health', description: 'CheckQ 健康检查', inputSchema: { type: 'object', properties: {} } },
-  { name: 'flows_list', description: '列出所有任务（含 cron/enabled/nextRunAt）', inputSchema: { type: 'object', properties: {} } },
-  { name: 'flow_get', description: '读取单个任务的完整定义（nodes/edges/vars/log）', inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
-  { name: 'flow_run', description: '运行一个任务并返回逐步日志与摘要', inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
-  { name: 'flow_update_vars', description: '更新任务变量（如 wbToken），其余字段保留', inputSchema: { type: 'object', required: ['id', 'vars'], properties: { id: { type: 'string' }, vars: { type: 'object' } } } },
+  // —— 基础 ——
+  { name: 'health', description: 'CheckQ 健康检查（版本、连通性）', inputSchema: { type: 'object', properties: {} } },
+  { name: 'whoami', description: '当前身份与权限（登录用户 / API Key 作用域），用于自检', inputSchema: { type: 'object', properties: {} } },
+  { name: 'stats', description: '运维健康统计（任务数/运行数/成功率/下次调度）', inputSchema: { type: 'object', properties: {} } },
+  { name: 'notifications_list', description: '站内通知列表（含未读数）', inputSchema: { type: 'object', properties: { limit: { type: 'number' } } } },
+  // —— 任务（签到）——
+  { name: 'flows_list', description: '列出所有任务（含 cron/enabled/nextRunAt/上次结果）', inputSchema: { type: 'object', properties: { search: { type: 'string' } } } },
+  { name: 'flow_get', description: '读取单个任务的完整定义（nodes/edges/vars/log/notify）', inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  { name: 'flow_run', description: '立即运行一个任务，返回状态、摘要与人话日志（不改动配置）', inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  { name: 'flow_logs', description: '读取某任务的连续日志流（多次运行的人话日志，最像 qinglong 面板）', inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' }, limit: { type: 'number' } } } },
+  { name: 'flow_update_vars', description: '更新任务变量（如 cookie / wbToken / ua），其余字段保留', inputSchema: { type: 'object', required: ['id', 'vars'], properties: { id: { type: 'string' }, vars: { type: 'object' } } } },
+  { name: 'flow_update', description: '更新任务基础配置（name/cron/timezone/jitterMinutes/enabled/note）', inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' }, name: { type: 'string' }, cron: { type: 'string' }, timezone: { type: 'string' }, jitterMinutes: { type: 'number' }, enabled: { type: 'boolean' }, note: { type: 'string' } } } },
+  { name: 'flow_toggle', description: '启用/停用某个任务的定时调度', inputSchema: { type: 'object', required: ['id', 'enabled'], properties: { id: { type: 'string' }, enabled: { type: 'boolean' } } } },
+  { name: 'flow_create', description: '新建一个任务（可从模板克隆；至少给 name）', inputSchema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, cron: { type: 'string' }, timezone: { type: 'string' }, vars: { type: 'object' }, templateId: { type: 'string' }, enabled: { type: 'boolean' } } } },
+  { name: 'flow_notify_test', description: '向某任务已配置的渠道发一条测试通知（验证 webhook/telegram 等）', inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  // —— 模板 ——
+  { name: 'templates_list', description: '列出所有模板（含变量名）', inputSchema: { type: 'object', properties: {} } },
+  { name: 'template_get', description: '读取模板详情（变量名与默认变量值，敏感项已脱敏）', inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  // —— 运行历史 ——
   { name: 'runs_list', description: '列出某任务的历史运行记录', inputSchema: { type: 'object', required: ['flowId'], properties: { flowId: { type: 'string' }, limit: { type: 'number' } } } },
   { name: 'run_get', description: '读取某次运行的完整日志与变量快照', inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
-  { name: 'templates_list', description: '列出所有模板', inputSchema: { type: 'object', properties: {} } },
-  { name: 'stats', description: '运维健康统计（任务数/运行数/成功率/调度器）', inputSchema: { type: 'object', properties: {} } },
-  { name: 'notifications_list', description: '站内通知列表（含未读数）', inputSchema: { type: 'object', properties: { limit: { type: 'number' } } } },
 ];
 
 async function callTool(name, args) {
   args = args || {};
   switch (name) {
     case 'health': return api('GET', '/api/health');
+    case 'whoami': return api('GET', '/api/me');
+    case 'flow_logs': return api('GET', '/api/flows/' + encodeURIComponent(args.id) + '/logs?limit=' + (args.limit || 200));
+    case 'flow_update': {
+      const patch = {};
+      for (const k of ['name', 'cron', 'timezone', 'jitterMinutes', 'enabled', 'note']) {
+        if (args[k] !== undefined) patch[k] = args[k];
+      }
+      return api('PUT', '/api/flows/' + encodeURIComponent(args.id), patch);
+    }
+    case 'flow_toggle':
+      return api('PUT', '/api/flows/' + encodeURIComponent(args.id), { enabled: !!args.enabled });
+    case 'flow_create': {
+      if (args.templateId) {
+        const tpl = await api('GET', '/api/templates/' + encodeURIComponent(args.templateId));
+        return api('POST', '/api/templates/' + encodeURIComponent(args.templateId) + '/instantiate', {
+          name: args.name,
+          vars: args.vars || {},
+        });
+      }
+      return api('POST', '/api/flows', {
+        name: args.name,
+        cron: args.cron || '',
+        timezone: args.timezone || 'Asia/Shanghai',
+        enabled: args.enabled === true,
+        vars: args.vars || {},
+        nodes: [{ id: 'n0', type: 'http', name: '请求', x: 80, y: 80, config: { method: 'GET', url: 'https://example.com', headers: [], body: '', asserts: [] } },
+                { id: 'n1', type: 'log', name: '日志', x: 320, y: 80, config: { text: '完成：{{last.status}}' } }],
+        edges: [{ id: 'e0', source: 'n0', sourceHandle: 'success', target: 'n1' }],
+        log: { level: 'all', record: 'log', debug: false },
+      });
+    }
+    case 'flow_notify_test': return api('POST', '/api/flows/' + encodeURIComponent(args.id) + '/notify-test', {});
     case 'flows_list': return api('GET', '/api/flows');
     case 'flow_get': return api('GET', '/api/flows/' + args.id);
     case 'flow_run': return api('POST', '/api/flows/' + args.id + '/run', {});
@@ -72,6 +115,7 @@ async function callTool(name, args) {
     case 'runs_list': return api('GET', '/api/runs?flowId=' + encodeURIComponent(args.flowId) + '&limit=' + (args.limit || 30));
     case 'run_get': return api('GET', '/api/runs/' + args.id);
     case 'templates_list': return api('GET', '/api/templates');
+    case 'template_get': return api('GET', '/api/templates/' + encodeURIComponent(args.id));
     case 'stats': return api('GET', '/api/system/stats');
     case 'notifications_list': return api('GET', '/api/notifications?limit=' + (args.limit || 50));
     default: throw new Error('unknown tool: ' + name);

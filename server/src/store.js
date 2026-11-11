@@ -449,11 +449,16 @@ export class Store {
     return this.meta.apiKeys.map((k) => ({
       id: k.id, name: k.name, prefix: k.prefix, createdAt: k.createdAt,
       lastUsedAt: k.lastUsedAt || null, userId: k.userId || null, disabled: !!k.disabled,
+      scopes: Array.isArray(k.scopes) && k.scopes.length ? k.scopes : ['read', 'run', 'write'],
     }));
   }
 
-  addApiKey({ name, hash, prefix, userId }) {
-    const k = { id: crypto.randomUUID(), name: name || 'API Key', hash, prefix, userId: userId || null, createdAt: Date.now(), lastUsedAt: null, disabled: false };
+  addApiKey({ name, hash, prefix, userId, scopes }) {
+    const k = {
+      id: crypto.randomUUID(), name: name || 'API Key', hash, prefix, userId: userId || null,
+      createdAt: Date.now(), lastUsedAt: null, disabled: false,
+      scopes: Array.isArray(scopes) && scopes.length ? scopes : ['read', 'run', 'write'],
+    };
     this.meta.apiKeys.push(k);
     this.flush();
     return k;

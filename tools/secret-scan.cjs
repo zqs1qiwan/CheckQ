@@ -34,6 +34,25 @@ const ALLOW = [
   /server\/test\/secrets\.test\.js$/,
 ];
 
+
+// ---- 仓库内容政策（金标准）：仓库只放 CheckQ 本身 ----
+// 私有资产（具体站点的流程/模板/脚本、实例笔记、运维记录）只允许留在本地，不进仓库
+const PRIVATE_PATTERNS = [
+  /(^|\/)AGENTS\.md$/i,
+  /(^|\/)docs\/agent-notes\//i,
+  /glados/i,
+  /workbuddy/i,
+  /(^|\/)tools\/wb-/i,
+];
+
+function policyCheck() {
+  let out = '';
+  try { out = execSync('git ls-files', { cwd: ROOT, encoding: 'utf8' }); } catch { return; }
+  const bad = out.split('\n').map((s) => s.trim()).filter(Boolean)
+    .filter((f) => PRIVATE_PATTERNS.some((re) => re.test(f)));
+  for (const f of bad) findings.push({ where: f, rule: '私有资产不应进仓库', sample: '（文件路径）' });
+}
+
 function walk(dir, out = []) {
   for (const f of fs.readdirSync(dir)) {
     if (f === '.git' || f === 'node_modules' || f === 'wiki' || f === 'dist') continue;
@@ -71,11 +90,13 @@ for (const rule of RULES) {
   }
 }
 
+policyCheck();
+
 if (!findings.length) {
   console.log('✓ 秘密扫描通过：工作区与 git 历史均未发现真实凭据');
   process.exit(0);
 }
 console.log(`发现 ${findings.length} 处疑似真实凭据：`);
 for (const f of findings) console.log(`  ✗ [${f.rule}] ${f.where} :: ${f.sample}`);
-console.log('\n处理：1) 立刻到签发方（BotFather / 控制台）轮换该凭据；2) 用 git filter-repo 清理历史；3) 提交本文件已用假值替换。');
+console.log('\n处理：1) 立刻到签发方（BotFather / 控制台）轮换该凭据；2) 用 git filter-repo / filter-branch 清理历史；3) 私有资产移出仓库并加入 .gitignore。');
 process.exit(1);

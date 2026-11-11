@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { confirmDialog } from '../confirm.jsx';
 import Modal from './Modal.jsx';
+import Dropdown from './Dropdown.jsx';
 import { IconKey, IconCopy } from './Icons.jsx';
 
 const SCOPES = [
@@ -31,7 +32,6 @@ export default function ApiKeysPanel({ onToast }) {
   const [created, setCreated] = useState(null);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [menuFor, setMenuFor] = useState(null);
 
   const load = () => api.apiKeys().then((r) => setKeys(r.keys || [])).catch(() => setKeys([]));
   useEffect(() => { load(); }, []);
@@ -53,7 +53,6 @@ export default function ApiKeysPanel({ onToast }) {
   };
 
   const revoke = async (k) => {
-    setMenuFor(null);
     const ok = await confirmDialog({ title: '回收密钥', message: `回收「${k.name}」？使用它的程序会立即失效。`, confirmText: '回收', danger: true });
     if (!ok) return;
     try { await api.revokeApiKey(k.id); load(); onToast('已回收'); }
@@ -116,14 +115,11 @@ export default function ApiKeysPanel({ onToast }) {
                 </div>
               </div>
               <div className="key-ops">
-                <button className="small" onClick={() => { setMenuFor(menuFor === k.id ? null : k.id); }}>⋯</button>
-                {menuFor === k.id && (
-                  <div className="key-menu">
-                    <button onClick={() => { setEditing({ key: k, ips: (k.allowedIps || []).join('\n') }); setMenuFor(null); }}>允许 IP</button>
-                    <button onClick={() => { setMenuFor(null); onToast('请删除后重新生成'); }}>重新生成</button>
-                    <button className="danger-text" onClick={() => revoke(k)}>立即回收</button>
-                  </div>
-                )}
+                <Dropdown trigger="⋯" triggerClass="dd-row" align="right" width={150} ariaLabel={`${k.name} 更多操作`}>
+                  <button onClick={() => { setEditing({ key: k, ips: (k.allowedIps || []).join('\n') }); }}>允许 IP</button>
+                  <button onClick={() => onToast('请删除后重新生成')}>重新生成</button>
+                  <button className="danger-text" onClick={() => revoke(k)}>立即回收</button>
+                </Dropdown>
               </div>
             </div>
           ))}

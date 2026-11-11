@@ -248,23 +248,17 @@ select { padding-right: 26px; }
 .checkline { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; padding: 4px 0; }
 .checkline input { accent-color: var(--accent); }
 
-/* 图标按钮（不展开文字的紧凑动作） */
-button.iconbtn { padding: 0; font-size: var(--fs-md); border-radius: var(--r-md); width: var(--ctl-h); height: var(--ctl-h); min-width: var(--ctl-h); min-height: var(--ctl-h); display: inline-flex; align-items: center; justify-content: center; flex: none; }
-
-/* 下拉菜单（顶栏收拢次级导入入口等） */
-.menu { position: relative; display: inline-flex; }
-.menu > summary {
-  list-style: none;
-  font-family: inherit; font-size: 13px; line-height: 1.25; white-space: nowrap;
-  display: inline-flex; align-items: center; gap: 6px;
+/* 图标按钮（不展开文字的紧凑动作）—— button 与 a（外链）外观必须完全一致 */
+button.iconbtn, a.iconbtn {
+  padding: 0; font-size: var(--fs-md); border-radius: var(--r-md);
+  width: var(--ctl-h); height: var(--ctl-h); min-width: var(--ctl-h); min-height: var(--ctl-h);
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
   background: var(--panel2); color: var(--text);
-  border: 1px solid var(--border); border-radius: 8px;
-  padding: 7px 14px; cursor: pointer;
+  border: 1px solid var(--border); text-decoration: none;
 }
-.menu > summary::-webkit-details-marker { display: none; }
-.menu > summary::after { content: '▾'; font-size: 11px; color: var(--muted); margin-left: 2px; }
-.menu[open] > summary { border-color: var(--accent); color: var(--accent); background: var(--hover-tint); }
-.menu > summary:hover { border-color: var(--muted); background: var(--hover-tint); }
+a.iconbtn:hover { border-color: var(--muted); background: var(--hover-tint); color: var(--text); text-decoration: none; }
+
+/* 下拉菜单浮层本体（由 Dropdown.jsx 挂到 body，见文末 .dd-pop 定位规则） */
 .menu-pop {
   position: absolute; top: calc(100% + 6px); left: 0; z-index: 80;
   min-width: 190px; background: var(--panel);
@@ -279,22 +273,9 @@ button.iconbtn { padding: 0; font-size: var(--fs-md); border-radius: var(--r-md)
 }
 .menu-pop button:last-child { border-bottom: none; }
 .menu-pop button:hover { background: var(--hover-tint); }
+.menu-pop button:disabled { opacity: .45; }
 .menu-pop .danger-text { color: var(--fail); }
 .menu-sep { height: 1px; background: var(--border); margin: 2px 0; }
-/* 行内「···」菜单：右对齐，避免撑开操作列 */
-.row-menu { position: relative; display: inline-flex; }
-.row-menu > summary {
-  list-style: none; cursor: pointer;
-  display: inline-flex; align-items: center; justify-content: center;
-  min-width: 34px; height: 28px; padding: 0 8px;
-  border: 1px solid var(--border); border-radius: 7px;
-  color: var(--muted); font-size: 15px; line-height: 1;
-  background: var(--panel2);
-}
-.row-menu > summary::-webkit-details-marker { display: none; }
-.row-menu > summary:hover { color: var(--text); border-color: var(--muted); }
-.row-menu[open] > summary { color: var(--text); border-color: var(--accent); }
-.row-menu .menu-pop { left: auto; right: 0; min-width: 140px; }
 
 /* AI 生成结果预览（快速组装） */
 .ai-preview {
@@ -319,7 +300,7 @@ button.iconbtn { padding: 0; font-size: var(--fs-md); border-radius: var(--r-md)
 .table-scroll::-webkit-scrollbar { height: 8px; }
 .table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 .table-scroll::-webkit-scrollbar-thumb:hover { background: var(--muted); }
-.flow-table { width: 100%; border-collapse: collapse; min-width: 720px; border-radius: 12px; overflow: hidden; }
+.flow-table { width: 100%; border-collapse: collapse; min-width: 720px; border-radius: 12px; }
 .flow-table th, .flow-table td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 .flow-table th { color: var(--muted); font-weight: 500; font-size: 12px; letter-spacing: .2px; white-space: nowrap; }
 .flow-table tr:last-child td { border-bottom: none; }
@@ -660,17 +641,25 @@ span.json-toggle { cursor: default; }
   .topbar .logo { font-size: 15px; }
   .editor-topbar { gap: 6px; row-gap: 6px; }
   .editor-topbar .flow-title { flex: 1 1 110px; min-width: 84px; max-width: 180px; font-size: 14px; }
-  .editor-topbar button, .editor-topbar .menu > summary { padding: 6px 9px; font-size: 12px; }
+  .editor-topbar button, .editor-topbar .dd-trigger { padding: 6px 9px; font-size: 12px; }
   .page { padding: 14px 10px 26px; }
   .page-head { gap: 8px; row-gap: 6px; margin-bottom: 14px; }
   button { height: var(--ctl-h-lg); }
   button.small { height: var(--ctl-h-sm); }
-  button.iconbtn { width: var(--ctl-h-lg); height: var(--ctl-h-lg); min-width: var(--ctl-h-lg); min-height: var(--ctl-h-lg); }
+  button.iconbtn, a.iconbtn { width: var(--ctl-h-lg); height: var(--ctl-h-lg); min-width: var(--ctl-h-lg); min-height: var(--ctl-h-lg); }
   .theme-btn { font-size: 16px; }
   .menu > summary { height: var(--ctl-h-lg); display: inline-flex; align-items: center; }
   .flow-table { min-width: 540px; }
   .flow-table th.col-next, .flow-table td.col-next,
   .flow-table th.col-last, .flow-table td.col-last { display: none; }
+  /* 操作列固定在右侧：窄屏横滚时「运行/日志/···」始终可点 */
+  .flow-table th:last-child, .flow-table td:last-child {
+    position: sticky; right: 0; z-index: 2;
+    background: var(--panel);
+    box-shadow: -8px 0 12px -8px rgba(0, 0, 0, .35);
+  }
+  .flow-table th:last-child { background: var(--panel2); }
+  .flow-table tbody tr:hover td:last-child { background: var(--panel2); }
   .flow-table th, .flow-table td { padding: 10px 10px; }
   .badge { font-size: 11px; padding: 2px 7px; }
   .modal { width: calc(100% - 18px); max-height: 92vh; padding: 18px 16px; }
@@ -853,15 +842,7 @@ button.icon-text svg { flex: none; }
 .key-meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: var(--fs-xs); color: var(--muted); }
 .key-meta code { font-size: var(--fs-xs); }
 .key-ops { position: relative; flex: none; }
-.key-ops > button { width: 28px; height: 28px; padding: 0; }
-.key-menu {
-  position: absolute; right: 0; top: 32px; z-index: 20; min-width: 150px;
-  display: flex; flex-direction: column; padding: 4px;
-  background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-md);
-  box-shadow: var(--shadow);
-}
-.key-menu button { justify-content: flex-start; border: none; background: transparent; height: 30px; width: 100%; }
-.key-menu button:hover { background: var(--hover-tint); }
+.key-ops > .dd > .dd-trigger { width: 28px; height: 28px; padding: 0; min-width: 28px; }
 
 .key-reveal { border: 1px solid color-mix(in srgb, var(--ok) 45%, var(--border)); background: color-mix(in srgb, var(--ok) 8%, var(--panel)); border-radius: var(--r-lg); padding: 12px 14px; margin-bottom: var(--sp-4); }
 .key-reveal-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
@@ -875,8 +856,41 @@ button.icon-text svg { flex: none; }
 .guide-foot { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-3); margin-top: 16px; }
 .guide-wiki { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-sm); color: var(--muted); text-decoration: none; margin-right: auto; }
 .guide-wiki:hover { color: var(--accent); text-decoration: none; }
-a.iconbtn { text-decoration: none; color: var(--text); }
-a.iconbtn:hover { border-color: var(--muted); background: var(--hover-tint); text-decoration: none; }
+/* ---- 通用：代码/片段块（长网址、命令等必须能折行，否则撑破弹窗） ---- */
+.code-block {
+  background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px; font-size: 11px; color: var(--muted);
+  font-family: var(--mono, ui-monospace, Consolas, monospace);
+  white-space: pre-wrap;          /* 保留换行，但允许折行 */
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  user-select: all;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* =====================================================================
+   浮层下拉菜单（Portal 版）
+   —— 替代 <details>：挂在 body 上 + fixed 定位，任何父级 overflow 都不会裁掉
+   ===================================================================== */
+.dd { position: relative; display: inline-flex; flex: none; }
+.dd-trigger { gap: 6px; }
+.dd-trigger.open { border-color: var(--accent); color: var(--accent); background: var(--hover-tint); }
+.dd-caret { font-size: 11px; color: var(--muted); margin-left: 2px; line-height: 1; }
+/* 顶栏文字型菜单（更多 / 导入） */
+.dd-menu .dd-trigger { font-size: var(--fs-sm); padding: 0 var(--ctl-px); }
+/* 行内「···」芯片 */
+.dd-row .dd-trigger {
+  min-width: 34px; height: var(--ctl-h-sm); padding: 0 8px;
+  border-radius: var(--r-sm); color: var(--muted); font-size: 15px; line-height: 1;
+}
+.dd-row .dd-trigger:hover { color: var(--text); border-color: var(--muted); }
+/* 浮层本体（覆盖 .menu-pop 的 absolute 定位） */
+.dd-pop {
+  position: fixed; top: 0; left: 0; z-index: 90;
+  max-height: calc(100vh - 16px); overflow-y: auto; overscroll-behavior: contain;
+}
+.dd-pop button { width: 100%; }
 
 /* =====================================================================
    首页大 Tab（任务 / 模板）—— 顶部分栏，GitHub 风格
@@ -895,9 +909,6 @@ a.iconbtn:hover { border-color: var(--muted); background: var(--hover-tint); tex
   background: var(--panel2); border: 1px solid var(--border);
   border-radius: 999px; padding: 1px 7px; line-height: 1.5;
 }
-
-/* 行内菜单靠近视口底部时向上展开 */
-.row-menu.up .menu-pop { top: auto; bottom: calc(100% + 6px); }
 
 /* 批量创建（CSV）说明块 */
 .csv-help { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--panel2); padding: 12px 14px; margin-bottom: 10px; }

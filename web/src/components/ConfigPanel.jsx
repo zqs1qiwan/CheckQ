@@ -87,7 +87,7 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
                 onClick={() => onConfigUpdate({ headers: config.headers.filter((_, j) => j !== i) })}>×</button>
             </div >
           ))}
-          <button className="small" style={{ width: '100%' }}
+          <button className="small" style={{ alignSelf: 'flex-start' }}
             onClick={() => onConfigUpdate({ headers: [...(config.headers || []), { name: '', value: '', enabled: true }] })}>
             + 添加请求头
           </button>
@@ -98,7 +98,7 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
                 onChange={(e) => onConfigUpdate({ body: e.target.value })} />
             </>
           )}
-          <div className="section-title">断言（全部通过才继续）</div >
+          <div className="section-title" title="所有断言都通过才会继续往下走">断言</div >
           {(config.asserts || []).map((a, i) => (
             <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 8, marginBottom: 8 }}>
               <div className="kv-row">
@@ -157,7 +157,7 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
               )}
             </div >
           ))}
-          <button className="small" style={{ width: '100%' }}
+          <button className="small" style={{ alignSelf: 'flex-start' }}
             onClick={() => onConfigUpdate({ asserts: [...(config.asserts || []), { expr: '', expect: 'true' }] })}>
             + 添加断言
           </button>

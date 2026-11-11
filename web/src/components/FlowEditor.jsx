@@ -11,6 +11,7 @@ import ConfigPanel from './ConfigPanel.jsx';
 import RunDrawer from './RunDrawer.jsx';
 import GuideModal from './GuideModal.jsx';
 import Modal from './Modal.jsx';
+import Dropdown from './Dropdown.jsx';
 import { IconHelp, IconBug, IconPlay } from './Icons.jsx';
 import { toast as globalToast } from '../toast.js';
 
@@ -489,21 +490,18 @@ function FlowEditorInner({ flowId, onBack }) {
         <button className="small" disabled={!runResult} onClick={() => setDrawerOpen(true)} title={runResult ? '展开运行日志' : '先运行一次'}>日志</button>
         <button className="small primary" onClick={runNow} title="从头执行整个流程">运行</button>
         <button className="iconbtn" onClick={() => setGuideOpen(true)} title="使用引导" aria-label="使用引导"><IconHelp size={16} /></button>
-        <details className="menu">
-          <summary>···</summary>
-          <div className="menu-pop" onClick={(e) => e.currentTarget.closest('details')?.removeAttribute('open')}>
-            <button disabled={!canUndo} onClick={undo}>撤销</button>
-            <button disabled={!canRedo} onClick={redo}>重做</button>
-            <div className="menu-sep" />
-            <button onClick={runDebug} title="记录每一步的请求/响应并展开运行过程窗口"><IconBug size={14} /> 调试运行</button>
-            <div className="menu-sep" />
-            <button onClick={() => setNotifyOpen(true)}>通知渠道</button>
-            <button onClick={testNotify}>测试通知</button>
-            <button onClick={() => setCookieOpen(true)}>填入 Cookie</button>
-            <button onClick={() => setLogOpen(true)}>日志配置</button>
-            <button onClick={saveAsTemplate}>存为模板</button>
-          </div>
-        </details>
+        <Dropdown trigger="···" triggerClass="dd-menu" align="right" width={170} ariaLabel="编辑器更多操作">
+          <button disabled={!canUndo} onClick={undo}>撤销</button>
+          <button disabled={!canRedo} onClick={redo}>重做</button>
+          <div className="menu-sep" />
+          <button onClick={runDebug} title="记录每一步的请求/响应并展开运行过程窗口"><IconBug size={14} /> 调试运行</button>
+          <div className="menu-sep" />
+          <button onClick={() => setNotifyOpen(true)}>通知渠道</button>
+          <button onClick={testNotify}>测试通知</button>
+          <button onClick={() => setCookieOpen(true)}>填入 Cookie</button>
+          <button onClick={() => setLogOpen(true)}>日志配置</button>
+          <button onClick={saveAsTemplate}>存为模板</button>
+        </Dropdown>
         <ThemeToggle />
       </div>
 
@@ -705,7 +703,7 @@ function CookieHelpModal({ flow, onClose, onSaved }) {
           <button className="small" disabled={!tabId} onClick={captureNow}>已登录，自动抓 Cookie</button>
         </div>
         {tabId && <p style={{ color: 'var(--muted)', fontSize: 11 }}>tab: {String(tabId).slice(0, 12)}… 登录后点上方抓取</p>}
-        <pre className="mono" style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, fontSize: 11, wordBreak: 'break-all', userSelect: 'all', color: 'var(--muted)' }}>{bookmarklet}</pre>
+        <pre className="code-block">{bookmarklet}</pre>
         <div className="field">
           <label>备用：粘贴 cookie 后保存</label>
           <input className="mono" readOnly value={snippet} onFocus={(e) => e.target.select()} />
@@ -797,13 +795,12 @@ function NotifyModal({ flow, onClose, onSaved, onToast }) {
           失败时通知
         </label>
         <div className="field">
-          <label>通知模板（支持 {'{{'}flow.name{'}}'} / {'{{'}status{'}}'} / {'{{'}message{'}}'} / {'{{'}duration{'}}'} / {'{{'}time{'}}'}）</label>
+          <label title={'可用变量：{{flow.name}} / {{status}} / {{message}} / {{duration}} / {{time}}'}>通知模板</label>
           <textarea rows={2} className="mono" value={template} onChange={(e) => setTemplate(e.target.value)} />
         </div>
         {channels.length === 0 && (
           <div className="notify-empty">
-            还没有通知渠道。点下方「+ 添加渠道」选择类型（站内通知 / Webhook / Bark / Telegram / Server酱 / PushPlus / 钉钉 / 企业微信 / 飞书 / Gotify / ntfy / 邮件），
-            填好地址后可用「测试发送」验证。站内通知不需要任何外部服务，消息会显示在首页 🔔。
+            还没有通知渠道。点下方「+ 添加渠道」选类型；站内通知不需要任何外部服务，消息会显示在首页铃铛里。
           </div>
         )}
         {channels.map((c, i) => (

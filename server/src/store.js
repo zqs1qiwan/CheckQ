@@ -171,13 +171,16 @@ export class Store {
 
   createFlow(data) {
     const jitterMinutes = Math.min(30, Math.max(0, Number(data.jitterMinutes) || 0));
+    const cron = (data.cron || '').trim();
     const flow = {
       id: crypto.randomUUID(),
       name: data.name || '未命名流程',
       note: data.note || '',
-      cron: data.cron || '',
+      cron,
       timezone: data.timezone || 'Asia/Shanghai',
-      enabled: false,
+      // 默认不调度；但调用方显式传 enabled:true 且给了 cron 时按请求启用
+      // （没有 cron 就没有调度意义，强制关闭）
+      enabled: data.enabled === true && !!cron,
       jitterMinutes,
       vars: data.vars || {},
       nodes: data.nodes || [],

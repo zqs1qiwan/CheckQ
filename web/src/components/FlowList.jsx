@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import ThemeToggle from './ThemeToggle.jsx';
 import LogStream from './LogStream.jsx';
 import Modal from './Modal.jsx';
+import Dropdown from './Dropdown.jsx';
 import { IconBell, IconBook, IconKey, IconUsers, IconShield, IconSparkle, IconGear, IconGlobe } from './Icons.jsx';
 import { confirmDialog } from '../confirm.jsx';
 import AccountPanel from './AccountPanel.jsx';
@@ -101,7 +102,7 @@ function WizardModal({ onClose, onCreated }) {
       }
     >
         <div className="field">
-          <label>一句话描述（例：每天8点去 https://ex.com/sign 签到，看到签到成功算成功）</label>
+          <label title="用一句话说清「什么时间、去哪个地址、看到什么算成功」">一句话描述</label>
           <input value={sentence} onChange={(e) => setSentence(e.target.value)} placeholder="每天8点去 https://ex.com/sign 签到，看到签到成功算成功" />
           <span className="btn-row" style={{ marginTop: 6 }}>
             <button className="small primary" disabled={aiBusy || !sentence.trim()} onClick={aiGenerate}>{aiBusy ? 'AI 生成中…' : 'AI 生成流程'}</button>
@@ -123,7 +124,7 @@ function WizardModal({ onClose, onCreated }) {
         )}
         <div style={{ borderTop: '1px solid var(--border)', margin: '12px 0 10px' }} />
         <div className="field">
-          <label>请求地址（浏览器打开站点后复制地址栏）</label>
+          <label title="在浏览器打开目标站点，把地址栏里的网址复制过来">请求地址</label>
           <input className="mono" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/sign" />
         </div>
         <div className="field-inline">
@@ -141,10 +142,8 @@ function WizardModal({ onClose, onCreated }) {
           </div>
         </div>
         <div className="field">
-          <label>看到什么词算成功（页面文案，如「签到成功」；空=只看 HTTP 200）</label>
+          <label title="页面里出现的成功提示文案；留空则只要 HTTP 200 就算成功">看到什么词算成功</label>
           <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="签到成功" />
-        </div>
-        <div className="field">
         </div>
         {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
     </Modal>
@@ -179,36 +178,6 @@ export default function FlowList({ onOpen, onLogout }) {
   };
 
   useEffect(() => { load(); }, []);
-
-  // 行内「···」菜单靠近视口底部时改为向上展开，避免被裁掉
-  useEffect(() => {
-    // 点击时（details 尚未展开）先按位置判断方向，避免出现一帧的错位
-    const onClick = (e) => {
-      const s = e.target instanceof Element ? e.target.closest('details.row-menu > summary') : null;
-      if (!s) return;
-      const d = s.parentElement;
-      const r = s.getBoundingClientRect();
-      const MENU_H = 170;
-      if (r.bottom + MENU_H > window.innerHeight - 8) d.classList.add('up');
-      else d.classList.remove('up');
-    };
-    // 展开后再精确校正一次（菜单高度随内容变化）
-    const onToggle = (e) => {
-      const d = e.target;
-      if (!(d instanceof HTMLElement) || !d.matches('details.row-menu')) return;
-      const pop = d.querySelector('.menu-pop');
-      if (!pop) return;
-      const r = pop.getBoundingClientRect();
-      if (r.bottom > window.innerHeight - 8) d.classList.add('up');
-      else if (r.top >= 0) d.classList.remove('up');
-    };
-    document.addEventListener('click', onClick, true);
-    document.addEventListener('toggle', onToggle, true);
-    return () => {
-      document.removeEventListener('click', onClick, true);
-      document.removeEventListener('toggle', onToggle, true);
-    };
-  }, []);
 
   // 当前登录身份（用户名 / 角色）
   useEffect(() => {
@@ -350,16 +319,13 @@ export default function FlowList({ onOpen, onLogout }) {
         <span className="logo">Check<em>Q</em></span>
         <span className="spacer" />
         <button className="primary" onClick={() => setModal('new')}>+ 新建任务</button>
-        <details className="menu">
-          <summary>更多</summary>
-          <div className="menu-pop" onClick={(e) => e.currentTarget.closest('details')?.removeAttribute('open')}>
-            <button onClick={() => setModal('wizard')}>快速组装</button>
-            <button onClick={() => setModal('curl')} disabled={importBusy}>导入 cURL 命令</button>
-            <button onClick={() => setModal('import')} disabled={importBusy}>导入 HAR / JSON</button>
-            <div className="menu-sep" />
-            <button onClick={onLogout}>退出登录</button>
-          </div>
-        </details>
+        <Dropdown trigger="更多" caret triggerClass="dd-menu" width={190} ariaLabel="更多操作">
+          <button onClick={() => setModal('wizard')}>快速组装</button>
+          <button onClick={() => setModal('curl')} disabled={importBusy}>导入 cURL 命令</button>
+          <button onClick={() => setModal('import')} disabled={importBusy}>导入 HAR / JSON</button>
+          <div className="menu-sep" />
+          <button onClick={onLogout}>退出登录</button>
+        </Dropdown>
         {me && (
           <span className="who-chip" title={`登录身份：${me.username}（${me.role === 'admin' ? '管理员' : me.role === 'operator' ? '操作员' : '只读'}）${me.totpEnabled ? ' · 两步验证已启用' : ''}`}>
             {me.displayName || me.username}
@@ -410,31 +376,28 @@ export default function FlowList({ onOpen, onLogout }) {
                 </div>
                 <div className="tpl-actions">
                   <button className="small primary" onClick={() => setModal({ type: 'instantiate', tpl: t })}>+ 创建任务</button>
-                  <details className="row-menu">
-                    <summary title="更多操作">···</summary>
-                    <div className="menu-pop" onClick={(e) => e.currentTarget.closest('details')?.removeAttribute('open')}>
-                      <button onClick={() => setModal({ type: 'csv', tpl: t })}>批量创建</button>
-                      <button onClick={() => setModal({ type: 'template-editor', tpl: t })}>管理模板</button>
-                      <button onClick={async () => {
-                        try {
-                          const data = await api.exportTemplate(t.id);
-                          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                          const a = document.createElement('a');
-                          a.href = URL.createObjectURL(blob);
-                          a.download = `${t.name.replace(/[\\/:*?"<>|]/g, '_')}.json`;
-                          a.click();
-                          URL.revokeObjectURL(a.href);
-                        } catch (e) {
-                          setToast({ kind: 'fail', text: `导出失败: ${e.message}` });
-                        }
-                      }}>导出 JSON</button>
-                      <button className="danger-text" onClick={async () => {
-                        if (!(await confirmDialog({ title: '删除模板', message: `删除模板「${t.name}」？已创建的任务不受影响。`, confirmText: '删除', danger: true }))) return;
-                        await api.deleteTemplate(t.id);
-                        load();
-                      }}>删除模板</button>
-                    </div>
-                  </details>
+                  <Dropdown trigger="···" triggerClass="dd-row" align="right" width={150} ariaLabel="模板更多操作">
+                    <button onClick={() => setModal({ type: 'csv', tpl: t })}>批量创建</button>
+                    <button onClick={() => setModal({ type: 'template-editor', tpl: t })}>管理模板</button>
+                    <button onClick={async () => {
+                      try {
+                        const data = await api.exportTemplate(t.id);
+                        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                        const a = document.createElement('a');
+                        a.href = URL.createObjectURL(blob);
+                        a.download = `${t.name.replace(/[\\/:*?"<>|]/g, '_')}.json`;
+                        a.click();
+                        URL.revokeObjectURL(a.href);
+                      } catch (e) {
+                        setToast({ kind: 'fail', text: `导出失败: ${e.message}` });
+                      }
+                    }}>导出 JSON</button>
+                    <button className="danger-text" onClick={async () => {
+                      if (!(await confirmDialog({ title: '删除模板', message: `删除模板「${t.name}」？已创建的任务不受影响。`, confirmText: '删除', danger: true }))) return;
+                      await api.deleteTemplate(t.id);
+                      load();
+                    }}>删除模板</button>
+                  </Dropdown>
                 </div>
               </div>
             ))}
@@ -479,8 +442,8 @@ export default function FlowList({ onOpen, onLogout }) {
             </span>
           )}
           <span className="spacer" />
-          <button className={`small ${batchMode ? 'primary' : ''}`} onClick={() => { setBatchMode((v) => !v); setSelected(new Set()); }}>
-            ☑ 批量{batchMode ? '退出' : '管理'}
+          <button className={`small ${batchMode ? 'primary' : ''}`} title={batchMode ? '退出批量模式' : '进入批量模式：可勾选多个任务一起操作'} onClick={() => { setBatchMode((v) => !v); setSelected(new Set()); }}>
+            {batchMode ? '退出批量' : '批量管理'}
           </button>
           <button className="small" title="下载脱敏备份（cookie/token 等凭据已清空，适合分享与存档）" onClick={async () => {
             try {
@@ -549,23 +512,20 @@ export default function FlowList({ onOpen, onLogout }) {
                         <button className="small primary" disabled={running === f.id} title={running === f.id ? '正在运行…' : '立即运行一次'}
                           onClick={() => runNow(f)}>{running === f.id ? '运行中' : '运行'}</button>
                         <button className="small" title="查看运行日志（每天的签到记录都在这里）" onClick={() => openLog(f)}>日志</button>
-                        <details className="row-menu">
-                          <summary title="更多操作">···</summary>
-                          <div className="menu-pop" onClick={(e) => e.currentTarget.closest('details')?.removeAttribute('open')}>
-                            <button onClick={() => onOpen(f.id)}>编辑</button>
-                            <button onClick={async () => {
-                              try {
-                                await api.cloneFlow(f.id);
-                                setToast({ kind: 'ok', text: '已克隆为副本（调度暂停）' });
-                                load();
-                              } catch (e) {
-                                setToast({ kind: 'fail', text: e.message });
-                              }
-                            }}>复制副本</button>
-                            <button onClick={() => toggle(f)}>{f.enabled ? '停用调度' : '启用调度'}</button>
-                            <button className="danger-text" onClick={() => del(f)}>删除</button>
-                          </div>
-                        </details>
+                        <Dropdown trigger="···" triggerClass="dd-row" align="right" width={150} ariaLabel="任务更多操作">
+                          <button onClick={() => onOpen(f.id)}>编辑</button>
+                          <button onClick={async () => {
+                            try {
+                              await api.cloneFlow(f.id);
+                              setToast({ kind: 'ok', text: '已克隆为副本（调度暂停）' });
+                              load();
+                            } catch (e) {
+                              setToast({ kind: 'fail', text: e.message });
+                            }
+                          }}>复制副本</button>
+                          <button onClick={() => toggle(f)}>{f.enabled ? '停用调度' : '启用调度'}</button>
+                          <button className="danger-text" onClick={() => del(f)}>删除</button>
+                        </Dropdown>
                       </div>
                     </td>
                   </tr>
@@ -812,7 +772,6 @@ function CsvImportModal({ tpl, onClose, onDone }) {
         </>
       }
     >
-                >
         <div className="csv-help">
           <div className="csv-help-title">怎么填</div>
           <ol>
@@ -1026,7 +985,7 @@ function SettingsFlow({ onToast }) {
   return (
     <>
       <div className="field">
-        <label>界面提示</label>
+        <label title="只控制右上角弹出的提示；面板上的「今日汇总」始终是实时数据，打开首页就能看到。">界面提示</label>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input type="radio" name="toast-level" style={{ width: 'auto' }} checked={level === 'error'} onChange={() => changeLevel('error')} />
           仅错误提示（默认，日常最安静）
@@ -1039,12 +998,9 @@ function SettingsFlow({ onToast }) {
           <input type="radio" name="toast-level" style={{ width: 'auto' }} checked={level === 'all'} onChange={() => changeLevel('all')} />
           全部提示
         </label>
-        <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 4, lineHeight: 1.5 }}>
-          面板上的「今日汇总」始终是实时数据，打开首页就能看到；这里只控制右上角弹出的提示。
-        </div>
       </div>
       <div className="field">
-        <label>每日总推送（可选，默认关）</label>
+        <label title="默认关闭；开启后每天指定时间把今日汇总推送到勾选的任务">每日总推送</label>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input type="checkbox" style={{ width: 'auto' }} checked={!!cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} />
           每天 {cfg.time} 把今日汇总推送到下面勾选的任务

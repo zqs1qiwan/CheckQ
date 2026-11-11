@@ -13,15 +13,22 @@ export default function App() {
 
   useEffect(() => {
     set401Handler(() => setView('login'));
-    api.flows().then(() => setView('list')).catch(() => setView('login'));
-    // 提示级别（服务端为准，失败则用本地缓存）
-    api.uiSettings().then((s) => setToastLevel(s.toastLevel)).catch(() => {});
+    // 先问「我是谁」：/api/me 是公开端点，未登录也返回 200，
+    // 直接拉 /api/flows 会在登录页产生一堆 401 报错（控制台噪音）。
+    api.me()
+      .then((r) => {
+        if (!r.authenticated) { setView('login'); return; }
+        api.flows().then(() => setView('list')).catch(() => setView('login'));
+        // 提示级别（服务端为准，失败则用本地缓存）
+        api.uiSettings().then((s) => setToastLevel(s.toastLevel)).catch(() => {});
+      })
+      .catch(() => setView('login'));
   }, []);
 
   return (
     <>
       {view === 'loading' && <div className="boot">CheckQ</div>}
-      {view === 'login' && <Login onOk={() => setView('list')} />}
+      {view === 'login' && <Login onOk={() => { setView('list'); api.uiSettings().then((s) => setToastLevel(s.toastLevel)).catch(() => {}); }} />}
       {view === 'list' && (
         <FlowList
           onOpen={(id) => { setFlowId(id); setView('editor'); }}

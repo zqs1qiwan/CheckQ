@@ -6,6 +6,8 @@ import LogStream from './LogStream.jsx';
 import Modal from './Modal.jsx';
 import { IconBell, IconHelp, IconMore, IconDownload, IconTrash } from './Icons.jsx';
 import { confirmDialog } from '../confirm.jsx';
+import AccountPanel from './AccountPanel.jsx';
+import UsersPanel from './UsersPanel.jsx';
 import { toast as globalToast, setToastLevel, getToastLevel } from '../toast.js';
 
 function fmtTime(ts) {
@@ -163,6 +165,7 @@ export default function FlowList({ onOpen, onLogout }) {
   const [guideOpen, setGuideOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [unread, setUnread] = useState(0);
+  const [me, setMe] = useState(null);
   const [selected, setSelected] = useState(new Set());
   const [batchBusy, setBatchBusy] = useState(false);
   const [batchMode, setBatchMode] = useState(false); // 批量管理开关：勾选列默认隐藏，不干扰日常阅读
@@ -181,6 +184,11 @@ export default function FlowList({ onOpen, onLogout }) {
   // 首次访问自动打开一次使用引导
   useEffect(() => {
     try { if (!localStorage.getItem('checkq-guide-seen')) setGuideOpen(true); } catch {}
+  }, []);
+
+  // 当前登录身份（用户名 / 角色）
+  useEffect(() => {
+    api.me().then((r) => setMe(r.authenticated ? r.user : null)).catch(() => {});
   }, []);
 
   // 站内通知未读数（30s 轮询，失败静默）
@@ -329,6 +337,12 @@ export default function FlowList({ onOpen, onLogout }) {
             <button onClick={onLogout}>退出登录</button>
           </div>
         </details>
+        {me && (
+          <span className="who-chip" title={`登录身份：${me.username}（${me.role === 'admin' ? '管理员' : me.role === 'operator' ? '操作员' : '只读'}）${me.totpEnabled ? ' · 两步验证已启用' : ''}`}>
+            {me.displayName || me.username}
+            <em>{me.role === 'admin' ? '管理员' : me.role === 'operator' ? '操作员' : '只读'}</em>
+          </span>
+        )}
         <ThemeToggle />
         <button className="iconbtn bell-btn" onClick={() => setNotifOpen(true)} title="站内通知" aria-label="站内通知">
           <IconBell size={16} />{unread > 0 && <span className="bell-dot">{unread > 99 ? '99+' : unread}</span>}
@@ -820,7 +834,11 @@ function SettingsModal({ onClose }) {
   const [err, setErr] = useState('');
   const [key, setKey] = useState('');
   const [hasKey, setHasKey] = useState(false);
-  useEffect(() => { api.systemSettings().then((s) => setHasKey(s.hasApiKey)).catch(() => {}); }, []);
+  const [me, setMe] = useState(null);
+  useEffect(() => {
+    api.systemSettings().then((s) => setHasKey(s.hasApiKey)).catch(() => {});
+    api.me().then((r) => setMe(r.authenticated ? r.user : null)).catch(() => {});
+  }, []);
   const changePw = async () => {
     setErr(''); setMsg('');
     try { await api.changePassword(oldPw, newPw); setMsg('密码已改，请重新登录'); setOldPw(''); setNewPw(''); }
@@ -834,6 +852,7 @@ function SettingsModal({ onClose }) {
     ['general', '通知与汇总'],
     ['ai', 'AI 助手'],
     ['security', '账号安全'],
+    ...(me?.role === 'admin' ? [['users', '用户管理']] : []),
     ['api', 'API Key'],
   ];
   return (
@@ -854,19 +873,9 @@ function SettingsModal({ onClose }) {
 
           {tab === 'ai' && <AiSettings />}
 
-          {tab === 'security' && (
-            <>
-              <div className="field">
-                <label>当前密码</label>
-                <input type="password" autoComplete="off" value={oldPw} onChange={(e) => setOldPw(e.target.value)} />
-              </div>
-              <div className="field">
-                <label>新密码（至少 8 位）</label>
-                <input type="password" autoComplete="off" value={newPw} onChange={(e) => setNewPw(e.target.value)} />
-              </div>
-              <button className="primary" onClick={changePw}>修改密码</button>
-            </>
-          )}
+          {tab === 'security' && <AccountPanel onToast={(text) => { setMsg(text); setErr(''); }} />}
+
+          {tab === 'users' && me?.role === 'admin' && <UsersPanel onToast={(text) => { setMsg(text); setErr(''); }} />}
 
           {tab === 'api' && (
             <div className="field">

@@ -16,6 +16,8 @@ import tls from 'node:tls';
 import { fileURLToPath } from 'node:url';
 
 import { Store, hashPwd, verifyPwd } from './store.js';
+import { checkPassword, checkUsername, ROLES, PASSWORD_MIN, hashApiKey, newApiKey } from './auth.js';
+import { generateSecret, verifyTotp, generateRecoveryCodes, hashRecoveryCode, verifyRecoveryCode, otpauthUri } from './totp.js';
 import { Engine, redactVars } from './engine.js';
 import { validateFlow } from './model.js';
 import { importHar } from './har-import.js';
@@ -40,7 +42,10 @@ export function buildServer({ dataDir, port }) {
   };
   process.once('SIGTERM', flushExit);
   process.once('SIGINT', flushExit);
-  const sessions = new Map(); // qsid -> expiry
+  const sessions = new Map(); // qsid -> { userId, createdAt, lastSeenAt, ip, ua, expiresAt }
+  const SESSION_TTL = 7 * 24 * 3600e3;   // 绝对有效期 7 天
+  const SESSION_IDLE = 24 * 3600e3;       // 空闲 24 小时失效
+  const CSRF_SAFE = new Set(['/api/login', '/api/logout', '/api/health', '/api/system/bootstrap']);
   // 登录防爆破（PRD §4.10）：同一 IP 10 分钟内失败 5 次 → 429 锁定
   const loginFails = new Map(); // ip -> { count, firstAt }
   const LOGIN_FAIL_LIMIT = 5;
@@ -56,6 +61,27 @@ export function buildServer({ dataDir, port }) {
     if (rec && Date.now() - rec.firstAt <= LOGIN_FAIL_WINDOW) rec.count++;
     else loginFails.set(ip, { count: 1, firstAt: Date.now() });
   };
+  const ACCOUNT_FAIL_LIMIT = 8;          // 单账号连续失败上限
+  const ACCOUNT_FAIL_WINDOW = 15 * 60e3; // 单账号锁定窗口
+
+  /** 当前会话（过期即清理） */
+  function currentSession(req) {
+    const qsid = req.cookies?.qsid;
+    if (!qsid) return null;
+    const s = sessions.get(qsid);
+    if (!s) return null;
+    if (s.expiresAt < Date.now() || Date.now() - s.lastSeenAt > SESSION_IDLE) {
+      sessions.delete(qsid);
+      return null;
+    }
+    s.lastSeenAt = Date.now();
+    return { qsid, ...s };
+  }
+
+  /** 某用户的全部会话 id */
+  function sessionsOf(userId) {
+    return [...sessions.entries()].filter(([, s]) => s.userId === userId).map(([id]) => id);
+  }
 
   const runningFlows = new Set();
   const queueMap = new Map(); // flowId -> Promise 链（运行排队：同 flow 串行执行）
@@ -435,75 +461,427 @@ export function buildServer({ dataDir, port }) {
   app.register(cookie);
   app.register(multipart);
 
-  // ---- auth ----
+  // ---- 安全响应头 + 同源校验（防 CSRF / 点击劫持 / MIME 嗅探）----
+  app.addHook('onSend', async (req, reply) => {
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('X-Frame-Options', 'DENY');
+    reply.header('Referrer-Policy', 'same-origin');
+    reply.header('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+    reply.header('Cross-Origin-Opener-Policy', 'same-origin');
+    reply.header(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    );
+  });
+
+  // 写操作必须同源（浏览器会带 Origin；跨站表单/图片不会带同源 Origin）
   app.addHook('onRequest', async (req, reply) => {
-    const pub = req.url === '/api/login' || req.url === '/api/health' || req.url === '/api/system/bootstrap' || !req.url.startsWith('/api/');
-    if (pub) return;
-    const qsid = req.cookies?.qsid;
-    const exp = sessions.get(qsid);
-    if (!qsid || !exp || exp < Date.now()) {
-      const auth = req.headers['x-api-key'];
-      if (auth && store.meta.apiKey && auth === store.meta.apiKey) return;
-      return reply.code(401).send({ error: '未登录' });
+    if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return;
+    if (CSRF_SAFE.has(req.url.split('?')[0])) return;
+    const origin = req.headers.origin;
+    if (!origin) return; // 非浏览器客户端（脚本/MCP/测试）不拦
+    let host = '';
+    try { host = new URL(origin).host; } catch { host = ''; }
+    const self = req.headers.host;
+    if (host && self && host !== self) {
+      return reply.code(403).send({ error: '跨站请求被拒绝（CSRF 防护）' });
     }
   });
+
+  // ---- auth ----
+  app.addHook('onRequest', async (req, reply) => {
+    const path = req.url.split('?')[0];
+    const pub = path === '/api/login' || path === '/api/health' || path === '/api/system/bootstrap' || path === '/api/me' || !path.startsWith('/api/');
+    if (pub) return;
+    const sess = currentSession(req);
+    if (sess) {
+      const user = store.getUser(sess.userId);
+      if (!user || user.disabled) { sessions.delete(sess.qsid); return reply.code(401).send({ error: '账号不可用' }); }
+      req.user = user;
+      req.session = sess;
+      // 只读角色：禁止一切写操作
+      if (user.role === 'viewer' && !['GET', 'HEAD'].includes(req.method)) {
+        return reply.code(403).send({ error: '只读账号不能执行写操作' });
+      }
+      return;
+    }
+    const auth = req.headers['x-api-key'];
+    if (auth) {
+      const key = store.findApiKeyByHash(hashApiKey(auth));
+      if (key) { req.apiKey = key; return; }
+      // 兼容旧的单条 meta.apiKey
+      if (store.meta.apiKey && auth === store.meta.apiKey) { req.legacyApiKey = true; return; }
+    }
+    return reply.code(401).send({ error: '未登录' });
+  });
+
+  /** 需要管理员 */
+  const requireAdmin = (req, reply) => {
+    if (req.user && req.user.role === 'admin') return true;
+    reply.code(403).send({ error: '需要管理员权限' });
+    return false;
+  };
 
   app.post('/api/login', async (req, reply) => {
     const ip = req.ip || req.hostname || 'unknown';
     if (loginLocked(ip)) {
       return reply.code(429).send({ error: '登录失败次数过多，请 10 分钟后再试' });
     }
-    const { password } = req.body || {};
-    if (!password || !verifyPwd(password, store.meta.passwordHash)) {
+    const { username, password, code } = req.body || {};
+    // 未给用户名时：只有一个账号就用它，否则默认 admin
+    const name = String(username || (store.meta.users.length === 1 ? store.meta.users[0].username : 'admin')).trim();
+    const user = store.getUserByName(name);
+
+    const fail = (msg, code2 = 401) => {
       noteLoginFail(ip);
-      if (loginLocked(ip)) {
-        return reply.code(429).send({ error: '登录失败次数过多，请 10 分钟后再试' });
+      if (user) {
+        user.failedLogins = (user.failedLogins || 0) + 1;
+        if (user.failedLogins >= ACCOUNT_FAIL_LIMIT) user.lockedUntil = Date.now() + ACCOUNT_FAIL_WINDOW;
+        store.flush();
       }
-      return reply.code(401).send({ error: '密码错误' });
+      if (loginLocked(ip)) return reply.code(429).send({ error: '登录失败次数过多，请 10 分钟后再试' });
+      return reply.code(code2).send({ error: msg });
+    };
+
+    // 用户不存在也要走一次 scrypt，避免用户名枚举（时序一致）
+    const dummy = '00:' + crypto.createHash('sha256').update('dummy').digest('hex');
+    const okPwd = verifyPwd(password || '', user ? user.passwordHash : dummy);
+    if (!user || user.disabled || !okPwd) {
+      store.audit('login.fail', `用户名=${name}`, '');
+      return fail('用户名或密码错误');
     }
+    if (user.lockedUntil && user.lockedUntil > Date.now()) {
+      const mins = Math.ceil((user.lockedUntil - Date.now()) / 60000);
+      return reply.code(429).send({ error: `账号已锁定，请 ${mins} 分钟后重试` });
+    }
+
+    // 两步验证
+    if (user.totp?.enabled) {
+      if (!code) {
+        return reply.code(401).send({ error: '需要两步验证码', needTotp: true });
+      }
+      const input = String(code).trim();
+      let ok2fa = verifyTotp(user.totp.secret, input);
+      if (!ok2fa) {
+        // 恢复码（一次性）
+        const idx = (user.recoveryCodes || []).findIndex((h) => verifyRecoveryCode(input, h));
+        if (idx >= 0) {
+          user.recoveryCodes.splice(idx, 1);
+          store.flush();
+          ok2fa = true;
+        }
+      }
+      if (!ok2fa) {
+        store.audit('login.2fa-fail', `用户名=${name}`, name);
+        return fail('两步验证码错误');
+      }
+    }
+
     loginFails.delete(ip);
+    user.failedLogins = 0;
+    user.lockedUntil = null;
+    user.lastLoginAt = Date.now();
+    store.flush();
+
     const qsid = crypto.randomBytes(24).toString('base64url');
-    sessions.set(qsid, Date.now() + 7 * 86400e3);
-    reply.setCookie('qsid', qsid, { path: '/', sameSite: 'lax', maxAge: 7 * 86400 });
+    sessions.set(qsid, {
+      userId: user.id, createdAt: Date.now(), lastSeenAt: Date.now(),
+      ip, ua: String(req.headers['user-agent'] || '').slice(0, 120), expiresAt: Date.now() + SESSION_TTL,
+    });
+    reply.setCookie('qsid', qsid, { path: '/', httpOnly: true, sameSite: 'strict', maxAge: 7 * 86400 });
+    store.audit('login.ok', `用户名=${name}`, user.username);
+    return { ok: true, user: { username: user.username, displayName: user.displayName, role: user.role, totpEnabled: !!user.totp?.enabled } };
+  });
+
+  app.post('/api/logout', async (req, reply) => {
+    const qsid = req.cookies?.qsid;
+    if (qsid) sessions.delete(qsid);
+    reply.clearCookie('qsid', { path: '/' });
     return { ok: true };
   });
 
-  app.post('/api/logout', async () => {
-    sessions.clear();
+  // 当前登录信息（供前端显示用户名/角色）
+  app.get('/api/me', async (req) => {
+    const sess = currentSession(req);
+    if (!sess) return { authenticated: false };
+    const user = store.getUser(sess.userId);
+    if (!user) return { authenticated: false };
+    return {
+      authenticated: true,
+      user: {
+        id: user.id, username: user.username, displayName: user.displayName || user.username,
+        role: user.role, totpEnabled: !!user.totp?.enabled,
+        recoveryCodesLeft: (user.recoveryCodes || []).length,
+        lastLoginAt: user.lastLoginAt || null, passwordUpdatedAt: user.passwordUpdatedAt || null,
+      },
+      session: { createdAt: sess.createdAt, ip: sess.ip, ua: sess.ua },
+    };
+  });
+
+  // ---- 我的会话 ----
+  app.get('/api/system/sessions', async (req) => {
+    const me = req.user;
+    if (!me) return { sessions: [] };
+    const current = req.cookies?.qsid;
+    return {
+      sessions: sessionsOf(me.id).map((id) => {
+        const s = sessions.get(id);
+        return { id, current: id === current, createdAt: s.createdAt, lastSeenAt: s.lastSeenAt, ip: s.ip, ua: s.ua };
+      }).sort((a, b) => b.lastSeenAt - a.lastSeenAt),
+    };
+  });
+
+  app.delete('/api/system/sessions/:id', async (req, reply) => {
+    const me = req.user;
+    if (!me) return reply.code(401).send({ error: '未登录' });
+    const s = sessions.get(req.params.id);
+    if (!s || s.userId !== me.id) return reply.code(404).send({ error: '会话不存在' });
+    sessions.delete(req.params.id);
+    store.audit('session.revoke', `会话=${req.params.id.slice(0, 8)}`, me.username);
+    return { ok: true };
+  });
+
+  app.post('/api/system/logout-all', async (req) => {
+    const me = req.user;
+    if (!me) return { ok: false };
+    for (const id of sessionsOf(me.id)) sessions.delete(id);
+    store.audit('logout.all', '', me.username);
     return { ok: true };
   });
 
   app.get('/api/health', async () => ({ ok: true, version: '0.3.17' }));
 
-  // 首次启动：若仍是随机生成的管理员密码，引导用户创建正式密码
-  app.get('/api/system/bootstrap', async () => ({ needsSetup: !!store.meta.generatedPassword }));
+  // 首次启动：还没有任何账号时，引导创建管理员（用户名 + 密码）
+  app.get('/api/system/bootstrap', async () => ({
+    needsSetup: store.meta.users.length === 0,
+    username: store.meta.users[0]?.username || 'admin',
+    hasUsers: store.meta.users.length > 0,
+  }));
   app.post('/api/system/bootstrap', async (req, reply) => {
-    const { password } = req.body || {};
-    if (!password || String(password).length < 8) return reply.code(400).send({ error: '密码至少 8 位' });
-    store.meta.passwordHash = hashPwd(String(password));
-    store.meta.generatedPassword = false;
-    store.meta.plainHint = null;
-    store.flush();
-    sessions.clear();
+    if (store.meta.users.length) return reply.code(400).send({ error: '账号已存在，无需初始化' });
+    const { username = 'admin', password } = req.body || {};
+    const nameErr = checkUsername(username);
+    if (nameErr) return reply.code(400).send({ error: nameErr });
+    const pwdErr = checkPassword(password, username);
+    if (pwdErr) return reply.code(400).send({ error: pwdErr });
+    store.createUser({ username, password, role: 'admin', displayName: '管理员' });
+    store.audit('bootstrap', `创建管理员 ${username}`, username);
+    for (const id of [...sessions.keys()]) sessions.delete(id);
     return { ok: true };
   });
 
-  // 设置：改密 / API Key（单用户）
-  app.get('/api/system/settings', async () => ({ hasApiKey: !!store.meta.apiKey, apiKey: store.meta.apiKey ? store.meta.apiKey.slice(0, 8) + '…' : null }));
-  app.post('/api/system/password', async (req, reply) => {
-    const { oldPassword, newPassword } = req.body || {};
-    if (!verifyPwd(oldPassword || '', store.meta.passwordHash)) return reply.code(401).send({ error: '当前密码错误' });
-    if (!newPassword || String(newPassword).length < 8) return reply.code(400).send({ error: '新密码至少 8 位' });
-    store.meta.passwordHash = hashPwd(String(newPassword));
-    store.meta.generatedPassword = false;
+
+  // ---- 两步验证（TOTP）----
+  // 1) 开始绑定：生成密钥（此时未启用）
+  app.post('/api/system/2fa/enroll', async (req, reply) => {
+    const me = req.user;
+    if (!me) return reply.code(401).send({ error: '未登录' });
+    const { password } = req.body || {};
+    if (!verifyPwd(password || '', me.passwordHash)) return reply.code(401).send({ error: '密码不正确' });
+    if (me.totp?.enabled) return reply.code(400).send({ error: '已启用两步验证，请先关闭' });
+    const secret = generateSecret();
+    me.totp = { enabled: false, secret, createdAt: Date.now() };
     store.flush();
-    sessions.clear();
+    store.audit('2fa.enroll-start', `用户=${me.username}`, me.username);
+    return { ok: true, secret, uri: otpauthUri({ secret, account: me.username }), digits: 6, period: 30 };
+  });
+
+  // 2) 确认绑定：校验一次验证码 → 启用 + 生成恢复码（明文只返回这一次）
+  app.post('/api/system/2fa/confirm', async (req, reply) => {
+    const me = req.user;
+    if (!me) return reply.code(401).send({ error: '未登录' });
+    const { code } = req.body || {};
+    if (!me.totp?.secret) return reply.code(400).send({ error: '尚未开始绑定' });
+    if (!verifyTotp(me.totp.secret, code)) return reply.code(400).send({ error: '验证码错误' });
+    const codes = generateRecoveryCodes(10);
+    me.totp = { ...me.totp, enabled: true, confirmedAt: Date.now() };
+    me.recoveryCodes = codes.map(hashRecoveryCode);
+    store.flush();
+    store.audit('2fa.enable', `用户=${me.username}`, me.username);
+    return { ok: true, recoveryCodes: codes };
+  });
+
+  // 3) 关闭两步验证（需密码 + 当前验证码）
+  app.post('/api/system/2fa/disable', async (req, reply) => {
+    const me = req.user;
+    if (!me) return reply.code(401).send({ error: '未登录' });
+    const { password, code } = req.body || {};
+    if (!verifyPwd(password || '', me.passwordHash)) return reply.code(401).send({ error: '密码不正确' });
+    if (!me.totp?.enabled) return reply.code(400).send({ error: '未启用两步验证' });
+    if (!verifyTotp(me.totp.secret, code)) return reply.code(400).send({ error: '验证码错误' });
+    me.totp = null;
+    me.recoveryCodes = [];
+    store.flush();
+    store.audit('2fa.disable', `用户=${me.username}`, me.username);
     return { ok: true };
   });
-  app.post('/api/system/apikey', async () => {
-    const key = crypto.randomBytes(24).toString('base64url');
-    store.meta.apiKey = key;
+
+  // 4) 重新生成恢复码
+  app.post('/api/system/2fa/recovery-codes', async (req, reply) => {
+    const me = req.user;
+    if (!me) return reply.code(401).send({ error: '未登录' });
+    const { password, code } = req.body || {};
+    if (!verifyPwd(password || '', me.passwordHash)) return reply.code(401).send({ error: '密码不正确' });
+    if (!me.totp?.enabled) return reply.code(400).send({ error: '未启用两步验证' });
+    if (!verifyTotp(me.totp.secret, code)) return reply.code(400).send({ error: '验证码错误' });
+    const codes = generateRecoveryCodes(10);
+    me.recoveryCodes = codes.map(hashRecoveryCode);
     store.flush();
+    store.audit('2fa.recovery-codes', `用户=${me.username}`, me.username);
+    return { ok: true, recoveryCodes: codes };
+  });
+
+  // ---- 用户管理（仅管理员）----
+  app.get('/api/system/users', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    return { users: store.listUsers(), roles: ROLES, passwordMin: PASSWORD_MIN };
+  });
+
+  app.post('/api/system/users', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    const { username, password, role = 'operator', displayName } = req.body || {};
+    const nameErr = checkUsername(username);
+    if (nameErr) return reply.code(400).send({ error: nameErr });
+    if (store.getUserByName(username)) return reply.code(400).send({ error: '用户名已存在' });
+    if (!ROLES.includes(role)) return reply.code(400).send({ error: '角色无效' });
+    const pwdErr = checkPassword(password, username);
+    if (pwdErr) return reply.code(400).send({ error: pwdErr });
+    const u = store.createUser({ username, password, role, displayName });
+    store.audit('user.create', `用户=${u.username} 角色=${role}`, req.user.username);
+    return { ok: true, user: store.listUsers().find((x) => x.id === u.id) };
+  });
+
+  app.put('/api/system/users/:id', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    const u = store.getUser(req.params.id);
+    if (!u) return reply.code(404).send({ error: '用户不存在' });
+    const { role, disabled, displayName, username } = req.body || {};
+    if (role !== undefined) {
+      if (!ROLES.includes(role)) return reply.code(400).send({ error: '角色无效' });
+      if (u.id === req.user.id && role !== 'admin') return reply.code(400).send({ error: '不能降低自己的管理员权限' });
+      if (u.role === 'admin' && role !== 'admin') {
+        const admins = store.meta.users.filter((x) => x.role === 'admin' && !x.disabled).length;
+        if (admins <= 1) return reply.code(400).send({ error: '至少保留一个管理员' });
+      }
+    }
+    if (disabled !== undefined && u.id === req.user.id && disabled) {
+      return reply.code(400).send({ error: '不能停用自己的账号' });
+    }
+    if (username !== undefined) {
+      const nameErr = checkUsername(username);
+      if (nameErr) return reply.code(400).send({ error: nameErr });
+      if (store.getUserByName(username) && store.getUserByName(username).id !== u.id) {
+        return reply.code(400).send({ error: '用户名已存在' });
+      }
+    }
+    const patch = {};
+    if (role !== undefined) patch.role = role;
+    if (disabled !== undefined) patch.disabled = !!disabled;
+    if (displayName !== undefined) patch.displayName = displayName;
+    if (username !== undefined) patch.username = username;
+    store.updateUser(u.id, patch);
+    if (patch.disabled) for (const id of sessionsOf(u.id)) sessions.delete(id);
+    store.audit('user.update', `用户=${u.username}`, req.user.username);
+    return { ok: true, user: store.listUsers().find((x) => x.id === u.id) };
+  });
+
+  // 管理员重置他人密码（强制该用户下次登录改密由管理员分配新密码）
+  app.post('/api/system/users/:id/password', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    const u = store.getUser(req.params.id);
+    if (!u) return reply.code(404).send({ error: '用户不存在' });
+    const { password } = req.body || {};
+    const pwdErr = checkPassword(password, u.username);
+    if (pwdErr) return reply.code(400).send({ error: pwdErr });
+    store.updateUser(u.id, { passwordHash: hashPwd(String(password)) });
+    for (const id of sessionsOf(u.id)) sessions.delete(id);
+    store.audit('user.reset-password', `用户=${u.username}`, req.user.username);
+    return { ok: true };
+  });
+
+  // 管理员重置他人 2FA（用户丢失验证器时用）
+  app.post('/api/system/users/:id/2fa/reset', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    const u = store.getUser(req.params.id);
+    if (!u) return reply.code(404).send({ error: '用户不存在' });
+    store.updateUser(u.id, { totp: null, recoveryCodes: [] });
+    for (const id of sessionsOf(u.id)) sessions.delete(id);
+    store.audit('user.2fa-reset', `用户=${u.username}`, req.user.username);
+    return { ok: true };
+  });
+
+  app.delete('/api/system/users/:id', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    const u = store.getUser(req.params.id);
+    if (!u) return reply.code(404).send({ error: '用户不存在' });
+    if (u.id === req.user.id) return reply.code(400).send({ error: '不能删除自己的账号' });
+    if (u.role === 'admin' && store.meta.users.filter((x) => x.role === 'admin' && !x.disabled).length <= 1) {
+      return reply.code(400).send({ error: '至少保留一个管理员' });
+    }
+    for (const id of sessionsOf(u.id)) sessions.delete(id);
+    store.deleteUser(u.id);
+    store.audit('user.delete', `用户=${u.username}`, req.user.username);
+    return { ok: true };
+  });
+
+  // 审计日志（仅管理员）
+  app.get('/api/system/audit', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    return { entries: store.listAudit(Number(req.query?.limit) || 100) };
+  });
+
+  // 设置：改密 / API Key（单用户）
+  app.get('/api/system/settings', async (req) => ({
+    hasApiKey: !!store.meta.apiKey || store.meta.apiKeys.length > 0,
+    apiKey: store.meta.apiKey ? store.meta.apiKey.slice(0, 8) + '…' : null,
+    apiKeys: req.user?.role === 'admin' ? store.listApiKeys() : [],
+    userCount: store.meta.users.length,
+  }));
+  // 修改自己的密码（需校验旧密码；改密后其他会话失效）
+  app.post('/api/system/password', async (req, reply) => {
+    const me = req.user;
+    if (!me) return reply.code(401).send({ error: '未登录' });
+    const { oldPassword, newPassword } = req.body || {};
+    if (!verifyPwd(oldPassword || '', me.passwordHash)) {
+      store.audit('password.fail', `用户=${me.username}`, me.username);
+      return reply.code(401).send({ error: '当前密码不正确' });
+    }
+    const err = checkPassword(newPassword, me.username);
+    if (err) return reply.code(400).send({ error: err });
+    if (verifyPwd(newPassword || '', me.passwordHash)) return reply.code(400).send({ error: '新密码不能与当前密码相同' });
+    store.updateUser(me.id, { passwordHash: hashPwd(String(newPassword)) });
+    store.audit('password.change', `用户=${me.username}`, me.username);
+    const current = req.cookies?.qsid;
+    for (const id of sessionsOf(me.id)) if (id !== current) sessions.delete(id);
+    return { ok: true };
+  });
+  // API Key：明文只在创建时返回一次，服务端只存 sha256 摘要
+  app.get('/api/system/apikeys', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    return { keys: store.listApiKeys() };
+  });
+  app.post('/api/system/apikeys', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    const { name } = req.body || {};
+    const { key, hash, prefix } = newApiKey();
+    const k = store.addApiKey({ name: String(name || 'API Key').slice(0, 40), hash, prefix, userId: req.user?.id || null });
+    store.audit('apikey.create', `名称=${k.name}`, req.user?.username || '');
+    return { ok: true, apiKey: key, key: { id: k.id, name: k.name, prefix: k.prefix, createdAt: k.createdAt } };
+  });
+  app.delete('/api/system/apikeys/:id', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    const ok = store.revokeApiKey(req.params.id);
+    if (!ok) return reply.code(404).send({ error: '不存在' });
+    store.audit('apikey.revoke', `id=${req.params.id.slice(0, 8)}`, req.user?.username || '');
+    return { ok: true };
+  });
+  // 兼容旧接口（单 key）
+  app.post('/api/system/apikey', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    const { key, hash, prefix } = newApiKey();
+    store.meta.apiKey = key; // 兼容旧字段（明文仅此一次由管理员自行保管）
+    store.addApiKey({ name: '默认 Key', hash, prefix, userId: req.user?.id || null });
+    store.audit('apikey.create', '默认 Key', req.user?.username || '');
     return { apiKey: key };
   });
 

@@ -3,13 +3,21 @@ import { api } from '../api.js';
 
 export default function Login({ onOk }) {
   const [mode, setMode] = useState('loading'); // loading | setup | login
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [code, setCode] = useState('');
+  const [needCode, setNeedCode] = useState(false);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    api.bootstrap().then((r) => setMode(r.needsSetup ? 'setup' : 'login')).catch(() => setMode('login'));
+    api.bootstrap()
+      .then((r) => {
+        setMode(r.needsSetup ? 'setup' : 'login');
+        if (r.username) setUsername(r.username);
+      })
+      .catch(() => setMode('login'));
   }, []);
 
   const submitLogin = async (e) => {
@@ -17,10 +25,18 @@ export default function Login({ onOk }) {
     setBusy(true);
     setErr('');
     try {
-      await api.login(password);
+      await api.login(username.trim() || undefined, password, code.trim() || undefined);
       onOk();
     } catch (e2) {
-      setErr(e2.message.includes('密码') || e2.message.includes('未登录') ? e2.message : '登录失败，请检查密码');
+      const msg = e2.message || '登录失败';
+      if (e2.needTotp || msg.includes('两步')) {
+        setNeedCode(true);
+        setErr('该账号已启用两步验证，请输入 6 位动态码');
+      } else if (msg.includes('锁定')) {
+        setErr(msg);
+      } else {
+        setErr(msg.includes('未登录') ? '用户名或密码错误' : msg);
+      }
     } finally {
       setBusy(false);
     }
@@ -29,11 +45,13 @@ export default function Login({ onOk }) {
   const submitSetup = async (e) => {
     e.preventDefault();
     setErr('');
-    if (password.length < 8) { setErr('密码至少 8 位'); return; }
+    if (username.trim().length < 3) { setErr('用户名至少 3 位'); return; }
+    if (password.length < 10) { setErr('密码至少 10 位'); return; }
     if (password !== confirm) { setErr('两次输入的密码不一致'); return; }
     setBusy(true);
     try {
-      await api.setupPassword(password);
+      await api.setupAccount(username.trim(), password);
+      await api.login(username.trim(), password);
       onOk();
     } catch (e2) {
       setErr(e2.message);
@@ -52,11 +70,14 @@ export default function Login({ onOk }) {
         <form className="login-card" onSubmit={submitSetup}>
           <h1>Check<em style={{ color: 'var(--accent)' }}>Q</em></h1>
           <p className="sub">首次启动 · 创建管理员账号</p>
-          <input type="password" placeholder="设置登录密码（至少 8 位）" value={password} autoFocus onChange={(e) => setPassword(e.target.value)} />
+          <input placeholder="用户名（字母数字，3-32 位）" value={username} autoFocus onChange={(e) => setUsername(e.target.value)} />
+          <input type="password" placeholder="登录密码（至少 10 位，含两类字符）" value={password} onChange={(e) => setPassword(e.target.value)} />
           <input type="password" placeholder="再输入一次" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-          <button className="primary" disabled={busy || !password}>{busy ? '创建中…' : '创建并进入'}</button>
+          <button className="primary" disabled={busy || !username || !password}>{busy ? '创建中…' : '创建并进入'}</button>
           <div className="login-err">{err}</div>
-          <p className="login-hint">密码只保存在本机数据目录的 meta.json（scrypt 哈希）；API 调用请用「设置 → API Key」。</p>
+          <p className="login-hint">
+            密码用 scrypt 加盐哈希保存（本机 meta.json，不落明文）；登录后可再开启两步验证（TOTP）。
+          </p>
         </form>
       </div>
     );
@@ -68,14 +89,32 @@ export default function Login({ onOk }) {
         <h1>Check<em style={{ color: 'var(--accent)' }}>Q</em></h1>
         <p className="sub">可视化 HTTP 自动化流程引擎</p>
         <input
-          type="password"
-          placeholder="访问密码"
-          value={password}
-          autoFocus
-          onChange={(e) => setPassword(e.target.value)}
+          placeholder="用户名"
+          value={username}
+          autoFocus={!needCode}
+          onChange={(e) => setUsername(e.target.value)}
+          autoComplete="username"
         />
+        <input
+          type="password"
+          placeholder="密码"
+          value={password}
+          autoFocus={needCode}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="current-password"
+        />
+        {needCode && (
+          <input
+            placeholder="两步验证码（6 位动态码或恢复码）"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+          />
+        )}
         <button className="primary" disabled={busy || !password}>{busy ? '验证中…' : '进入'}</button>
         <div className="login-err">{err}</div>
+        <p className="login-hint">连续失败会临时锁定；忘记两步验证码可用恢复码，或让管理员在「用户管理」重置。</p>
       </form>
     </div>
   );

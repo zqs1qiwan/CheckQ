@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { Cron } from 'croner';
+import { hashPwd, checkPassword } from './auth.js';
 
 export class Store {
   #persistTimer = null;
@@ -24,15 +25,54 @@ export class Store {
     this.templates = this.#load(this.templatesFile, []);
     this.notifications = this.#load(this.notificationsFile, []);
     this.meta = this.#load(this.metaFile, {});
-    if (!this.meta.passwordHash) {
-      const pwd = process.env.ADMIN_PASSWORD || crypto.randomBytes(9).toString('base64url');
-      this.meta.passwordHash = hashPwd(pwd);
-      this.meta.generatedPassword = !process.env.ADMIN_PASSWORD;
-      this.meta.plainHint = process.env.ADMIN_PASSWORD ? null : pwd;
+
+    // ---- 账号体系（v0.4.3）：多用户 + 角色 + 2FA + 审计 ----
+    this.meta.users = Array.isArray(this.meta.users) ? this.meta.users : [];
+    this.meta.apiKeys = Array.isArray(this.meta.apiKeys) ? this.meta.apiKeys : [];
+    this.meta.audit = Array.isArray(this.meta.audit) ? this.meta.audit : [];
+
+    // 迁移：旧版单密码 meta.passwordHash → admin 用户；并删除明文密码提示
+    if (!this.meta.users.length && this.meta.passwordHash) {
+      this.meta.users.push({
+        id: crypto.randomUUID(),
+        username: 'admin',
+        displayName: '管理员',
+        role: 'admin',
+        passwordHash: this.meta.passwordHash,
+        passwordUpdatedAt: Date.now(),
+        disabled: false,
+        totp: null,
+        recoveryCodes: [],
+        createdAt: Date.now(),
+        lastLoginAt: null,
+      });
+      console.log('[CheckQ] 已把旧单密码迁移为用户 admin（可稍后在「账号安全」改名/加密码）');
+    }
+    delete this.meta.passwordHash;   // 不再保留旧字段
+    delete this.meta.plainHint;      // 明文密码绝不落盘
+    delete this.meta.generatedPassword;
+
+    if (!this.meta.users.length) {
+      const pwd = process.env.ADMIN_PASSWORD || crypto.randomBytes(12).toString('base64url');
+      this.meta.users.push({
+        id: crypto.randomUUID(),
+        username: 'admin',
+        displayName: '管理员',
+        role: 'admin',
+        passwordHash: hashPwd(pwd),
+        passwordUpdatedAt: Date.now(),
+        disabled: false,
+        totp: null,
+        recoveryCodes: [],
+        createdAt: Date.now(),
+        lastLoginAt: null,
+      });
+      this.meta.firstRunPassword = pwd;   // 仅本次进程内打印一次，不写盘
       this.#save(this.metaFile, this.meta);
-      if (!process.env.ADMIN_PASSWORD) {
-        console.log(`[CheckQ] 未设置 ADMIN_PASSWORD，初始密码: ${pwd}`);
-      }
+      console.log(`[CheckQ] 初始账号 admin，初始密码: ${pwd}（仅显示一次，请立即登录后修改）`);
+    } else {
+      delete this.meta.firstRunPassword;
+      this.#save(this.metaFile, this.meta);
     }
   }
 
@@ -309,6 +349,127 @@ export class Store {
   }
 
   /** 运维统计（首页健康条）：任务/调度/今日运行/成功率/下次触发 */
+
+  // ---- users ----
+  listUsers() {
+    return this.meta.users.map((u) => this.#publicUser(u));
+  }
+
+  #publicUser(u) {
+    if (!u) return null;
+    return {
+      id: u.id,
+      username: u.username,
+      displayName: u.displayName || u.username,
+      role: u.role || 'operator',
+      disabled: !!u.disabled,
+      totpEnabled: !!(u.totp && u.totp.enabled),
+      recoveryCodesLeft: Array.isArray(u.recoveryCodes) ? u.recoveryCodes.length : 0,
+      createdAt: u.createdAt || null,
+      lastLoginAt: u.lastLoginAt || null,
+      passwordUpdatedAt: u.passwordUpdatedAt || null,
+      failedLogins: u.failedLogins || 0,
+      lockedUntil: u.lockedUntil || null,
+    };
+  }
+
+  getUser(id) {
+    return this.meta.users.find((u) => u.id === id) || null;
+  }
+
+  getUserByName(username) {
+    const name = String(username || '').trim().toLowerCase();
+    return this.meta.users.find((u) => String(u.username).toLowerCase() === name) || null;
+  }
+
+  createUser({ username, password, role = 'operator', displayName }) {
+    const user = {
+      id: crypto.randomUUID(),
+      username: String(username).trim(),
+      displayName: String(displayName || username).trim(),
+      role,
+      passwordHash: hashPwd(password),
+      passwordUpdatedAt: Date.now(),
+      disabled: false,
+      totp: null,
+      recoveryCodes: [],
+      createdAt: Date.now(),
+      lastLoginAt: null,
+      failedLogins: 0,
+      lockedUntil: null,
+    };
+    this.meta.users.push(user);
+    this.flush();
+    return user;
+  }
+
+  updateUser(id, patch) {
+    const u = this.getUser(id);
+    if (!u) return null;
+    if (patch.username !== undefined) u.username = String(patch.username).trim();
+    if (patch.displayName !== undefined) u.displayName = String(patch.displayName).trim();
+    if (patch.role !== undefined) u.role = patch.role;
+    if (patch.disabled !== undefined) u.disabled = !!patch.disabled;
+    if (patch.passwordHash !== undefined) {
+      u.passwordHash = patch.passwordHash;
+      u.passwordUpdatedAt = Date.now();
+    }
+    if (patch.totp !== undefined) u.totp = patch.totp;
+    if (patch.recoveryCodes !== undefined) u.recoveryCodes = patch.recoveryCodes;
+    if (patch.failedLogins !== undefined) u.failedLogins = patch.failedLogins;
+    if (patch.lockedUntil !== undefined) u.lockedUntil = patch.lockedUntil;
+    this.flush();
+    return u;
+  }
+
+  deleteUser(id) {
+    const i = this.meta.users.findIndex((u) => u.id === id);
+    if (i === -1) return false;
+    this.meta.users.splice(i, 1);
+    this.flush();
+    return true;
+  }
+
+  // ---- api keys ----
+  listApiKeys() {
+    return this.meta.apiKeys.map((k) => ({
+      id: k.id, name: k.name, prefix: k.prefix, createdAt: k.createdAt,
+      lastUsedAt: k.lastUsedAt || null, userId: k.userId || null, disabled: !!k.disabled,
+    }));
+  }
+
+  addApiKey({ name, hash, prefix, userId }) {
+    const k = { id: crypto.randomUUID(), name: name || 'API Key', hash, prefix, userId: userId || null, createdAt: Date.now(), lastUsedAt: null, disabled: false };
+    this.meta.apiKeys.push(k);
+    this.flush();
+    return k;
+  }
+
+  revokeApiKey(id) {
+    const i = this.meta.apiKeys.findIndex((k) => k.id === id);
+    if (i === -1) return false;
+    this.meta.apiKeys.splice(i, 1);
+    this.flush();
+    return true;
+  }
+
+  findApiKeyByHash(hash) {
+    const k = this.meta.apiKeys.find((x) => x.hash === hash && !x.disabled);
+    if (k) { k.lastUsedAt = Date.now(); this.flush(); }
+    return k || null;
+  }
+
+  // ---- audit ----
+  audit(action, detail = '', actor = '') {
+    this.meta.audit.unshift({ at: Date.now(), action, detail: String(detail || '').slice(0, 300), actor: actor || '' });
+    if (this.meta.audit.length > 500) this.meta.audit.length = 500;
+    this.flush();
+  }
+
+  listAudit(limit = 100) {
+    return this.meta.audit.slice(0, Math.min(Math.max(1, limit), 500));
+  }
+
   stats() {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
@@ -344,15 +505,5 @@ export class Store {
   }
 }
 
-export function hashPwd(pwd) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(pwd, salt, 32).toString('hex');
-  return `${salt}:${hash}`;
-}
-
-export function verifyPwd(pwd, stored) {
-  const [salt, hash] = String(stored).split(':');
-  if (!salt || !hash) return false;
-  const h = crypto.scryptSync(pwd, salt, 32).toString('hex');
-  return crypto.timingSafeEqual(Buffer.from(h), Buffer.from(hash));
-}
+// 密码哈希已抽到 server/src/auth.js（scrypt N=16384 + 随机盐 + 常量时间比较）
+export { hashPwd, verifyPwd, checkPassword, checkUsername, hashApiKey, newApiKey, ROLES, PASSWORD_MIN } from './auth.js';

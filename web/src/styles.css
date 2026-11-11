@@ -742,3 +742,34 @@ button.icon-text { gap: 5px; }
 button.icon-text svg { flex: none; }
 .menu-pop button { gap: 6px; justify-content: flex-start; }
 .menu-pop button svg { flex: none; opacity: .85; }
+
+/* ---- 账号安全 / 用户管理（v0.4.3） ---- */
+.acc-panel, .users-panel { display: flex; flex-direction: column; gap: var(--sp-4); }
+.acc-card { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--panel2); padding: var(--sp-4); }
+.acc-card-head { font-size: var(--fs-md); font-weight: 600; margin-bottom: var(--sp-3); }
+.acc-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: 5px 0; font-size: var(--fs-sm); color: var(--muted); border-bottom: 1px dashed var(--border); }
+.acc-row:last-child { border-bottom: none; }
+.acc-row b { color: var(--text); font-weight: 600; }
+.acc-row-actions { display: flex; align-items: center; gap: var(--sp-2); }
+.acc-recovery { margin-top: var(--sp-3); padding: var(--sp-3); border: 1px dashed var(--accent); border-radius: var(--r-md); }
+.acc-codes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 10px; margin: 8px 0; }
+.acc-codes code { font-family: var(--mono, ui-monospace, Consolas, monospace); font-size: var(--fs-sm); color: var(--text); letter-spacing: .5px; }
+
+.users-table { display: flex; flex-direction: column; gap: 2px; }
+.users-row { display: grid; grid-template-columns: 1.4fr 1fr .7fr .7fr 1.2fr 2fr; gap: var(--sp-2); align-items: center; padding: 7px 8px; border-radius: var(--r-sm); font-size: var(--fs-sm); }
+.users-row:hover { background: var(--hover-tint); }
+.users-head { color: var(--muted); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .04em; }
+.users-name { display: flex; flex-direction: column; min-width: 0; }
+.users-name b { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.users-uid { color: var(--muted); font-size: var(--fs-xs); }
+.users-time { color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
+.users-ops { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+
+.audit-list { display: flex; flex-direction: column; max-height: 260px; overflow-y: auto; }
+.audit-row { display: grid; grid-template-columns: 140px 130px 1fr 90px; gap: var(--sp-2); padding: 4px 2px; font-size: var(--fs-xs); color: var(--muted); border-bottom: 1px dashed var(--border); }
+.audit-action { color: var(--text); }
+.audit-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 顶栏登录身份 */
+.who-chip { display: inline-flex; align-items: center; gap: 6px; height: var(--ctl-h); padding: 0 10px; border-radius: var(--r-md); border: 1px solid var(--border); background: var(--panel2); font-size: var(--fs-sm); color: var(--text); white-space: nowrap; }
+.who-chip em { font-style: normal; color: var(--muted); font-size: var(--fs-xs); }

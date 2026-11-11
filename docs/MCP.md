@@ -1,4 +1,4 @@
-# CheckQ MCP Server — AI-ready 接入指南
+﻿# CheckQ MCP Server — AI-ready 接入指南
 
 > MCP (Model Context Protocol) 服务端：`mcp/checkq-mcp.cjs`，零依赖，Node 18+，stdio JSON-RPC 2.0。
 > 任何支持 MCP 的 Agent（Claude Desktop / Cursor / OpenCode / 自研 Agent）都能直接接入。
@@ -19,7 +19,7 @@ node mcp/checkq-mcp.cjs
 | CHECKQ_PASSWORD | 二选一 | 登录密码（服务端会换 cookie） |
 | CHECKQ_API_KEY | 二选一 | X-API-Key（推荐，免登录、免会话过期） |
 
-## 3. 工具定义（9 个）
+## 3. 工具定义（10 个）
 
 | 工具 | 参数 | 说明 |
 |---|---|---|
@@ -32,6 +32,7 @@ node mcp/checkq-mcp.cjs
 | run_get | { id } | 单次运行完整日志与变量快照 |
 | templates_list | {} | 模板列表 |
 | stats | {} | 运维健康统计 |
+| notifications_list | { limit? } | 站内通知列表（含未读数） |
 
 ## 4. JSON-RPC 示例
 

@@ -48,6 +48,9 @@ X-API-Key: <key>
 | GET/PUT | /api/system/ai | AI 助手配置（baseUrl/apiKey/model，key 打码回显） |
 | POST | /api/ai/generate | `{ sentence }` → LLM 生成流程草稿（≤6 节点，http URL 必填，草稿 enabled:false） |
 | GET/PUT | /api/system/daily-summary-config | 每日汇总定时配置 |
+| GET | /api/notifications?limit= | 站内通知列表 `{ items, unread, total }` |
+| POST | /api/notifications/read | 标记已读（body `{ ids? }`，省略=全部） |
+| DELETE | /api/notifications | 清空站内通知 |
 | POST | /api/system/daily-summary | `{ flowId }` 立即发送汇总 |
 | GET/POST | /api/system/backup | 导出/导入全部数据（restore 以新 ID 导入，停用） |
 
@@ -128,6 +131,22 @@ data: { "id":"run-xxx", "status":"success", "durationMs":..., "summary":"...", "
 | delay | seconds |
 
 断言 asserts：`{ res: [regex], from: "content"|"status", negate }` 或 `{ expr, expect }`。
+
+### 通知渠道（flow.notify.channels[]，12 种）
+| type | 关键字段 |
+|---|---|
+| inbox | title（站内通知，无需外部服务） |
+| webhook | url |
+| bark | url, title, group |
+| telegram | token, chat |
+| serverchan | key, title |
+| pushplus | token, title |
+| dingtalk | url, secret?, title |
+| wecom | url |
+| feishu | url, secret? |
+| gotify | url, token, priority |
+| ntfy | url, topic, priority |
+| email | host, port, user, pass, from, to, subject |
 
 ## 6. 模板变量语法
 

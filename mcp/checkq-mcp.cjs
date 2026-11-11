@@ -55,6 +55,7 @@ const TOOLS = [
   { name: 'run_get', description: '读取某次运行的完整日志与变量快照', inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
   { name: 'templates_list', description: '列出所有模板', inputSchema: { type: 'object', properties: {} } },
   { name: 'stats', description: '运维健康统计（任务数/运行数/成功率/调度器）', inputSchema: { type: 'object', properties: {} } },
+  { name: 'notifications_list', description: '站内通知列表（含未读数）', inputSchema: { type: 'object', properties: { limit: { type: 'number' } } } },
 ];
 
 async function callTool(name, args) {
@@ -72,6 +73,7 @@ async function callTool(name, args) {
     case 'run_get': return api('GET', '/api/runs/' + args.id);
     case 'templates_list': return api('GET', '/api/templates');
     case 'stats': return api('GET', '/api/system/stats');
+    case 'notifications_list': return api('GET', '/api/notifications?limit=' + (args.limit || 50));
     default: throw new Error('unknown tool: ' + name);
   }
 }

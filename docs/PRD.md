@@ -509,7 +509,9 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 
 | 功能 | 设计 | 状态 |
 |---|---|---|
-| 渠道 | **webhook / bark / telegram / serverchan / dingtalk / wecom / feishu**（7 种原生集成，无外部脚本） | ✅ v0.4 |
+| 渠道 | **站内 / webhook / bark / telegram / serverchan / pushplus / dingtalk / wecom / feishu / gotify / ntfy / 邮件SMTP**（12 种原生集成，无外部脚本） | ✅ v0.4.1 |
+| 站内通知 | `inbox` 渠道零依赖：消息落库 notifications.json（上限 200），首页 🔔 未读角标 + 通知弹窗（全部已读/清空） | ✅ v0.4.1 |
+| 邮件 | 零依赖 SMTP：465 隐式 TLS / 587 STARTTLS / AUTH LOGIN，支持多收件人、UTF-8 主题 | ✅ v0.4.1 |
 | 加签 | 钉钉/飞书机器人 `secret` → HMAC-SHA256 签名（timestamp+sign 拼 URL） | ✅ v0.4 |
 | 流级开关 | onSuccess / onFailure | ✅ |
 | 消息模板 | 流级 `notify.template`，可用变量: flow.name/status/message/duration/time | ✅ v0.4 |

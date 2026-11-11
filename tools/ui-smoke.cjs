@@ -142,6 +142,18 @@ function fail(where, msg) { issues.push(`[${where}] ${msg}`); }
 function ok(where, msg) { notes.push(`[${where}] ✓ ${msg}`); }
 
 /* 页面内通用断言片段 */
+const WAIT = `
+  const waitFor = async (sel, ms = 5000) => {
+    const t0 = Date.now();
+    while (Date.now() - t0 < ms) {
+      const el = document.querySelector(sel);
+      if (el) return el;
+      await new Promise(r => setTimeout(r, 100));
+    }
+    return null;
+  };
+`;
+
 const ASSERT = `
   const A = { issues: [], notes: [] };
   const bad = (m) => A.issues.push(m);
@@ -282,12 +294,13 @@ async function checkModal(page, where, openExpr, opts = {}) {
     if (SHOTS) await page.shot(path.join(SHOTS, 'home-1440.png'));
 
     /* 2) 底部行内菜单（最容易出界的一处） */
-    await page.eval(`
+    await page.eval(WAIT + `
       const rows = [...document.querySelectorAll('.flow-table tbody tr')];
       const last = rows[rows.length - 1];
       last.scrollIntoView({ block: 'end' });
       await new Promise(r => setTimeout(r, 200));
-      last.querySelector('.dd-trigger').click();
+      const trig = await waitFor('details.row-menu > summary, .dd-trigger');
+      if (trig) trig.click();
       await new Promise(r => setTimeout(r, 260));
     `);
     await checkDropdown(page, '首页/1440', `return 1;`, '底部行');
@@ -303,7 +316,11 @@ async function checkModal(page, where, openExpr, opts = {}) {
     tpl.A.issues.forEach((i) => fail('模板页/1440', i));
     if (SHOTS) await page.shot(path.join(SHOTS, 'templates-1440.png'));
     if (tpl.cards) {
-      await page.eval(`document.querySelector('.tpl-card .dd-trigger').click(); await new Promise(r=>setTimeout(r,260));`);
+      await page.eval(WAIT + `
+        const trig = await waitFor('.tpl-card .dd-trigger');
+        if (trig) trig.click();
+        await new Promise(r => setTimeout(r, 260));
+      `);
       await checkDropdown(page, '模板页/1440', `return 1;`, '模板卡');
       await page.eval(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); await new Promise(r=>setTimeout(r,150));`);
     }
@@ -343,7 +360,11 @@ async function checkModal(page, where, openExpr, opts = {}) {
       return { hasTab: !!apikey, hasTrigger: !!t };
     `);
     if (keyMenu.hasTrigger) {
-      await page.eval(`document.querySelector('.key-ops .dd-trigger').click(); await new Promise(r=>setTimeout(r,260));`);
+      await page.eval(WAIT + `
+        const trig = await waitFor('.key-ops .dd-trigger');
+        if (trig) trig.click();
+        await new Promise(r => setTimeout(r, 260));
+      `);
       await checkDropdown(page, '设置/1440', `return 1;`, 'API 密钥');
       await page.eval(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); await new Promise(r=>setTimeout(r,150));`);
     }
@@ -376,10 +397,10 @@ async function checkModal(page, where, openExpr, opts = {}) {
     }
 
     /* 8) 编辑器 */
-    const openEditor = await page.eval(`
+    const openEditor = await page.eval(WAIT + `
       const btn = [...document.querySelectorAll('.flow-table tbody tr td button')].find(b => b.textContent.trim() === '编辑');
       if (btn) { btn.click(); return true; }
-      const row = document.querySelector('.flow-table tbody tr');
+      const row = await waitFor('.flow-table tbody tr');
       if (row) { const m = row.querySelector('.dd-trigger'); m.click(); await new Promise(r=>setTimeout(r,250));
         const e = [...document.querySelectorAll('.dd-pop button')].find(b=>b.textContent.trim()==='编辑'); if (e) { e.click(); return true; } }
       return false;
@@ -395,7 +416,11 @@ async function checkModal(page, where, openExpr, opts = {}) {
       ed.A.issues.forEach((i) => fail('编辑器/1440', i));
       if (!ed.A.issues.length) ok('编辑器/1440', '三栏布局正常');
       if (SHOTS) await page.shot(path.join(SHOTS, 'editor-1440.png'));
-      await checkDropdown(page, '编辑器/1440', `document.querySelector('.editor-topbar .dd-trigger').click(); await new Promise(r=>setTimeout(r,260));`, '编辑器更多');
+      await checkDropdown(page, '编辑器/1440', WAIT + `
+        const trig = await waitFor('.editor-topbar .dd-trigger');
+        if (trig) trig.click();
+        await new Promise(r => setTimeout(r, 260));
+      `, '编辑器更多');
       await page.eval(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); await new Promise(r=>setTimeout(r,150));`);
       /* 8b) 编辑器里的每个弹窗 */
       const editorModals = [
@@ -450,7 +475,17 @@ async function checkModal(page, where, openExpr, opts = {}) {
     mob.A.issues.forEach((i) => fail('移动端/390', i));
     mob.A.notes.forEach((n) => ok('移动端/390', n));
     if (SHOTS) await page.shot(path.join(SHOTS, 'home-390.png'));
-    await page.eval(`const rows=[...document.querySelectorAll('.flow-table tbody tr')]; if(rows.length){rows[rows.length-1].scrollIntoView({block:'end'}); await new Promise(r=>setTimeout(r,200)); rows[rows.length-1].querySelector('.dd-trigger').click(); await new Promise(r=>setTimeout(r,260));}`);
+    await page.eval(WAIT + `
+      const rows=[...document.querySelectorAll('.flow-table tbody tr')];
+      if(rows.length){
+        const last=rows[rows.length-1];
+        last.scrollIntoView({block:'end'});
+        await new Promise(r=>setTimeout(r,200));
+        const trig=await waitFor('.dd-trigger');
+        if(trig) trig.click();
+        await new Promise(r=>setTimeout(r,260));
+      }
+    `);
     await checkDropdown(page, '移动端/390', `return 1;`, '底部行');
     await page.eval(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); await new Promise(r=>setTimeout(r,150));`);
 

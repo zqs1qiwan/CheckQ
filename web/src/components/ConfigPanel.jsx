@@ -207,10 +207,9 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
                 </div>
               </div>
               <div className="field">
-                <label>重试间隔基数 (ms)</label>
+                <label title="线性退避：第 n 次重试等待 基数×n 毫秒">重试间隔基数 (ms)</label>
                 <input type="number" min="500" max="30000" step="500" value={config.retry?.backoffMs ?? 1000}
                   onChange={(e) => onConfigUpdate({ retry: { times: config.retry?.times ?? 0, backoffMs: Math.max(500, Number(e.target.value) || 1000), retryOn: config.retry?.retryOn || 'both' } })} />
-                <div className="hint">线性退避：第 n 次重试等待 基数×n 毫秒。</div>
               </div>
             </div>
           </details>
@@ -219,13 +218,9 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
 
       {type === 'condition' && (
         <div className="field">
-          <label>判定表达式 <span style={{ color: 'var(--muted)' }}>(jexl)</span ></label>
+          <label title="last = 上一个响应；vars.xxx = 流程变量；真→true 出口，假→false 出口">判定表达式 <span style={{ color: 'var(--muted)' }}>(jexl)</span ></label>
           <input className="mono" placeholder="last.json.code == 0" value={config.expr || ''}
             onChange={(e) => onConfigUpdate({ expr: e.target.value })} />
-          <div className="hint">
-            last = 上一个响应；vars.xxx = 流程变量<br />
-            真 → true 出口，假 → false 出口
-          </div >
         </div >
       )}
 
@@ -236,13 +231,9 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
             <input value={config.name || ''} onChange={(e) => onUpdate({ name: e.target.value })} />
           </div >
           <div className="field">
-            <label>值 <span style={{ color: 'var(--muted)' }}>（用 = 开头进行表达式求值）</span ></label>
+            <label title="直接渲染模板 {{xxx}}；以 = 开头按表达式求值，例：=last.json.loginDevice == 'macOS' ? vars.ua_mac : vars.ua_win">值 <span style={{ color: 'var(--muted)' }}>（用 = 开头进行表达式求值）</span ></label>
             <input className="mono" placeholder="文本 {{var}} 或 =last.json.token" value={config.value ?? ''}
               onChange={(e) => onConfigUpdate({ value: e.target.value })} />
-            <div className="hint">
-              直接渲染模板 {`{{xxx}}`}；以 = 开头按表达式求值<br />
-              例: =last.json.loginDevice == 'macOS' ? vars.ua_mac : vars.ua_win
-            </div >
           </div >
         </>
       )}
@@ -278,9 +269,8 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
           )}
           {config.mode === 'setCookie' && (
             <div className="field">
-              <label>Cookie 名过滤 <span style={{ color: 'var(--muted)' }}>（正则，可选）</span></label>
+              <label title="捕获该响应全部 Set-Cookie 的 k=v，用 '; ' 连接存入变量，供后续请求 Cookie 头使用">Cookie 名过滤 <span style={{ color: 'var(--muted)' }}>（正则，可选）</span></label>
               <input className="mono" placeholder="只保留匹配的 cookie 名，如 sess" value={config.cookieFilter || ''} onChange={(e) => onConfigUpdate({ cookieFilter: e.target.value })} />
-              <div className="hint">捕获该响应全部 Set-Cookie 的 k=v 部分，用 「; 」 连接存入变量，供后续请求 Cookie 头使用。</div>
             </div>
           )}
           {(!config.mode || config.mode === 'regex') && (
@@ -322,7 +312,7 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
         <>{/* Random delay node */}
           <div className="field-inline">
             <div className="field">
-              <label>最小等待 (秒)</label>
+              <label title="在 [最小, 最大] 秒之间随机等待">最小等待 (秒)</label>
               <input type="number" min="0" max="300" value={config.min ?? 1} onChange={(e) => onConfigUpdate({ min: Number(e.target.value) })} />
             </div>
             <div className="field">
@@ -330,7 +320,6 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
               <input type="number" min="0" max="300" value={config.max ?? 5} onChange={(e) => onConfigUpdate({ max: Number(e.target.value) })} />
             </div>
           </div>
-          <div className="hint">在 [最小, 最大] 秒之间随机等待，用于避开整点/固定间隔的反自动化风控。</div>
         </>
       )}
 
@@ -351,16 +340,15 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
 
       {type === 'script' && (
         <div className="field">
-          <label>脚本代码 <span style={{ color: 'var(--muted)' }}>（高级逃生舱：vars/last/steps 只读，return 对象合并回 vars；禁网络/文件，超时 1s）</span></label>
-          <textarea className="mono" rows={8} value={config.code || ''} onChange={(e) => onConfigUpdate({ code: e.target.value })} />
-          <div className="hint">例：<code>{"return { doubled: Number(vars.n || 0) * 2 };"}</code></div>
+          <label title="vars/last/steps 只读；return 的对象会合并回 vars；禁网络/文件，超时 1s">脚本代码</label>
+          <textarea className="mono" rows={8} value={config.code || ''} onChange={(e) => onConfigUpdate({ code: e.target.value })} placeholder={'return { doubled: Number(vars.n || 0) * 2 };'} />
         </div>
       )}
 
       {type === 'foreach' && (
         <>
           <div className="field">
-            <label>遍历源表达式 <span style={{ color: 'var(--muted)' }}>（数组：last.json.items / vars.list 等）</span></label>
+            <label title="数组表达式，如 last.json.items / vars.list">遍历源表达式</label>
             <input className="mono" value={config.source || ''} onChange={(e) => onConfigUpdate({ source: e.target.value })} />
           </div>
           <div className="field-inline">
@@ -374,8 +362,8 @@ export default function ConfigPanel({ node, onUpdate, onConfigUpdate, onDelete, 
             </div>
           </div>
           <div className="field">
-            <div className="hint" style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.6 }}>
-              「循环体」出口（each）连每轮要执行的节点链（单链到链尾）；「下一步」出口（next）连遍历结束后继续的节点。每轮可用 {'{{' + (config.itemVar || 'item') + '}}'} 与 {'{{index}}'}。上限 50 轮。
+            <div className="hint" style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.6 }} title="「循环体」出口（each）连每轮执行的节点链；「下一步」出口（next）连遍历后继续的节点；上限 50 轮">
+              每轮可用 {'{{' + (config.itemVar || 'item') + '}}'} 与 {'{{index}}'}
             </div>
           </div>
         </>

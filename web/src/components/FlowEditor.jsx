@@ -623,7 +623,6 @@ function FlowEditorInner({ flowId, onBack }) {
       {tplOpen && (
         <Modal
           title="存为模板"
-          subtitle="模板会带走节点 / 连线 / 变量 / 日志 / 通知，之后可基于它批量创建任务"
           onClose={() => setTplOpen(false)}
           footer={
             <>
@@ -682,7 +681,6 @@ function CookieHelpModal({ flow, onClose, onSaved }) {
   return (
     <Modal
       title="统一浏览器登录（自动抓 Cookie）"
-      subtitle="统一浏览器是路由器上的 Camoufox（与真实浏览器指纹一致）"
       onClose={onClose}
       footer={
         <>
@@ -781,7 +779,6 @@ function NotifyModal({ flow, onClose, onSaved, onToast }) {
   return (
     <Modal
       title={`通知渠道：${flow.name}`}
-      subtitle="可分别开启成功 / 失败通知；保存后用「测试发送」验证每个渠道"
       onClose={onClose}
       className="notify-modal"
       footer={
@@ -872,7 +869,6 @@ function LogConfigModal({ flow, onClose, onSaved }) {
   return (
     <Modal
       title={`日志配置：${flow.name}`}
-      subtitle="日常用「仅 log 节点」；排障时再打开调试模式"
       onClose={onClose}
       footer={
         <>
@@ -1042,7 +1038,6 @@ function ScheduleModal({ flow, onClose, onSave }) {
   return (
     <Modal
       title="调度"
-      subtitle="cron 留空 = 只手动运行；启用后按 cron / 时区自动执行"
       onClose={onClose}
       width={480}
       footer={
@@ -1053,9 +1048,8 @@ function ScheduleModal({ flow, onClose, onSave }) {
       }
     >
       <div className="field">
-        <label>cron 表达式</label>
+        <label title="例：30 8 * * * = 每天 08:30；13 0 * * * = 每天 00:13">cron 表达式</label>
         <input className="mono" placeholder="30 8 * * *（留空=手动）" value={cron} onChange={(e) => setCron(e.target.value)} />
-        <div className="hint">例：<code className="mono">30 8 * * *</code> = 每天 08:30；<code className="mono">13 0 * * *</code> = 每天 00:13</div>
       </div>
       <div className="field-inline">
         <div className="field">

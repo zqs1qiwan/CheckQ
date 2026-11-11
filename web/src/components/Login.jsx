@@ -31,7 +31,7 @@ export default function Login({ onOk }) {
       const msg = e2.message || '登录失败';
       if (e2.needTotp || msg.includes('两步')) {
         setNeedCode(true);
-        setErr('该账号已启用两步验证，请输入 6 位动态码');
+        setErr('该账号已启用两步验证，请输入验证码或恢复码');
       } else if (msg.includes('锁定')) {
         setErr(msg);
       } else {
@@ -75,9 +75,6 @@ export default function Login({ onOk }) {
           <input type="password" placeholder="再输入一次" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
           <button className="primary" disabled={busy || !username || !password}>{busy ? '创建中…' : '创建并进入'}</button>
           <div className="login-err">{err}</div>
-          <p className="login-hint">
-            密码用 scrypt 加盐哈希保存（本机 meta.json，不落明文）；登录后可再开启两步验证（TOTP）。
-          </p>
         </form>
       </div>
     );
@@ -87,7 +84,6 @@ export default function Login({ onOk }) {
     <div className="login-wrap">
       <form className="login-card" onSubmit={submitLogin}>
         <h1>Check<em style={{ color: 'var(--accent)' }}>Q</em></h1>
-        <p className="sub">可视化 HTTP 自动化流程引擎</p>
         <input
           placeholder="用户名"
           value={username}
@@ -105,7 +101,7 @@ export default function Login({ onOk }) {
         />
         {needCode && (
           <input
-            placeholder="两步验证码（6 位动态码或恢复码）"
+            placeholder="验证码或恢复码"
             value={code}
             onChange={(e) => setCode(e.target.value)}
             inputMode="numeric"
@@ -114,7 +110,6 @@ export default function Login({ onOk }) {
         )}
         <button className="primary" disabled={busy || !password}>{busy ? '验证中…' : '进入'}</button>
         <div className="login-err">{err}</div>
-        <p className="login-hint">连续失败会临时锁定；忘记两步验证码可用恢复码，或让管理员在「用户管理」重置。</p>
       </form>
     </div>
   );

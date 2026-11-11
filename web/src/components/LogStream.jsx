@@ -114,7 +114,6 @@ export default function LogStream({ flowId, flowName, onClose, live = false }) {
   return (
     <Modal
       title={`日志 · ${flowName || ''}`}
-      subtitle="多次运行连续滚动；点每组的「调试」查看该次运行的每步细节"
       onClose={onClose}
       className="logstream-modal"
       bodyClassName="logstream-wrap"

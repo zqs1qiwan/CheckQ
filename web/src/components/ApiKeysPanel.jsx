@@ -65,7 +65,7 @@ export default function ApiKeysPanel({ onToast }) {
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="如：签到 Agent" />
         </div>
         <div className="field">
-          <label>权限范围</label>
+          <label title="只读=只能查看；可运行=能触发任务；可修改=能改变量与调度">权限范围</label>
           {SCOPES.map(([id, label, desc]) => (
             <label key={id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
               <input type="checkbox" style={{ width: 'auto' }} checked={scopes.includes(id)} onChange={() => toggleScope(id)} />
@@ -74,28 +74,24 @@ export default function ApiKeysPanel({ onToast }) {
           ))}
         </div>
         <div className="field">
-          <label>回收日期（可选，到期自动失效并从列表移除）</label>
+          <label title="到期后该 Key 自动失效并从列表移除">回收日期</label>
           <input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
         </div>
         <div className="field">
-          <label>IP 允许名单（可选，每行一个 IP 或 CIDR，如 192.168.1.0/24；留空=不限制）</label>
+          <label title="每行一个 IP 或 CIDR；留空=不限制。来源 IP 取 X-Forwarded-For 优先，其次为连接来源">IP 允许名单</label>
           <textarea className="mono" rows={2} value={allowedIps} onChange={(e) => setAllowedIps(e.target.value)} placeholder={'192.168.1.0/24\n10.0.0.5'} />
-          <div className="hint">只允许这些来源 IP 使用这把 Key；Docker 端口映射下容器看到的是网关地址，建议同时在客户端带 <code className="mono">X-Forwarded-For</code>。</div>
         </div>
         <button className="primary" disabled={busy || !scopes.length} onClick={create}>{busy ? '生成中…' : '生成 API Key'}</button>
-        <div className="hint" style={{ marginTop: 6 }}>
-          明文只在生成时显示一次，服务端只存摘要；建议给外部 Agent 只勾「只读 + 可运行」。
-        </div>
         {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
       </div>
 
       {created && (
         <div className="acc-card">
-          <div className="acc-card-head">新 Key（只显示这一次，请立刻复制）</div>
+          <div className="acc-card-head" title="明文只显示这一次，服务端只存摘要">新 Key</div>
           <pre className="mono" style={{ wordBreak: 'break-all', fontSize: 12, margin: 0 }}>{created.apiKey}</pre>
           <button className="small" style={{ marginTop: 8 }} onClick={() => { navigator.clipboard?.writeText(created.apiKey); onToast('已复制'); }}>复制</button>
           <div className="hint" style={{ marginTop: 6 }}>
-            用法：请求头 <code className="mono">x-api-key: &lt;key&gt;</code>，或 MCP 里设 <code className="mono">CHECKQ_API_KEY</code>。
+            请求头 <code className="mono">x-api-key: &lt;key&gt;</code>
           </div>
         </div>
       )}
@@ -103,7 +99,7 @@ export default function ApiKeysPanel({ onToast }) {
       {editing && (
         <Modal
           title={`IP 允许名单 · ${editing.key.name}`}
-          subtitle="每行一个 IP 或 CIDR；留空表示不限制。保存后立即生效。"
+
           onClose={() => setEditing(null)}
           width={480}
           footer={
@@ -122,10 +118,10 @@ export default function ApiKeysPanel({ onToast }) {
           }
         >
           <div className="field">
-            <label>允许的 IP / CIDR</label>
+            <label title="每行一个 IP 或 CIDR；留空=不限制">允许的 IP / CIDR</label>
             <textarea className="mono" rows={5} value={editing.ips} onChange={(e) => setEditing({ ...editing, ips: e.target.value })} placeholder={'192.168.1.0/24\n10.0.0.5'} />
           </div>
-          <div className="hint">留空 = 不限制（任何来源都能用这把 Key）。</div>
+
         </Modal>
       )}
 

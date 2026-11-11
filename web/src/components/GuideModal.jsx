@@ -68,7 +68,6 @@ export default function GuideModal({ onClose }) {
   return (
     <Modal
       title="使用引导"
-      subtitle="3 步上手 · 任务列表 · 编辑器 · 日志 · 通知 · 常见问题"
       onClose={onClose}
       className="guide-modal"
       bodyClassName="guide-split"

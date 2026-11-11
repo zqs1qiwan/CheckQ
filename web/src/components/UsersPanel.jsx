@@ -68,7 +68,7 @@ export default function UsersPanel({ onToast }) {
       <div className="acc-card">
         <div className="acc-card-head">新建账号</div>
         <div className="field-inline">
-          <div className="field"><label>用户名</label>
+          <div className="field"><label title="3-32 位字母数字">用户名</label>
             <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="字母数字，3-32 位" />
           </div>
           <div className="field"><label>显示名（可选）</label>
@@ -76,7 +76,7 @@ export default function UsersPanel({ onToast }) {
           </div>
         </div>
         <div className="field-inline">
-          <div className="field"><label>初始密码（至少 10 位）</label>
+          <div className="field"><label title="至少 10 位，含两类字符">初始密码</label>
             <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
           </div>
           <div className="field"><label>角色</label>
@@ -123,7 +123,7 @@ export default function UsersPanel({ onToast }) {
       {resetFor && (
         <div className="acc-card">
           <div className="acc-card-head">重置「{resetFor.username}」的密码</div>
-          <div className="field"><label>新密码（至少 10 位）</label>
+          <div className="field"><label title="至少 10 位，含两类字符">新密码</label>
             <input type="password" value={resetPw} onChange={(e) => setResetPw(e.target.value)} />
           </div>
           <div className="btn-row">

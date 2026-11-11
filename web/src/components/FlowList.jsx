@@ -93,7 +93,6 @@ function WizardModal({ onClose, onCreated }) {
   return (
     <Modal
       title="快速组装"
-      subtitle="一句话让 AI 生成（需在设置配置 LLM API），或手动填三项生成骨架；进编辑器后点「运行」验证"
       onClose={onClose}
       footer={
         <>
@@ -147,7 +146,6 @@ function WizardModal({ onClose, onCreated }) {
           <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="签到成功" />
         </div>
         <div className="field">
-          <div className="hint">规则模式生成：HTTP 节点（带断言/UA）→ 日志节点「{eventLabel}完成」，cron 每天 8 点（可改），调度默认关闭。</div>
         </div>
         {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
     </Modal>
@@ -538,8 +536,7 @@ export default function FlowList({ onOpen, onLogout }) {
       {modal === 'new' && (
         <Modal
           title="新建空白任务"
-          subtitle="进入编辑器：左侧拖积木到画布 → 连线 → 点「运行」测试 → 调好后「存为模板」"
-          onClose={() => setModal(null)}
+              onClose={() => setModal(null)}
           footer={
             <>
               <button onClick={() => setModal(null)}>取消</button>
@@ -556,8 +553,7 @@ export default function FlowList({ onOpen, onLogout }) {
       {modal === 'import' && (
         <Modal
           title="导入"
-          subtitle="支持 .har（浏览器请求录制）和 .json（CheckQ 模板）"
-          onClose={() => setModal(null)}
+              onClose={() => setModal(null)}
           footer={
             <>
               <button onClick={() => setModal(null)}>取消</button>
@@ -634,7 +630,6 @@ function InstantiateModal({ tpl, onClose, onCreated }) {
   return (
     <Modal
       title={`从模板创建任务：${tpl.name}`}
-      subtitle="节点流程与模板相同，只改这里的变量（如 cookie）；留空用默认值"
       onClose={onClose}
       footer={
         <>
@@ -703,7 +698,6 @@ function CurlImportModal({ onClose, onCreated }) {
   return (
     <Modal
       title="导入 cURL 命令"
-      subtitle="粘贴浏览器 “Copy as cURL” 的完整命令，自动解析为 HTTP 请求节点"
       onClose={onClose}
       width={640}
       footer={
@@ -759,7 +753,6 @@ function CsvImportModal({ tpl, onClose, onDone }) {
   return (
     <Modal
       title={`批量创建任务：${tpl.name}`}
-      subtitle="首行为变量名（如 name,cookie，name 列可选作任务名），每行一条任务"
       onClose={onClose}
       width={640}
       footer={
@@ -801,7 +794,6 @@ function NotificationsModal({ onClose }) {
   return (
     <Modal
       title={`站内通知${data ? `（${data.total} 条 · 未读 ${data.unread}）` : ''}`}
-      subtitle="任务通知渠道选「站内通知」时，消息会出现在这里；无需任何外部服务"
       onClose={onClose}
       className="notif-modal"
       footer={
@@ -855,7 +847,6 @@ function SettingsModal({ onClose }) {
   return (
     <Modal
       title="设置"
-      subtitle="通知与汇总 / AI 助手 / 账号安全 / API Key"
       onClose={onClose}
       className="settings-modal"
       bodyClassName="settings-split"
@@ -981,7 +972,7 @@ function SettingsFlow({ onToast }) {
           每天 {cfg.time} 把今日汇总推送到下面勾选的任务
         </label>
         <div className="push-units">
-          {pushable.length === 0 && <div className="hint">还没有带通知渠道的任务。先到任务里配置「通知渠道」，这里才会出现可推送单位。</div>}
+          {pushable.length === 0 && <div className="hint">还没有可推送的任务</div>}
           {pushable.map((f) => (
             <label key={f.id} className="push-unit">
               <input
@@ -1040,7 +1031,6 @@ function RestoreModal({ onClose, onDone }) {
   return (
     <Modal
       title="从备份恢复"
-      subtitle="粘贴备份 JSON（「备份」按钮下载的文件）；恢复任务带「（恢复）」后缀且默认停用"
       onClose={onClose}
       width={640}
       footer={
@@ -1050,7 +1040,7 @@ function RestoreModal({ onClose, onDone }) {
         </>
       }
     >
-        <textarea className="mono" rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder='{"flows": [...]}' />
+        <textarea className="mono" rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder='{"flows": [...]}' title="粘贴「备份」下载的文件内容" />
         {doneInfo && <p style={{ color: 'var(--ok)', fontSize: 12 }}>已恢复 {doneInfo.createdFlows?.length || 0} 个任务、{doneInfo.createdTemplates?.length || 0} 个模板</p>}
         {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
     </Modal>
@@ -1143,7 +1133,6 @@ function BackupFullModal({ onClose }) {
   return (
     <Modal
       title="完整备份（含凭据）"
-      subtitle="会包含明文的 cookie / token / 密码，请立即保存到安全位置，勿外发"
       onClose={onClose}
       width={440}
       footer={
@@ -1158,7 +1147,6 @@ function BackupFullModal({ onClose }) {
         <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
       </div>
       {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
-      <div className="hint">日常用「备份」即可（凭据已脱敏，可安全分享）；只有迁移到另一台机器时才需要完整备份。</div>
     </Modal>
   );
 }

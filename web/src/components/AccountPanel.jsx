@@ -131,7 +131,7 @@ export default function AccountPanel({ onToast }) {
       {me && (
         <div className="acc-card">
           <div className="acc-card-head">修改用户名 / 显示名</div>
-          <div className="field"><label>新用户名（3-32 位，字母数字）</label>
+          <div className="field"><label title="3-32 位字母数字。修改后其它设备会登出，需用新用户名重新登录">新用户名</label>
             <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={me.user.username} autoComplete="username" />
           </div>
           <div className="field"><label>显示名（面板里展示的名字，可选）</label>
@@ -141,9 +141,6 @@ export default function AccountPanel({ onToast }) {
             <input type="password" value={namePw} onChange={(e) => setNamePw(e.target.value)} autoComplete="current-password" />
           </div>
           <button className="primary" onClick={changeAccount} disabled={!namePw || (!newName.trim() && !newDisplay.trim())}>保存</button>
-          <div className="hint" style={{ marginTop: 6 }}>
-            改用户名后所有设备会被登出，需要用新用户名重新登录（与青龙面板一致）。
-          </div>
           {nameMsg && <p style={{ color: 'var(--ok)', fontSize: 12 }}>{nameMsg}</p>}
           {nameErr && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{nameErr}</p>}
         </div>
@@ -154,25 +151,21 @@ export default function AccountPanel({ onToast }) {
         <div className="field"><label>当前密码</label>
           <input type="password" autoComplete="current-password" value={oldPw} onChange={(e) => setOldPw(e.target.value)} />
         </div>
-        <div className="field"><label>新密码（至少 10 位，含两类字符）</label>
+        <div className="field"><label title="至少 10 位，含大小写字母 / 数字 / 符号中的两类；修改后其它设备的会话立即失效">新密码</label>
           <input type="password" autoComplete="new-password" value={newPw} onChange={(e) => setNewPw(e.target.value)} />
         </div>
         <div className="field"><label>再输入一次</label>
           <input type="password" autoComplete="new-password" value={newPw2} onChange={(e) => setNewPw2(e.target.value)} />
         </div>
         <button className="primary" onClick={changePassword}>修改密码</button>
-        <div className="hint" style={{ marginTop: 6 }}>修改后，其它设备上的登录会话会立即失效。</div>
         {pwMsg && <p style={{ color: 'var(--ok)', fontSize: 12 }}>{pwMsg}</p>}
         {pwErr && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{pwErr}</p>}
       </div>
 
       <div className="acc-card">
-        <div className="acc-card-head">两步验证（TOTP）</div>
+        <div className="acc-card-head" title="用 Google Authenticator / Authy / Aegis 等验证器 App 绑定，绑定后登录需要 6 位动态码">两步验证（TOTP）</div>
         {!enroll && (
           <>
-            <div className="hint" style={{ marginBottom: 8 }}>
-              用 Google Authenticator / Authy / Aegis 等验证器 App 扫码绑定；绑定后登录需要 6 位动态码。
-            </div>
             {me?.user.totpEnabled ? (
               <>
                 <div className="field"><label>账号密码（用于确认身份）</label>
@@ -198,14 +191,13 @@ export default function AccountPanel({ onToast }) {
         )}
         {enroll && (
           <>
-            <div className="hint" style={{ marginBottom: 8 }}>把下面密钥加入验证器 App，然后输入 App 显示的 6 位验证码完成绑定。</div>
-            <div className="field"><label>密钥（Base32）</label>
+            <div className="field"><label title="把密钥加入验证器 App，或直接导入 otpauth 链接">密钥（Base32）</label>
               <input className="mono" readOnly value={enroll.secret} onFocus={(e) => e.target.select()} />
             </div>
             <div className="field"><label>otpauth 链接（可被 App 直接导入）</label>
               <input className="mono" readOnly value={enroll.uri} onFocus={(e) => e.target.select()} />
             </div>
-            <div className="field"><label>App 上的 6 位验证码</label>
+            <div className="field"><label>验证码</label>
               <input value={totpCode} onChange={(e) => setTotpCode(e.target.value)} inputMode="numeric" />
             </div>
             <div className="btn-row">
@@ -216,22 +208,18 @@ export default function AccountPanel({ onToast }) {
         )}
         {recovery && (
           <div className="acc-recovery">
-            <div className="acc-card-head">恢复码（只显示这一次，请立即保存）</div>
+            <div className="acc-card-head" title="每个恢复码只能用一次；丢失验证器时可用它登录">恢复码（只显示这一次）</div>
             <div className="acc-codes">{recovery.map((c) => <code key={c}>{c}</code>)}</div>
-            <div className="hint">每个恢复码只能用一次；丢失验证器时可用它登录。</div>
           </div>
         )}
         {totpErr && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{totpErr}</p>}
       </div>
 
       <div className="acc-card">
-        <div className="acc-card-head">访问控制（IP 黑名单）</div>
-        <div className="hint" style={{ marginBottom: 8 }}>
-          列入黑名单的 IP 无法登录、也无法使用任何 API Key（对登录态与 Key 同时生效）。
-        </div>
+        <div className="acc-card-head" title="列入黑名单的 IP 无法登录，也无法使用任何 API Key">访问控制（IP 黑名单）</div>
         <div className="field-inline">
           <div className="field">
-            <label>新增黑名单 IP（支持 CIDR，如 192.168.1.0/24）</label>
+            <label title="支持 CIDR，如 192.168.1.0/24">新增黑名单 IP</label>
             <input className="mono" value={newIp} onChange={(e) => setNewIp(e.target.value)} placeholder="192.168.9.9" />
           </div>
           <div className="field" style={{ display: 'flex', alignItems: 'flex-end' }}>

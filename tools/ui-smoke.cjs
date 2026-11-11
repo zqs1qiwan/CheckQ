@@ -457,6 +457,23 @@ async function checkModal(page, where, openExpr, opts = {}) {
       `);
       if (!cfg.ok) fail('编辑器参数面板', cfg.issues.join('; ') || cfg.why);
       else ok('编辑器参数面板', '控件排版正常（按钮不被拉成整行、无横向溢出）');
+
+      /* 8d) 左侧面板：变量行的按钮不能被面板裁掉（此时编辑器已打开） */
+      const pal = await page.eval(`
+        const pal=document.querySelector('.palette');
+        if (!pal) return { ok:false, why:'左侧积木面板不存在' };
+        const pr=pal.getBoundingClientRect();
+        const bad=[];
+        for (const v of pal.querySelectorAll('.var-row')) {
+          for (const b of v.querySelectorAll('button')) {
+            const br=b.getBoundingClientRect();
+            if (br.right > pr.right + 0.5 || br.left < pr.left - 0.5) bad.push((b.textContent||b.title||'?') + ' 越出面板');
+          }
+        }
+        return { ok: bad.length === 0, bad, n: pal.querySelectorAll('.var-row').length };
+      `);
+      if (!pal.ok) fail('编辑器左侧面板', `变量行按钮被裁掉: ${pal.bad.join('、') || pal.why}`);
+      else ok('编辑器左侧面板', `变量行按钮都在面板内（${pal.n} 行）`);
       // 回到列表
       await page.eval(`const b = [...document.querySelectorAll('.editor-topbar button')].find(x=>x.textContent.includes('返回')||x.getAttribute('title')?.includes('返回')); if (b) b.click(); await new Promise(r=>setTimeout(r,600));`);
     } else fail('编辑器/1440', '打不开编辑器');

@@ -395,6 +395,9 @@ span.json-toggle { cursor: default; }
 .linkbtn:hover { color: var(--text); background: var(--hover-tint); border: none; }
 .palette .panel-head { padding-top: 0; }
 .var-row button.small { min-width: 26px; min-height: 26px; justify-content: center; }
+/* 变量行：名字输入框可压缩，按钮固定宽度 —— 否则窄面板里按钮会被挤出面板被裁掉 */
+.var-row > div > input.mono { flex: 1 1 auto; min-width: 0; }
+.var-row > div > button { flex: none; }
 .vars-list button.small.danger { min-width: 26px; }
 .palette .item {
   display: flex; align-items: center; gap: 9px;

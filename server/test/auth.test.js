@@ -250,6 +250,61 @@ await check('改密成功且旧密码失效', async () => {
   return r.statusCode === 200 && old.status === 401 && neu.status === 200;
 });
 
+
+await check('修改用户名需要当前密码', async () => {
+  const r = await app.inject({
+    method: 'PUT', url: '/api/system/account', headers: { cookie: neu.cookie },
+    payload: { username: 'admin2', currentPassword: 'wrong' },
+  });
+  return r.statusCode === 401;
+});
+
+await check('用户名格式非法被拒', async () => {
+  const r = await app.inject({
+    method: 'PUT', url: '/api/system/account', headers: { cookie: neu.cookie },
+    payload: { username: 'a b!', currentPassword: 'NewStrong#2026' },
+  });
+  return r.statusCode === 400;
+});
+
+await check('用户名被占用被拒', async () => {
+  const r = await app.inject({
+    method: 'PUT', url: '/api/system/account', headers: { cookie: neu.cookie },
+    payload: { username: 'operator1', currentPassword: 'NewStrong#2026' },
+  });
+  return r.statusCode === 400 && /已存在/.test(r.json().error);
+});
+
+await check('改显示名不需要密码即可（仅会话）', async () => {
+  const r = await app.inject({
+    method: 'PUT', url: '/api/system/account', headers: { cookie: neu.cookie },
+    payload: { displayName: '老白' },
+  });
+  const me = await app.inject({ method: 'GET', url: '/api/me', headers: { cookie: neu.cookie } });
+  return r.statusCode === 200 && me.json().user.displayName === '老白';
+});
+
+await check('修改用户名成功并强制重新登录', async () => {
+  const r = await app.inject({
+    method: 'PUT', url: '/api/system/account', headers: { cookie: neu.cookie },
+    payload: { username: 'laobai', currentPassword: 'NewStrong#2026' },
+  });
+  const j = r.json();
+  // 旧用户名不能再登录
+  const oldLogin = await login({ username: 'admin', password: 'NewStrong#2026' });
+  // 新用户名可以登录
+  const newLogin = await login({ username: 'laobai', password: 'NewStrong#2026' });
+  // 旧会话已失效
+  const after = await app.inject({ method: 'GET', url: '/api/flows', headers: { cookie: neu.cookie } });
+  return r.statusCode === 200 && j.reauth === true && oldLogin.status === 401 && newLogin.status === 200 && after.statusCode === 401;
+});
+
+await check('改用户名后审计留痕', async () => {
+  const r = await app.inject({ method: 'GET', url: '/api/system/audit', headers: { cookie: admin.cookie } });
+  const actions = r.json().entries.map((e) => e.action);
+  return actions.includes('account.username');
+});
+
 await check('会话可列出并可吊销', async () => {
   const list = await app.inject({ method: 'GET', url: '/api/system/sessions', headers: { cookie: neu.cookie } });
   const j = list.json();

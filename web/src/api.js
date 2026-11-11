@@ -33,6 +33,7 @@ export const api = {
   setupAccount: (username, password) => req('POST', '/api/system/bootstrap', { username, password }),
   logout: () => req('POST', '/api/logout', {}),
   me: () => req('GET', '/api/me'),
+  updateAccount: (payload) => req('PUT', '/api/system/account', payload),
   sessions: () => req('GET', '/api/system/sessions'),
   revokeSession: (id) => req('DELETE', `/api/system/sessions/${id}`),
   logoutAll: () => req('POST', '/api/system/logout-all', {}),

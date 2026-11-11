@@ -837,6 +837,42 @@ export function buildServer({ dataDir, port }) {
     apiKeys: req.user?.role === 'admin' ? store.listApiKeys() : [],
     userCount: store.meta.users.length,
   }));
+  // 修改自己的用户名 / 显示名
+  // 对齐 qinglong「安全设置 → 修改用户名密码」：改用户名后强制重新登录（吊销全部会话）
+  app.put('/api/system/account', async (req, reply) => {
+    const me = req.user;
+    if (!me) return reply.code(401).send({ error: '未登录' });
+    const { username, displayName, currentPassword } = req.body || {};
+    const patch = {};
+    let reauth = false;
+
+    if (username !== undefined && String(username).trim() !== me.username) {
+      const name = String(username).trim();
+      const nameErr = checkUsername(name);
+      if (nameErr) return reply.code(400).send({ error: nameErr });
+      const exist = store.getUserByName(name);
+      if (exist && exist.id !== me.id) return reply.code(400).send({ error: '用户名已存在' });
+      if (!verifyPwd(currentPassword || '', me.passwordHash)) {
+        store.audit('account.username-fail', `用户=${me.username}`, me.username);
+        return reply.code(401).send({ error: '当前密码不正确' });
+      }
+      patch.username = name;
+      reauth = true;
+    }
+    if (displayName !== undefined) patch.displayName = String(displayName).trim().slice(0, 40) || patch.username || me.username;
+
+    if (!Object.keys(patch).length) return { ok: true, reauth: false };
+    store.updateUser(me.id, patch);
+    store.audit(reauth ? 'account.username' : 'account.displayName', `用户=${me.username} → ${patch.username || me.username}`, me.username);
+
+    if (reauth) {
+      // 用户名变更 → 所有会话失效（需用新用户名重新登录）
+      for (const id of sessionsOf(me.id)) sessions.delete(id);
+      reply.clearCookie('qsid', { path: '/' });
+    }
+    return { ok: true, reauth, user: { username: patch.username || me.username, displayName: patch.displayName || me.displayName } };
+  });
+
   // 修改自己的密码（需校验旧密码；改密后其他会话失效）
   app.post('/api/system/password', async (req, reply) => {
     const me = req.user;

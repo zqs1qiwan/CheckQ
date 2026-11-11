@@ -78,7 +78,67 @@
 | 13 | 密码策略仅 8 位 | 低 | 提升为 ≥10 位 + 两类字符 + 弱口令库 + 禁含用户名 |
 | 14 | Cookie `sameSite=lax` | 低 | 改为 `strict` + `httpOnly` |
 
-## 8. 仍存在的风险与建议（需要你决策/外部动作）
+## 8. 与 qinglong / qiandao 的做法对照（2026-11 调研）
+
+> 调研对象：`whyour/qinglong`（develop 分支 `back/api/user.ts`、`back/services/user.ts`、`back/shared/password.ts`、`src/pages/setting/security.tsx`）与 `binux/qiandao`（`web/handlers/login.py`、`libs/mcrypto.py`）。
+
+### 7.1 qinglong（青龙）
+
+| 能力 | qinglong 做法 | CheckQ 做法 |
+|---|---|---|
+| 账号模型 | **单账号**：用户名密码存在系统配置里（`authConfig`） | **多用户 + 角色**（admin/operator/viewer），存在 `meta.users[]` |
+| 改用户名密码 | 设置 → 安全设置 →「修改用户名密码」表单（用户名 + 新密码，**不校验旧密码**），保存后清空 token 强制重新登录 | 设置 → 账号安全 →「修改用户名 / 显示名」（改用户名**需当前密码**）+「修改密码」（需旧密码）；改用户名后吊销全部会话强制重新登录 |
+| 密码哈希 | scrypt，格式 `scrypt$salt$hash`，64 字节输出（`shared/password.ts`） | scrypt N=16384 + 16 字节盐，`salt:hash`，32 字节输出（`server/src/auth.js`） |
+| 两步验证 | `/user/two-factor/init` 返回 `{secret, url}`，前端显示 **QR Code** + 密钥，三步向导（装 App → 扫码 → 输 6 位码）；启用/禁用 | `/api/system/2fa/enroll` 返回 `{secret, uri}` + 一次性恢复码；**不显示二维码**（避免把密钥交给第三方二维码服务），提供 `otpauth://` 链接与 Base32 密钥，可被 Aegis/Authy 手动粘贴导入 |
+| 2FA 登录 | 两步式：先登录返回 420，再调 `/user/two-factor/login` 带 code；用 `lastTwoFactorStep` 防同一 30 秒窗口重放 | 单次登录请求里带 `code`；恢复码一次性消费；窗口 ±30s 校验 |
+| 登录限流 | `LoginThrottle`：失败次数 + 退避秒数，返回 410 + 等待时间 | IP 5 次/10 分钟 + 账号 8 次锁定 15 分钟，返回 429 |
+| 登录日志 | 独立页面「登录日志」（时间/IP/归属地/平台/成败） | 审计日志（含 login.ok / login.fail），管理员可看 |
+| IP 黑名单 | `GET/PUT/DELETE /user/ip-blacklist` | 未做（局域网单用户场景，暂不需要） |
+| 通知 | 登录成功/失败也会推送到通知渠道 | 任务成功/失败推送；**登录事件尚未推送**（可作为下一步） |
+| 头像 | 支持上传裁剪 | 未做（不影响安全） |
+
+### 7.2 qiandao（签到）
+
+| 能力 | qiandao 做法 | CheckQ 做法 |
+|---|---|---|
+| 账号标识 | **邮箱**（注册 + 邮箱验证链接，30 天有效） | 用户名（3-32 位）；无邮件服务，故不做邮箱验证 |
+| 找回密码 | 邮件发重置链接（1 小时有效，带加密签名 + mtime 校验） | 无邮件服务 → **当前密码确认**；或管理员在「用户管理」重置；或容器内命令重置（见 §9） |
+| 密码哈希 | PBKDF2 + 16 字节随机盐，输出 32 字节 | scrypt（更强、更抗 GPU），盐 16 字节，输出 32 字节 |
+| Cookie | httponly，https 下加 secure | httponly + SameSite=Strict，https 需在反代层加 secure |
+| 失败处理 | 登录失败计数 `evil(+5)`，有次数限制 | IP + 账号双层限流/锁定 |
+| 角色 | user 表有 role 字段 | admin / operator / viewer，viewer 写操作直接 403 |
+
+### 7.3 结论与取舍
+
+- **我们比两者多**：多用户 + 角色、只读账号、审计日志、会话可吊销、CSRF/安全头、API Key 只存摘要、一次性恢复码；
+- **我们少（有意为之）**：邮箱验证/找回（无邮件服务）、二维码（避免密钥外泄）、IP 黑名单、头像；
+- **已按 qinglong 的交互补齐**：可自助修改用户名（原本只有改密码），改用户名后强制重新登录；
+- **可借鉴的后续项**：登录成功/失败也走通知渠道（qinglong 有）、API Key 分平台（qinglong 按平台分组 token）。
+
+## 9. 修改用户名 / 密码怎么做（面板操作）
+
+| 想做什么 | 面板路径 | 说明 |
+|---|---|---|
+| 改用户名 | 设置 → 账号安全 → 「修改用户名 / 显示名」 | 填新用户名 + 当前密码 → 保存；**所有设备立即登出**，需用新用户名重新登录 |
+| 改显示名 | 同上 | 只影响面板展示，可随时改，不需密码 |
+| 改密码 | 设置 → 账号安全 → 「修改密码」 | 需当前密码 + 新密码（≥10 位、两类字符）；其它设备会话立即失效 |
+| 开启两步验证 | 设置 → 账号安全 → 「两步验证」→ 开始绑定 | 复制密钥或 `otpauth://` 链接到验证器 App → 输入 6 位码 → 保存恢复码 |
+| 忘了两步验证码 | 恢复码登录；或管理员在 设置 → 用户管理 → 重置2FA | 管理员重置后该用户需重新绑定 |
+| 忘了密码（仍已登录） | 设置 → 账号安全 → 修改密码 | — |
+| 忘了密码（已登出） | 管理员重置；或用容器命令重置（见 §9） | 局域网部署无公网找回通道 |
+
+API 对照：
+
+| 需求 | 方法 | 路径 | 请求体 |
+|---|---|---|---|
+| 改用户名/显示名 | PUT | `/api/system/account` | `{ username?, displayName?, currentPassword? }` |
+| 改密码 | POST | `/api/system/password` | `{ oldPassword, newPassword }` |
+| 当前身份 | GET | `/api/me` | — |
+| 开启 2FA | POST | `/api/system/2fa/enroll` → `/api/system/2fa/confirm` | `{ password }` → `{ code }` |
+| 关闭 2FA | POST | `/api/system/2fa/disable` | `{ password, code }` |
+
+
+## 10. 仍存在的风险与建议（需要你决策/外部动作）
 
 | 风险 | 说明 | 建议 |
 |---|---|---|
@@ -89,7 +149,7 @@
 | 审计日志只在本机 | 可被有 root 的人改 | 严重场景可外送到日志系统 |
 | 会话存内存 | 重启容器后所有会话失效（需重新登录） | 这是刻意的取舍（无会话落盘）；如需常驻可改为持久化会话表 |
 
-## 9. 运维手册
+## 11. 运维手册
 
 ```powershell
 # 忘记密码 / 忘记 2FA（容器内直接重置管理员密码）
@@ -113,7 +173,7 @@ ssh root@checkq.local 'docker exec checkq node -e "
 - **绑定 2FA**：设置 → 账号安全 → 两步验证 → 开始绑定（保存密钥与恢复码）；
 - **加 API Key 给外部脚本**：设置 → API Key → 生成（明文只显示一次）。
 
-## 10. 自测
+## 12. 自测
 
 ```bash
 cd server && node test/auth.test.js     # 39 项：登录/2FA/会话/用户管理/安全头/CSRF/审计

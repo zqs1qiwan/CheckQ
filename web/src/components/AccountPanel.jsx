@@ -17,6 +17,13 @@ export default function AccountPanel({ onToast }) {
   const [recovery, setRecovery] = useState(null);
   const [totpErr, setTotpErr] = useState('');
 
+  // 用户名 / 显示名
+  const [newName, setNewName] = useState('');
+  const [newDisplay, setNewDisplay] = useState('');
+  const [namePw, setNamePw] = useState('');
+  const [nameMsg, setNameMsg] = useState('');
+  const [nameErr, setNameErr] = useState('');
+
   // 会话
   const [sessions, setSessions] = useState([]);
 
@@ -35,6 +42,25 @@ export default function AccountPanel({ onToast }) {
       setOldPw(''); setNewPw(''); setNewPw2('');
       loadSessions();
     } catch (e) { setPwErr(e.message); }
+  };
+
+  const changeAccount = async () => {
+    setNameMsg(''); setNameErr('');
+    try {
+      const r = await api.updateAccount({
+        username: newName.trim() || undefined,
+        displayName: newDisplay.trim() || undefined,
+        currentPassword: namePw,
+      });
+      if (r.reauth) {
+        setNameMsg('用户名已修改，所有设备需重新登录');
+        setTimeout(() => window.location.reload(), 1200);
+        return;
+      }
+      setNameMsg('已更新');
+      setNewName(''); setNewDisplay(''); setNamePw('');
+      loadMe();
+    } catch (e) { setNameErr(e.message); }
   };
 
   const startEnroll = async () => {
@@ -94,6 +120,27 @@ export default function AccountPanel({ onToast }) {
           <div className="acc-row"><span>角色</span><b>{me.user.role === 'admin' ? '管理员' : me.user.role === 'operator' ? '操作员' : '只读'}</b></div>
           <div className="acc-row"><span>两步验证</span><b>{me.user.totpEnabled ? `已启用（恢复码剩 ${me.user.recoveryCodesLeft} 个）` : '未启用'}</b></div>
           <div className="acc-row"><span>最后登录</span><b>{fmt(me.user.lastLoginAt)}</b></div>
+        </div>
+      )}
+
+      {me && (
+        <div className="acc-card">
+          <div className="acc-card-head">修改用户名 / 显示名</div>
+          <div className="field"><label>新用户名（3-32 位，字母数字）</label>
+            <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={me.user.username} autoComplete="username" />
+          </div>
+          <div className="field"><label>显示名（面板里展示的名字，可选）</label>
+            <input value={newDisplay} onChange={(e) => setNewDisplay(e.target.value)} placeholder={me.user.displayName} />
+          </div>
+          <div className="field"><label>当前密码（确认身份）</label>
+            <input type="password" value={namePw} onChange={(e) => setNamePw(e.target.value)} autoComplete="current-password" />
+          </div>
+          <button className="primary" onClick={changeAccount} disabled={!namePw || (!newName.trim() && !newDisplay.trim())}>保存</button>
+          <div className="hint" style={{ marginTop: 6 }}>
+            改用户名后所有设备会被登出，需要用新用户名重新登录（与青龙面板一致）。
+          </div>
+          {nameMsg && <p style={{ color: 'var(--ok)', fontSize: 12 }}>{nameMsg}</p>}
+          {nameErr && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{nameErr}</p>}
         </div>
       )}
 

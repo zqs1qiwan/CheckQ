@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import Modal from './Modal.jsx';
+import { IconDownload, IconBug } from './Icons.jsx';
 
 /**
  * 连续日志流（qinglong 面板风格）
@@ -69,6 +70,28 @@ export default function LogStream({ flowId, flowName, onClose, live = false }) {
     setNextBefore(r.nextBefore || null);
   };
 
+  // 导出某次运行的日志（人话日志 + 状态 + 摘要）
+  const exportRun = async (group) => {
+    let full = null;
+    try { full = await api.run(group.runId); } catch { full = null; }
+    const lines = [];
+    lines.push(`# ${group.runId}`);
+    lines.push(`任务：${flowName || ''}`);
+    lines.push(`时间：${fmtClock(group.startedAt)}`);
+    lines.push(`状态：${group.status}`);
+    if (group.summary) lines.push(`摘要：${group.summary}`);
+    lines.push('');
+    for (const l of (full?.logs || group.items)) {
+      lines.push(`[${l.ok === false ? 'ERROR' : 'OK'}] ${l.name}${l.message ? ' — ' + l.message : ''}`);
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${(flowName || 'task').replace(/[\\/:*?"<>|]/g, '_')}-${fmtClock(group.startedAt).replace(/[: ]/g, '')}.log`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
   const toggleDebug = async (runId) => {
     if (debugRun === runId) { setDebugRun(null); setDebugData(null); return; }
     setDebugRun(runId);
@@ -113,7 +136,12 @@ export default function LogStream({ flowId, flowName, onClose, live = false }) {
                 <span className="logstream-count">{g.items.length} 条</span>
                 {g.summary && <span className="logstream-summary">摘要：{g.summary}</span>}
                 <span className="spacer" />
-                <button className="small" onClick={() => toggleDebug(g.runId)}>{debugRun === g.runId ? '收起调试' : '调试'}</button>
+                <button className="small icon-text" onClick={() => toggleDebug(g.runId)} title="展开这次运行的每步细节">
+                  <IconBug size={13} /> {debugRun === g.runId ? '收起调试' : '调试'}
+                </button>
+                <button className="small icon-text" onClick={() => exportRun(g)} title="导出这次运行日志为 .log 文件">
+                  <IconDownload size={13} /> 导出
+                </button>
               </div>
               {g.items.map((e, i) => (
                 <div key={i} className={`logstream-line${e.ok ? '' : ' bad'}`}>

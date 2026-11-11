@@ -117,5 +117,6 @@ export const api = {
   clearNotifications: () => req('DELETE', '/api/notifications'),
   flowLogs: (id, { limit = 200, before = null } = {}) => req('GET', `/api/flows/${id}/logs?limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ''}`),
   uiSettings: () => req('GET', '/api/system/ui'),
+  pushTargets: () => req('GET', '/api/system/push-targets'),
   saveUiSettings: (patch) => req('PUT', '/api/system/ui', patch),
 };

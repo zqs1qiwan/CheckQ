@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import PickPanel from './PickPanel.jsx';
 
@@ -15,6 +15,37 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepP
   const [override, setOverride] = useState(null); // 历史点开的完整 run
   const [pickFor, setPickFor] = useState(null); // {stepId, body} 当前点选的响应
   const [debugLocal, setDebugLocal] = useState(false); // 调试模式（受控优先）
+  const [height, setHeight] = useState(() => {
+    const v = Number(localStorage.getItem('checkq-drawer-h'));
+    return v >= 25 && v <= 92 ? v : 55;
+  });
+  const dragRef = useRef(null);
+
+  // 拖拽调整日志坞高度（25% ~ 92%）
+  const onDragStart = (e) => {
+    e.preventDefault();
+    dragRef.current = { y: e.clientY, h: height };
+    const move = (ev) => {
+      if (!dragRef.current) return;
+      const dy = dragRef.current.y - (ev.touches ? ev.touches[0].clientY : ev.clientY);
+      const next = Math.min(92, Math.max(25, dragRef.current.h + (dy / window.innerHeight) * 100));
+      setHeight(Math.round(next));
+    };
+    const up = () => {
+      if (dragRef.current) {
+        try { localStorage.setItem('checkq-drawer-h', String(height)); } catch { /* ignore */ }
+      }
+      dragRef.current = null;
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      window.removeEventListener('touchmove', move);
+      window.removeEventListener('touchend', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+    window.addEventListener('touchmove', move, { passive: false });
+    window.addEventListener('touchend', up);
+  };
   const debug = debugProp !== undefined ? debugProp : debugLocal;
   const setDebug = (v) => {
     setDebugLocal(v);
@@ -52,7 +83,8 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepP
   const visibleLogs = (debug ? (shown.logs || []) : cleanLogs).filter((l) => errFilter === 'all' || l.errorType === errFilter || (errFilter === 'network' && l.errorType === 'network'));
 
   return (
-    <div className="run-drawer">
+    <div className="run-drawer" style={{ height: `${height}vh` }}>
+      <div className="drawer-grip" onMouseDown={onDragStart} onTouchStart={onDragStart} title="拖动调整高度" aria-hidden="true" />
       <div className="drawer-head">
         <div className="drawer-title">
           <div style={{ fontWeight: 600, whiteSpace: 'nowrap' }}><span className={`run-status ${shown.status}`}>{statusLabel}</span> <span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: 12 }}>{shown.durationMs ? `${(shown.durationMs / 1000).toFixed(1)}s` : ''}</span></div>

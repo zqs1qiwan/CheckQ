@@ -1,4 +1,5 @@
 ﻿/* ============================================================
+
    CheckQ 样式 — 语义 token 双主题（夜=默认 / 日 / 自动跟随系统）
    主题切换：<html data-theme="auto|light|dark" data-mode="light|dark">
    规则要点：
@@ -35,6 +36,40 @@
   --canvas-dot: #232933;
   --focus-ring: rgba(107, 147, 240, .32);
   --input-bg: #1a1f26;
+}
+
+/* =====================================================================
+   品牌设计令牌（Brand tokens）—— 全站唯一尺寸来源，改这里即可统一全站
+   ===================================================================== */
+:root {
+  /* 控件高度（按钮 / 输入 / 选择） */
+  --ctl-h: 32px;          /* 标准控件高 */
+  --ctl-h-sm: 26px;       /* 小号控件（表格内、标签页） */
+  --ctl-h-lg: 38px;       /* 大号（移动端主按钮） */
+  --ctl-px: 14px;         /* 横向内边距 */
+  --ctl-px-sm: 11px;
+  /* 圆角 */
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 14px;
+  /* 字号 */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 15px;
+  --fs-xl: 17px;
+  /* 间距 */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  /* 图标 */
+  --icon-sm: 13px;
+  --icon-md: 16px;
+  --icon-lg: 20px;
 }
 
 html[data-mode='light'] {
@@ -122,21 +157,22 @@ body {
 /* ---- 按钮：字随继承 + 永不折行压缩 + 统一打击面 ---- */
 button {
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--fs-md);
   line-height: 1.25;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--sp-1);
   flex: 0 0 auto;
   background: var(--panel2);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 7px 14px;
+  border-radius: var(--r-md);
+  padding: 0 var(--ctl-px);
+  height: var(--ctl-h);
   cursor: pointer;
-  transition: border-color .15s, background .15s;
+  transition: border-color .15s, background .15s, color .15s;
 }
 button:hover { border-color: var(--muted); background: var(--hover-tint); }
 button:active { transform: translateY(1px); }
@@ -144,7 +180,7 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 button.primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
 button.danger { color: var(--fail); }
 button.danger:hover { border-color: var(--fail); background: transparent; }
-button.small { padding: 5px 11px; font-size: 12px; border-radius: 7px; min-height: 26px; display: inline-flex; align-items: center; justify-content: center; }
+button.small { padding: 0 var(--ctl-px-sm); font-size: var(--fs-sm); border-radius: var(--r-sm); height: var(--ctl-h-sm); min-height: var(--ctl-h-sm); display: inline-flex; align-items: center; justify-content: center; }
 button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
 
 /* ---- 表单控件：统一柔和外观（此前缺失全局规则，编辑器里是浏览器默认硬框） ---- */
@@ -157,9 +193,10 @@ textarea {
   color: var(--text);
   background: var(--input-bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 7px 10px;
-  min-height: 34px;
+  border-radius: var(--r-md);
+  padding: 0 10px;
+  min-height: var(--ctl-h);
+  height: var(--ctl-h);
   transition: border-color .15s, box-shadow .15s, background .15s;
 }
 input:not([type='checkbox']):not([type='radio']):hover,
@@ -173,7 +210,7 @@ textarea:focus {
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 input::placeholder, textarea::placeholder { color: var(--muted); opacity: .75; }
-textarea { resize: vertical; min-height: 84px; line-height: 1.6; }
+textarea { resize: vertical; min-height: 84px; height: auto; line-height: 1.6; }
 input[type='checkbox'], input[type='radio'] { accent-color: var(--accent); }
 select { padding-right: 26px; }
 .field > input, .field > select, .field > textarea { width: 100%; }
@@ -212,7 +249,7 @@ select { padding-right: 26px; }
 .checkline input { accent-color: var(--accent); }
 
 /* 图标按钮（不展开文字的紧凑动作） */
-button.iconbtn { padding: 4px 9px; font-size: 13px; border-radius: 6px; min-width: 30px; min-height: 30px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+button.iconbtn { padding: 0; font-size: var(--fs-md); border-radius: var(--r-md); width: var(--ctl-h); height: var(--ctl-h); min-width: var(--ctl-h); min-height: var(--ctl-h); display: inline-flex; align-items: center; justify-content: center; flex: none; }
 
 /* 下拉菜单（顶栏收拢次级导入入口等） */
 .menu { position: relative; display: inline-flex; }
@@ -450,6 +487,8 @@ span.json-toggle { cursor: default; }
   z-index: 10;
 }
 .run-drawer .drawer-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; row-gap: 6px; padding: 8px 14px; border-bottom: 1px solid var(--border); }
+.run-drawer .drawer-grip { height: 10px; margin: 0 auto -4px; width: 46px; border-radius: 6px; background: var(--border); opacity: .6; cursor: ns-resize; touch-action: none; }
+.run-drawer .drawer-grip:hover { opacity: 1; background: var(--muted); }
 /* 标题列：有保底宽度，窄窗下压缩 tabs 而不是把「执行失败」竖排成塔 */
 .drawer-title { flex: 1 1 auto; min-width: 148px; }
 .run-drawer .drawer-close { width: 26px; height: 26px; border-radius: 7px; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 12px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: none; }
@@ -624,10 +663,11 @@ span.json-toggle { cursor: default; }
   .editor-topbar button, .editor-topbar .menu > summary { padding: 6px 9px; font-size: 12px; }
   .page { padding: 14px 10px 26px; }
   .page-head { gap: 8px; row-gap: 6px; margin-bottom: 14px; }
-  button { padding: 8px 13px; }
-  button.small { padding: 6px 11px; font-size: 12px; }
-  .theme-btn { padding: 7px 12px; font-size: 16px; }
-  .menu > summary { padding: 8px 13px; }
+  button { height: var(--ctl-h-lg); }
+  button.small { height: var(--ctl-h-sm); }
+  button.iconbtn { width: var(--ctl-h-lg); height: var(--ctl-h-lg); min-width: var(--ctl-h-lg); min-height: var(--ctl-h-lg); }
+  .theme-btn { font-size: 16px; }
+  .menu > summary { height: var(--ctl-h-lg); display: inline-flex; align-items: center; }
   .flow-table { min-width: 540px; }
   .flow-table th.col-next, .flow-table td.col-next,
   .flow-table th.col-last, .flow-table td.col-last { display: none; }
@@ -642,6 +682,7 @@ span.json-toggle { cursor: default; }
   .canvas-wrap { flex: none; height: clamp(300px, 48vh, 560px); }
   .config-panel { flex: none; border-left: none; border-top: 1px solid var(--border); max-height: 60vh; }
   .run-drawer { position: fixed; left: 0; right: 0; bottom: 0; height: 55vh; z-index: 40; box-shadow: 0 -10px 28px rgba(0, 0, 0, .28); }
+@media (max-width: 640px) { .run-drawer { height: 92vh !important; } .run-drawer .drawer-grip { display: none; } }
   .react-flow__minimap { display: none; }
 }
 
@@ -689,3 +730,15 @@ span.json-toggle { cursor: default; }
 .logstream-debug { margin: 4px 0 8px 12px; padding: 6px 10px; border-left: 2px solid var(--border); background: var(--panel2); border-radius: 0 8px 8px 0; }
 .logstream-body-pre { margin: 4px 0 8px; padding: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; font-size: 11.5px; max-height: 260px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
 .logstream-more { text-align: center; padding: 8px 0 4px; }
+/* ---- 每日总推送：可推送单位（任务）勾选 ---- */
+.push-units { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 4px; max-height: 190px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--r-md); padding: 8px; background: var(--panel2); }
+.push-unit { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-md); padding: 4px 6px; border-radius: var(--r-sm); cursor: pointer; }
+.push-unit:hover { background: var(--hover-tint); }
+.push-unit-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.push-unit-ch { color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
+
+/* ---- 图标 + 文字按钮（统一内边距与图标尺寸） ---- */
+button.icon-text { gap: 5px; }
+button.icon-text svg { flex: none; }
+.menu-pop button { gap: 6px; justify-content: flex-start; }
+.menu-pop button svg { flex: none; opacity: .85; }

@@ -318,12 +318,16 @@ export class Store {
     const failed = todayRuns.filter((r) => r.status === 'failed').length;
     const enabled = this.flows.filter((f) => f.enabled && f.cron);
     let nextRunAt = null;
+    let nextFlowName = null;
     for (const f of enabled) {
       try {
         const job = new Cron(f.cron, { timezone: f.timezone || 'Asia/Shanghai' });
         const next = job.nextRun()?.getTime() || null;
         job.stop();
-        if (next && (nextRunAt === null || next < nextRunAt)) nextRunAt = next;
+        if (next && (nextRunAt === null || next < nextRunAt)) {
+          nextRunAt = next;
+          nextFlowName = f.name || '';
+        }
       } catch { /* 无效 cron 忽略 */ }
     }
     return {
@@ -335,6 +339,7 @@ export class Store {
       todayFailed: failed,
       successRate: todayRuns.length ? Math.round((success / todayRuns.length) * 100) : null,
       nextRunAt,
+      nextFlowName, // 下一次调度属于哪个任务（首页健康条提示用）
     };
   }
 }

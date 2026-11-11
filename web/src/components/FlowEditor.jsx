@@ -11,6 +11,7 @@ import ConfigPanel from './ConfigPanel.jsx';
 import RunDrawer from './RunDrawer.jsx';
 import GuideModal from './GuideModal.jsx';
 import Modal from './Modal.jsx';
+import { IconHelp, IconBug, IconPlay } from './Icons.jsx';
 import { toast as globalToast } from '../toast.js';
 
 const COLOR = Object.fromEntries(Object.entries(STEP_TYPES).map(([k, v]) => [k, v.color]));
@@ -68,7 +69,8 @@ function FlowEditorInner({ flowId, onBack }) {
   const [logOpen, setLogOpen] = useState(false);
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
-  const [debugRun, setDebugRun] = useState(false); // 单次运行调试模式（记录每步请求/响应）
+  const [scheduleOpen, setScheduleOpen] = useState(false); // 调度弹窗
+  const [debugView, setDebugView] = useState(false); // 当前运行结果是否展开每步细节
   const [cookieOpen, setCookieOpen] = useState(false);
   const [tplOpen, setTplOpen] = useState(false);
   const [tplName, setTplName] = useState('');
@@ -256,7 +258,6 @@ function FlowEditorInner({ flowId, onBack }) {
     setRunResult({ id: 'pending', status: 'running', logs: [] });
     try {
       const r = await api.runFlowStream(flow.id, {
-        debug: debugRun,
         onStart: () => {
           setRunResult({ id: 'pending', status: 'running', logs: [] });
           setRunStatusAll(null);
@@ -276,7 +277,7 @@ function FlowEditorInner({ flowId, onBack }) {
     } catch (e) {
       setRunResult({ id: 'err', status: 'failed', logs: [], finalMessage: e.message, durationMs: 0 });
     }
-  }, [dirty, save, flow?.id, debugRun]);
+  }, [dirty, save, flow?.id]);
 
   const testNotify = async () => {
     try {
@@ -309,15 +310,46 @@ function FlowEditorInner({ flowId, onBack }) {
     }
   };
 
+  // 调试运行：记录每一步的请求/响应，并自动展开运行过程窗口
+  const runDebug = useCallback(async () => {
+    if (dirty) await save();
+    setDrawerOpen(true);
+    setDebugView(true);
+    setRunResult({ id: 'pending', status: 'running', logs: [] });
+    try {
+      const r = await api.runFlowStream(flow.id, {
+        debug: true,
+        onStart: () => {
+          setRunResult({ id: 'pending', status: 'running', logs: [] });
+          setRunStatusAll(null);
+        },
+        onLog: (log) => {
+          setRunResult((cur) => ({ ...cur, status: 'running', logs: [...(cur.logs || []), log] }));
+          setRunStatus(log.stepId, log.ok === false ? 'failed' : 'running');
+        },
+      });
+      setRunResult(r);
+      for (const log of r.logs || []) {
+        if (log.ok === false) setRunStatus(log.stepId, 'failed');
+        else setRunStatus(log.stepId, 'ok');
+      }
+      showToast(`调试运行完成（${r.logs?.length || 0} 步）`, r.status === 'success' ? 'ok' : 'fail');
+    } catch (e) {
+      setRunResult({ id: 'err', status: 'failed', logs: [], finalMessage: e.message, durationMs: 0 });
+      showToast(`调试运行失败: ${e.message}`);
+    }
+  }, [dirty, save, flow?.id]);
+
   const debugTo = useCallback(async (nodeId) => {
     if (dirty) await save();
     const node = stateRef.current.nodes.find((n) => n.id === nodeId);
     setDrawerOpen(true);
     setRunResult({ id: 'pending', status: 'running', logs: [] });
     try {
+      setDebugView(true);
       const r = await api.runFlowStream(flow.id, {
         debugStopId: nodeId,
-        debug: debugRun,
+        debug: true,
         onStart: () => {
           setRunResult({ id: 'pending', status: 'running', logs: [] });
           setRunStatusAll(null);
@@ -449,61 +481,21 @@ function FlowEditorInner({ flowId, onBack }) {
           onChange={(e) => { setFlow({ ...flow, name: e.target.value }); markDirty(); }}
           onBlur={() => api.updateFlow(flow.id, { name: flow.name }).catch((e) => showToast(e.message))}
         />
-        <details className="menu">
-          <summary>调度</summary>
-          <div className="menu-pop schedule-pop">
-            <div className="field">
-              <label>cron 表达式</label>
-              <input
-                className="mono"
-                placeholder="30 8 * * *（留空=手动）"
-                value={flow.cron || ''}
-                onChange={(e) => setFlow({ ...flow, cron: e.target.value })}
-                onBlur={(e) => api.updateFlow(flow.id, { cron: e.target.value }).then(() => showToast('调度已保存', 'ok')).catch((err) => showToast(err.message))}
-              />
-            </div>
-            <div className="field-inline">
-              <div className="field">
-                <label>时区</label>
-                <select
-                  value={flow.timezone || 'Asia/Shanghai'}
-                  onChange={(e) => { setFlow({ ...flow, timezone: e.target.value }); api.updateFlow(flow.id, { timezone: e.target.value }); }}
-                >
-                  <option value="Asia/Shanghai">Asia/Shanghai</option>
-                  <option value="UTC">UTC</option>
-                  <option value="Asia/Tokyo">Asia/Tokyo</option>
-                  <option value="America/New_York">America/New_York</option>
-                </select>
-              </div>
-              <div className="field">
-                <label>抖动（分钟）</label>
-                <input
-                  type="number"
-                  value={flow.jitterMinutes ?? 0}
-                  title="cron 触发后随机延迟 0-N 分钟，0=不抖动"
-                  onChange={(e) => setFlow({ ...flow, jitterMinutes: Number(e.target.value) || 0 })}
-                  onBlur={(e) => api.updateFlow(flow.id, { jitterMinutes: Number(e.target.value) || 0 }).then(() => showToast('抖动已保存', 'ok')).catch((err) => showToast(err.message))}
-                />
-              </div>
-            </div>
-            <label className="checkline">
-              <input type="checkbox" checked={!!flow.enabled} onChange={toggleEnabled} />
-              启用定时调度
-            </label>
-          </div>
-        </details>
+        <button className="small" onClick={() => setScheduleOpen(true)} title="cron / 时区 / 抖动 / 启用调度">调度</button>
         <button className={`small${showPalette ? ' active' : ''}`} onClick={() => setShowPalette((v) => !v)} title="显示/收起步骤积木">积木</button>
         <button className={`small${showConfig ? ' active' : ''}`} onClick={() => setShowConfig((v) => !v)} title="显示/收起参数面板">参数</button>
         <span className="spacer" />
         {saving ? <span style={{ color: 'var(--muted)', fontSize: 12 }}>保存中…</span> : dirty ? <span style={{ color: 'var(--warn)', fontSize: 12 }}>未保存</span> : null}
         <button className="small" disabled={!runResult} onClick={() => setDrawerOpen(true)} title={runResult ? '展开运行日志' : '先运行一次'}>日志</button>
         <button className="small primary" onClick={runNow} title="从头执行整个流程">运行</button>
-        <button className="iconbtn" onClick={() => setGuideOpen(true)} title="使用引导" aria-label="使用引导">?</button>
+        <button className="iconbtn" onClick={() => setGuideOpen(true)} title="使用引导" aria-label="使用引导"><IconHelp size={16} /></button>
         <details className="menu">
           <summary>···</summary>
           <div className="menu-pop" onClick={(e) => e.currentTarget.closest('details')?.removeAttribute('open')}>
             <button disabled={!canUndo} onClick={undo}>撤销</button>
             <button disabled={!canRedo} onClick={redo}>重做</button>
+            <div className="menu-sep" />
+            <button onClick={runDebug} title="记录每一步的请求/响应并展开运行过程窗口"><IconBug size={14} /> 调试运行</button>
             <div className="menu-sep" />
             <button onClick={() => setNotifyOpen(true)}>通知渠道</button>
             <button onClick={testNotify}>测试通知</button>
@@ -595,7 +587,7 @@ function FlowEditorInner({ flowId, onBack }) {
         </div>
 
         {drawerOpen && (
-          <RunDrawer run={runResult} flowId={flow.id} onClose={() => setDrawerOpen(false)} onPickResponse={handlePickResponse} onRepPick={replaceFailedNode} debug={debugRun} onDebugChange={setDebugRun} />
+          <RunDrawer run={runResult} flowId={flow.id} onClose={() => setDrawerOpen(false)} onPickResponse={handlePickResponse} onRepPick={replaceFailedNode} debug={debugView} onDebugChange={setDebugView} />
         )}
       </div>
 
@@ -611,6 +603,18 @@ function FlowEditorInner({ flowId, onBack }) {
             const nf = await api.updateFlow(flow.id, { vars: { ...(flow.vars || {}), cookie: cookie.trim() } });
             setFlow(nf);
             showToast('cookie 已保存到变量', 'ok');
+            return nf;
+          }}
+        />
+      )}
+
+      {scheduleOpen && (
+        <ScheduleModal
+          flow={flow}
+          onClose={() => setScheduleOpen(false)}
+          onSave={async (patch) => {
+            const nf = await api.updateFlow(flow.id, patch);
+            setFlow((cur) => ({ ...cur, ...patch }));
             return nf;
           }}
         />
@@ -1015,5 +1019,64 @@ function VarsEditor({ flow, onVars }) {
       <input style={{ fontSize: 11, padding: '4px 6px', marginBottom: 4 }} placeholder="值" value={nv} onChange={(e) => setNv(e.target.value)} />
       <button className="small" style={{ width: '100%' }} onClick={add}>+ 添加变量</button>
     </div>
+  );
+}
+
+/** 调度弹窗（v0.4.2）：cron / 时区 / 抖动 / 启用调度，独立弹窗统一风格 */
+function ScheduleModal({ flow, onClose, onSave }) {
+  const [cron, setCron] = useState(flow.cron || '');
+  const [timezone, setTimezone] = useState(flow.timezone || 'Asia/Shanghai');
+  const [jitter, setJitter] = useState(flow.jitterMinutes ?? 0);
+  const [enabled, setEnabled] = useState(!!flow.enabled);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const save = async () => {
+    setBusy(true); setErr('');
+    try {
+      await onSave({ cron: cron.trim(), timezone, jitterMinutes: Number(jitter) || 0, enabled });
+      onClose();
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal
+      title="调度"
+      subtitle="cron 留空 = 只手动运行；启用后按 cron / 时区自动执行"
+      onClose={onClose}
+      width={480}
+      footer={
+        <>
+          <button onClick={onClose}>取消</button>
+          <button className="primary" disabled={busy} onClick={save}>{busy ? '保存中…' : '保存'}</button>
+        </>
+      }
+    >
+      <div className="field">
+        <label>cron 表达式</label>
+        <input className="mono" placeholder="30 8 * * *（留空=手动）" value={cron} onChange={(e) => setCron(e.target.value)} />
+        <div className="hint">例：<code className="mono">30 8 * * *</code> = 每天 08:30；<code className="mono">13 0 * * *</code> = 每天 00:13</div>
+      </div>
+      <div className="field-inline">
+        <div className="field">
+          <label>时区</label>
+          <select value={timezone} onChange={(e) => setTimezone(e.target.value)}>
+            <option value="Asia/Shanghai">Asia/Shanghai</option>
+            <option value="UTC">UTC</option>
+            <option value="Asia/Tokyo">Asia/Tokyo</option>
+            <option value="America/New_York">America/New_York</option>
+          </select>
+        </div>
+        <div className="field">
+          <label>抖动（分钟）</label>
+          <input type="number" min={0} max={60} value={jitter} onChange={(e) => setJitter(e.target.value)} title="cron 触发后随机延迟 0-N 分钟，0=不抖动" />
+        </div>
+      </div>
+      <label className="checkline">
+        <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+        启用定时调度
+      </label>
+      {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
+    </Modal>
   );
 }

@@ -4,6 +4,8 @@ import ThemeToggle from './ThemeToggle.jsx';
 import GuideModal from './GuideModal.jsx';
 import LogStream from './LogStream.jsx';
 import Modal from './Modal.jsx';
+import { IconBell, IconHelp, IconMore, IconDownload, IconTrash } from './Icons.jsx';
+import { confirmDialog } from '../confirm.jsx';
 import { toast as globalToast, setToastLevel, getToastLevel } from '../toast.js';
 
 function fmtTime(ts) {
@@ -250,7 +252,7 @@ export default function FlowList({ onOpen, onLogout }) {
   const doBatch = async (action) => {
     const ids = [...selected];
     if (!ids.length) return;
-    if (action === 'delete' && !confirm(`删除选中的 ${ids.length} 个任务？不可恢复`)) return;
+    if (action === 'delete' && !(await confirmDialog({ title: '删除任务', message: `删除选中的 ${ids.length} 个任务？不可恢复`, confirmText: '删除', danger: true }))) return;
     setBatchBusy(true);
     try {
       const r = await api.batch(ids, action);
@@ -271,7 +273,7 @@ export default function FlowList({ onOpen, onLogout }) {
   };
 
   const del = async (f) => {
-    if (!confirm(`删除任务「${f.name}」？不可恢复`)) return;
+    if (!(await confirmDialog({ title: '删除任务', message: `删除任务「${f.name}」？不可恢复`, confirmText: '删除', danger: true }))) return;
     await api.deleteFlow(f.id);
     load();
   };
@@ -329,9 +331,9 @@ export default function FlowList({ onOpen, onLogout }) {
         </details>
         <ThemeToggle />
         <button className="iconbtn bell-btn" onClick={() => setNotifOpen(true)} title="站内通知" aria-label="站内通知">
-          🔔{unread > 0 && <span className="bell-dot">{unread > 99 ? '99+' : unread}</span>}
+          <IconBell size={16} />{unread > 0 && <span className="bell-dot">{unread > 99 ? '99+' : unread}</span>}
         </button>
-        <button className="iconbtn" onClick={() => setGuideOpen(true)} title="使用引导：3 步上手 / 日志 / 通知 / 常见问题" aria-label="使用引导">?</button>
+        <button className="iconbtn" onClick={() => setGuideOpen(true)} title="使用引导：3 步上手 / 日志 / 通知 / 常见问题" aria-label="使用引导"><IconHelp size={16} /></button>
         <input
           ref={fileRef} type="file" accept=".har,.json" style={{ display: 'none' }}
           onChange={(e) => { const f = e.target.files[0]; if (f) doImport(f); e.target.value = ''; }}
@@ -345,7 +347,11 @@ export default function FlowList({ onOpen, onLogout }) {
             <span className="badge muted">今日 {stats.todayRuns} 次 · 成功 {stats.todaySuccess} · 失败 {stats.todayFailed}{stats.successRate !== null ? ` · 成功率 ${stats.successRate}%` : ''}</span>
             {stats.queuedFlows?.length ? <span className="badge warn">排队中 {stats.queuedFlows.length}</span> : null}
             {stats.dailySummary?.enabled ? <span className="badge ok">每日汇总 {stats.dailySummary.time}</span> : null}
-            {stats.nextRunAt ? <span className="badge ok" title="所有已启用任务中，最近的一次自动运行时间">下次调度 {fmtTime(stats.nextRunAt)}</span> : <span className="badge muted">暂无调度</span>}
+            {stats.nextRunAt ? (
+              <span className="badge ok" title={`下一次自动运行：${stats.nextFlowName || '未知任务'}（所有已启用任务中最近的一次）`}>
+                下次调度 {fmtTime(stats.nextRunAt)}{stats.nextFlowName ? ` · ${stats.nextFlowName}` : ''}
+              </span>
+            ) : <span className="badge muted">暂无调度</span>}
           </div>
         )}
         <div className="page-head">
@@ -383,7 +389,7 @@ export default function FlowList({ onOpen, onLogout }) {
                         }
                       }}>导出 JSON</button>
                       <button className="danger-text" onClick={async () => {
-                        if (!confirm(`删除模板「${t.name}」？已创建的任务不受影响。`)) return;
+                        if (!(await confirmDialog({ title: '删除模板', message: `删除模板「${t.name}」？已创建的任务不受影响。`, confirmText: '删除', danger: true }))) return;
                         await api.deleteTemplate(t.id);
                         load();
                       }}>删除模板</button>
@@ -769,7 +775,7 @@ function NotificationsModal({ onClose }) {
   useEffect(() => { load(); }, []);
   const markAll = async () => { setBusy(true); try { await api.markNotificationsRead(); await load(); } finally { setBusy(false); } };
   const clearAll = async () => {
-    if (!confirm('清空全部站内通知？')) return;
+    if (!(await confirmDialog({ title: '清空站内通知', message: '清空全部站内通知？此操作不可恢复。', confirmText: '清空', danger: true }))) return;
     setBusy(true);
     try { await api.clearNotifications(); await load(); } finally { setBusy(false); }
   };
@@ -922,14 +928,18 @@ function AiSettings() {
 
 /* 设置内：每日总推送（可选）+ 界面提示级别 */
 function SettingsFlow({ onToast }) {
-  const [cfg, setCfg] = useState({ enabled: false, time: '08:00', timezone: 'Asia/Shanghai', targetFlowId: '' });
-  const [flows, setFlows] = useState([]);
+  const [cfg, setCfg] = useState({ enabled: false, time: '08:00', timezone: 'Asia/Shanghai', targetFlowIds: [] });
+  const [pushable, setPushable] = useState([]);
+  const [selectedUnits, setSelectedUnits] = useState([]);
   const [marketUrl, setMarketUrl] = useState('');
   const [level, setLevel] = useState(getToastLevel());
   const [pushing, setPushing] = useState(false);
   useEffect(() => {
-    api.dailySummaryConfig().then(setCfg).catch(() => {});
-    api.flows().then(setFlows).catch(() => setFlows([]));
+    api.dailySummaryConfig().then((c) => {
+      setCfg({ ...c, targetFlowIds: c.targetFlowIds || [] });
+      setSelectedUnits(c.targetFlowIds || (c.targetFlowId ? [c.targetFlowId] : []));
+    }).catch(() => {});
+    api.pushTargets().then(setPushable).catch(() => setPushable([]));
   }, []);
   const changeLevel = async (v) => {
     setLevel(v);
@@ -937,11 +947,11 @@ function SettingsFlow({ onToast }) {
     try { await api.saveUiSettings({ toastLevel: v }); } catch (e) { onToast(e.message); }
   };
   const pushNow = async () => {
-    if (!cfg.targetFlowId) { onToast('先选择一个带通知渠道的任务'); return; }
+    if (!selectedUnits.length) { onToast('先勾选至少一个推送单位'); return; }
     setPushing(true);
     try {
-      const r = await api.pushDailySummary({ flowId: cfg.targetFlowId });
-      onToast(`已推送：${r.text || '今日汇总'}`);
+      const r = await api.pushDailySummary({ flowIds: selectedUnits });
+      onToast(`已推送到 ${(r.groups || []).length} 个单位：${r.text || '今日汇总'}`);
     } catch (e) { onToast(e.message); }
     finally { setPushing(false); }
   };
@@ -969,19 +979,34 @@ function SettingsFlow({ onToast }) {
         <label>每日总推送（可选，默认关）</label>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input type="checkbox" style={{ width: 'auto' }} checked={!!cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} />
-          每天 {cfg.time} 把今日汇总推送到所选任务的通知渠道
+          每天 {cfg.time} 把今日汇总推送到下面勾选的任务
         </label>
-        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+        <div className="push-units">
+          {pushable.length === 0 && <div className="hint">还没有带通知渠道的任务。先到任务里配置「通知渠道」，这里才会出现可推送单位。</div>}
+          {pushable.map((f) => (
+            <label key={f.id} className="push-unit">
+              <input
+                type="checkbox"
+                style={{ width: 'auto' }}
+                checked={selectedUnits.includes(f.id)}
+                onChange={(e) => setSelectedUnits(e.target.checked ? [...selectedUnits, f.id] : selectedUnits.filter((x) => x !== f.id))}
+              />
+              <span className="push-unit-name">{f.name}</span>
+              <span className="push-unit-ch">{f.channels.map((c) => c.type).join(' / ')}</span>
+            </label>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <input type="time" style={{ width: 110 }} value={cfg.time} onChange={(e) => setCfg({ ...cfg, time: e.target.value })} />
-          <select value={cfg.targetFlowId || ''} onChange={(e) => setCfg({ ...cfg, targetFlowId: e.target.value })}>
-            <option value="">选有渠道的任务</option>
-            {flows.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-          </select>
           <button className="small" onClick={async () => {
-            try { const r = await api.saveDailySummaryConfig(cfg); setCfg(r); onToast('每日总推送设置已保存'); }
-            catch (e) { onToast(e.message); }
+            try {
+              const r = await api.saveDailySummaryConfig({ ...cfg, targetFlowIds: selectedUnits });
+              setCfg(r);
+              onToast(`每日总推送设置已保存（${selectedUnits.length} 个推送单位）`);
+            } catch (e) { onToast(e.message); }
           }}>保存</button>
-          <button className="small" onClick={pushNow} disabled={pushing}>{pushing ? '推送中…' : '立即推送今日汇总'}</button>
+          <button className="small" onClick={pushNow} disabled={pushing || selectedUnits.length === 0}>{pushing ? '推送中…' : '立即推送今日汇总'}</button>
+          {selectedUnits.length > 0 && <span style={{ color: 'var(--muted)', fontSize: 11 }}>已选 {selectedUnits.length} 个推送单位</span>}
         </div>
       </div>
       <div className="field">

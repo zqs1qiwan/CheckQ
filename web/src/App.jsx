@@ -4,6 +4,7 @@ import Login from './components/Login.jsx';
 import FlowList from './components/FlowList.jsx';
 import FlowEditor from './components/FlowEditor.jsx';
 import GlobalToast from './components/GlobalToast.jsx';
+import { ConfirmHost } from './confirm.jsx';
 import { setToastLevel } from './toast.js';
 
 export default function App() {
@@ -31,6 +32,7 @@ export default function App() {
         <FlowEditor flowId={flowId} onBack={() => setView('list')} />
       )}
       <GlobalToast />
+      <ConfirmHost />
     </>
   );
 }

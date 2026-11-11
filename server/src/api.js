@@ -116,18 +116,35 @@ export function buildServer({ dataDir, port }) {
     return sendToChannels(n.channels, text, { flowId: flow.id, flowName: flow.name, status: run.status });
   }
 
-  runner.sendDailySummary = async () => {
-    const cfg = store.meta.dailySummary || {};
-    const target = cfg.targetFlowId ? store.getFlow(cfg.targetFlowId) : null;
-    if (!target?.notify.channels?.length) {
-      console.log('[CheckQ] dailySummary 跳过：目标任务无通知渠道');
-      return null;
-    }
+  /** 每日汇总的「推送单位」：由用户勾选的任务列表（每个任务用它自己的通知渠道） */
+  function summaryTargets(cfg = store.meta.dailySummary || {}) {
+    const ids = Array.isArray(cfg.targetFlowIds) && cfg.targetFlowIds.length
+      ? cfg.targetFlowIds
+      : (cfg.targetFlowId ? [cfg.targetFlowId] : []);
+    return ids.map((id) => store.getFlow(id)).filter((f) => f && f.notify?.channels?.length);
+  }
+
+  async function pushDailySummary(targets) {
     const s = store.stats();
     const text = `每日汇总：今日 ${s.todayRuns} 次（成功 ${s.todaySuccess} / 失败 ${s.todayFailed}，成功率 ${s.successRate ?? '—'}%）；任务 ${s.flows}，调度中 ${s.enabledScheduled}，下次 ${s.nextRunAt ? new Date(s.nextRunAt).toLocaleString('zh-CN') : '—'}`;
-    const results = await sendToChannels(target.notify.channels, text, { flowId: target.id, flowName: target.name, status: 'success' });
-    console.log(`[CheckQ] dailySummary 已发送 ${results.filter((x) => x.ok).length}/${results.length} 渠道`);
-    return { text, results };
+    const groups = [];
+    for (const target of targets) {
+      const results = await sendToChannels(target.notify.channels, text, { flowId: target.id, flowName: target.name, status: 'success' });
+      groups.push({ flowId: target.id, flowName: target.name, results });
+    }
+    const total = groups.reduce((n, g) => n + g.results.length, 0);
+    const ok = groups.reduce((n, g) => n + g.results.filter((x) => x.ok).length, 0);
+    console.log(`[CheckQ] dailySummary 已发送 ${ok}/${total} 渠道（${groups.length} 个推送单位）`);
+    return { text, results: groups.flatMap((g) => g.results), groups };
+  }
+
+  runner.sendDailySummary = async () => {
+    const targets = summaryTargets();
+    if (!targets.length) {
+      console.log('[CheckQ] dailySummary 跳过：未选择推送单位（或所选任务没有通知渠道）');
+      return null;
+    }
+    return pushDailySummary(targets);
   };
 
   function renderNotifyTemplate(n, flow, run) {
@@ -573,16 +590,17 @@ export function buildServer({ dataDir, port }) {
 
   // 每日汇总预览/发送（PRD §4.8 P2）：基于 store.stats() 今日口径
   app.post('/api/system/daily-summary', async (req, reply) => {
-    const s = store.stats();
-    const target = (req.body || {}).flowId ? store.getFlow((req.body || {}).flowId) : null;
-    if (target) {
-      const n = target.notify || {};
-      if (!n.channels?.length) return reply.code(400).send({ error: '该任务未配置通知渠道' });
-      const text = `每日汇总：今日 ${s.todayRuns} 次（成功 ${s.todaySuccess} / 失败 ${s.todayFailed}，成功率 ${s.successRate ?? '—'}%）；任务 ${s.flows}，调度中 ${s.enabledScheduled}，下次 ${s.nextRunAt ? new Date(s.nextRunAt).toLocaleString('zh-CN') : '—'}`;
-      const results = await sendToChannels(n.channels, text, { flowId: target.id, flowName: target.name, status: 'success' });
-      return { ok: results.every((r) => r.ok), text, results };
+    const body = req.body || {};
+    const ids = Array.isArray(body.flowIds) && body.flowIds.length ? body.flowIds : (body.flowId ? [body.flowId] : null);
+    if (ids) {
+      const targets = ids.map((id) => store.getFlow(id)).filter(Boolean);
+      if (!targets.length) return reply.code(404).send({ error: '任务不存在' });
+      const missing = targets.filter((t) => !t.notify?.channels?.length);
+      if (missing.length === targets.length) return reply.code(400).send({ error: '所选任务都没有通知渠道' });
+      const out = await pushDailySummary(targets.filter((t) => t.notify?.channels?.length));
+      return { ok: out.results.every((r) => r.ok), text: out.text, results: out.results, groups: out.groups };
     }
-    return { ok: true, stats: s };
+    return { ok: true, stats: store.stats() };
   });
 
   // ---- flows ----
@@ -846,6 +864,11 @@ export function buildServer({ dataDir, port }) {
   });
 
   // ---- runs ----
+  // 可推送单位：所有已配置通知渠道的任务（每日总推送时由用户勾选）
+  app.get('/api/system/push-targets', async () => store.flows
+    .filter((f) => f.notify?.channels?.length)
+    .map((f) => ({ id: f.id, name: f.name, channels: f.notify.channels.map((c) => c.type) })));
+
   app.get('/api/system/stats', async () => {
     const s = store.stats();
     return { ...s, queuedFlows: [...runningFlows, ...queuedSet], queueCount: queuedSet.size, runningCount: runningFlows.size, dailySummary: store.meta.dailySummary || null, unreadNotifications: store.listNotifications(1).unread };
@@ -859,11 +882,24 @@ export function buildServer({ dataDir, port }) {
   });
   app.delete('/api/notifications', async () => ({ ok: true, cleared: store.clearNotifications() }));
 
-  app.get('/api/system/daily-summary-config', async () => store.meta.dailySummary || { enabled: false, time: '08:00', timezone: 'Asia/Shanghai', targetFlowId: null });
+  app.get('/api/system/daily-summary-config', async () => {
+    const cfg = store.meta.dailySummary || {};
+    const targetFlowIds = Array.isArray(cfg.targetFlowIds) ? cfg.targetFlowIds : (cfg.targetFlowId ? [cfg.targetFlowId] : []);
+    return { enabled: !!cfg.enabled, time: cfg.time || '08:00', timezone: cfg.timezone || 'Asia/Shanghai', targetFlowId: cfg.targetFlowId || null, targetFlowIds };
+  });
   app.put('/api/system/daily-summary-config', async (req, reply) => {
     const cfg = req.body || {};
-    if (cfg.enabled && !/^\d{1,2}:\d{2}$/.test(String(cfg.time || ''))) return reply.code(400).send({ error: 'time 应为 HH:MM' });
-    store.meta.dailySummary = { enabled: !!cfg.enabled, time: cfg.time || '08:00', timezone: cfg.timezone || 'Asia/Shanghai', targetFlowId: cfg.targetFlowId || null };
+    if (cfg.enabled && !/^\d{1,2}:\d{2}$/.test(String(cfg.time || ''))) return reply.code(400).send({ error: 'time must be HH:MM' });
+    const ids = Array.isArray(cfg.targetFlowIds)
+      ? cfg.targetFlowIds.filter(Boolean)
+      : (cfg.targetFlowId ? [cfg.targetFlowId] : []);
+    store.meta.dailySummary = {
+      enabled: !!cfg.enabled,
+      time: cfg.time || '08:00',
+      timezone: cfg.timezone || 'Asia/Shanghai',
+      targetFlowIds: ids,
+      targetFlowId: ids[0] || null, // compat with old field
+    };
     store.flush();
     scheduler.rebuild();
     return store.meta.dailySummary;

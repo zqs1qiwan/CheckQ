@@ -170,6 +170,15 @@ const ASSERT = `
     return r.width > 0 && r.height > 0 && r.right > window.innerWidth + 1 && !inScroller(e);
   }).slice(0, 5).map((e) => e.tagName + '.' + (typeof e.className === 'string' ? e.className : '') + '(right=' + Math.round(rect(e).right) + ')');
   if (spill.length) bad('元素伸出视口: ' + spill.join(', '));
+
+  // 4) 页面上不能出现 undefined / NaN / [object Object]（数据形状对不上时的低级错误）
+  const bodyText = (document.body.innerText || '');
+  for (const token of ['undefined', 'NaN', '[object Object]']) {
+    if (bodyText.includes(token)) {
+      const at = bodyText.indexOf(token);
+      bad('页面出现「' + token + '」: …' + bodyText.slice(Math.max(0, at - 30), at + 30).replace(/\s+/g, ' ') + '…');
+    }
+  }
 `;
 
 /** 下拉菜单通用检查：打开 → 是否完整可见 → 是否被裁剪 → 点击项是否命中 */
@@ -317,10 +326,12 @@ async function checkModal(page, where, openExpr, opts = {}) {
         const panel = document.querySelector('.settings-panel');
         if (!panel) return { ok: false };
         const over = panel.scrollWidth > panel.clientWidth + 2;
-        return { ok: !over, over, name: document.querySelector('.settings-tab.active')?.textContent.trim().slice(0,12) };
+        const txt = panel.innerText || '';
+        const bads = ['undefined', 'NaN', '[object Object]'].filter(t => txt.includes(t));
+        return { ok: !over && !bads.length, over, bads, name: document.querySelector('.settings-tab.active')?.textContent.trim().slice(0,12) };
       `);
-      if (!p.ok) fail('设置/1440', `设置分区「${p.name}」内容横向溢出`);
-      else ok('设置/1440', `分区「${p.name}」无横向溢出`);
+      if (!p.ok) fail('设置/1440', `设置分区「${p.name}」${p.over ? '内容横向溢出' : ''}${p.bads?.length ? ' 出现 ' + p.bads.join('/') : ''}`);
+      else ok('设置/1440', `分区「${p.name}」无横向溢出、无 undefined/NaN`);
       if (i === 2 && SHOTS) await page.shot(path.join(SHOTS, 'settings-page-' + i + '.png'));
     }
     // API 密钥页的 ⋯ 菜单
@@ -488,7 +499,7 @@ async function checkModal(page, where, openExpr, opts = {}) {
     }
     await page.viewport(1440, 900);
   } catch (e) {
-    fail('运行', e.message);
+    fail('运行', e.message + (e.stack ? ' | ' + String(e.stack).split('\n').slice(0, 3).join(' <- ') : ''));
   }
 
   await page.close();

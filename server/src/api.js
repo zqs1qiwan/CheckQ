@@ -479,7 +479,11 @@ export function buildServer({ dataDir, port }) {
     reply.header('X-Frame-Options', 'DENY');
     reply.header('Referrer-Policy', 'same-origin');
     reply.header('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
-    reply.header('Cross-Origin-Opener-Policy', 'same-origin');
+    // COOP/COEP 只在 HTTPS（或 localhost）下有意义：明文 HTTP 属于「不可信来源」，
+    // 浏览器会直接忽略这些头并在控制台报错（每开一页都报一次）。按协议条件发送。
+    const proto = String(req.headers['x-forwarded-proto'] || req.protocol || '').split(',')[0].trim();
+    const secure = proto === 'https' || (req.headers.host || '').split(':')[0] === 'localhost';
+    if (secure) reply.header('Cross-Origin-Opener-Policy', 'same-origin');
     reply.header(
       'Content-Security-Policy',
       "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",

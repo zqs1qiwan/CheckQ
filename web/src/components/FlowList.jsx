@@ -114,7 +114,7 @@ function WizardModal({ onClose, onCreated }) {
           <div className="ai-preview">
             <div style={{ fontWeight: 600, fontSize: 13 }}>{aiDraft.name}</div>
             <div style={{ color: 'var(--muted)', fontSize: 12, margin: '4px 0' }}>
-              {aiDraft.nodes?.length || 0} 个节点 · cron {aiDraft.cron || '—'} · {aiDraft.nodes?.map((n) => n.type).join(' → ')}
+              {aiDraft.nodes?.length || 0} 个节点 · cron {aiDraft.cron || '—'} · {aiDraft.nodes?.map((n) => n.type)?.join(' → ')}
             </div>
             <span className="btn-row">
               <button className="small primary" disabled={aiBusy} onClick={createFromDraft}>用 AI 结果创建</button>
@@ -727,9 +727,9 @@ function CurlImportModal({ onClose, onCreated }) {
         {preview && (
           <div style={{ marginTop: 10, border: '1px solid var(--border)', borderRadius: 8, padding: 10, fontSize: 12 }}>
             <div><b>{preview.method}</b> <span className="mono">{preview.url}</span></div>
-            {preview.headers.length > 0 && (
+            {(preview.headers || []).length > 0 && (
               <div style={{ color: 'var(--muted)', marginTop: 4 }}>
-                {preview.headers.map((h) => `${h.name}: ${h.value.length > 40 ? h.value.slice(0, 40) + '…' : h.value}`).join(' | ')}
+                {(preview.headers || []).map((h) => `${h.name}: ${h.value.length > 40 ? h.value.slice(0, 40) + '…' : h.value}`).join(' | ')}
               </div>
             )}
             {preview.body && <div className="mono" style={{ marginTop: 4, wordBreak: 'break-all' }}>body: {preview.body.slice(0, 120)}</div>}
@@ -786,7 +786,7 @@ function CsvImportModal({ tpl, onClose, onDone }) {
           </div>
           <div className="hint">
             {tpl.varNames.length > 0
-              ? <>模板需要这些变量：{tpl.varNames.join('、')}；名字要和第一行完全一致。</>
+              ? <>模板需要这些变量：{(tpl.varNames || []).join('、')}；名字要和第一行完全一致。</>
               : <>这个模板没有变量，只填任务名即可。</>}
           </div>
         </div>
@@ -1016,7 +1016,8 @@ function SettingsFlow({ onToast }) {
                 onChange={(e) => setSelectedUnits(e.target.checked ? [...selectedUnits, f.id] : selectedUnits.filter((x) => x !== f.id))}
               />
               <span className="push-unit-name">{f.name}</span>
-              <span className="push-unit-ch">{f.channels.map((c) => c.type).join(' / ')}</span>
+              {/* 服务端返回的 channels 是类型名字符串数组（历史接口形态），兼容对象形态 */}
+              <span className="push-unit-ch">{(f.channels || []).map((c) => (typeof c === 'string' ? c : c.type)).filter(Boolean).join(' / ')}</span>
             </label>
           ))}
         </div>

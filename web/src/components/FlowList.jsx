@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import ThemeToggle from './ThemeToggle.jsx';
 import GuideModal from './GuideModal.jsx';
 import LogStream from './LogStream.jsx';
+import Modal from './Modal.jsx';
 import { toast as globalToast, setToastLevel, getToastLevel } from '../toast.js';
 
 function fmtTime(ts) {
@@ -85,10 +86,17 @@ function WizardModal({ onClose, onCreated }) {
     } catch (e) { setAiErr(e.message); } finally { setAiBusy(false); }
   };
   return (
-    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <h3>快速组装</h3>
-        <p style={{ color: 'var(--muted)', fontSize: 12 }}>两种方式：一句话让 AI 生成（需在设置配置 LLM API），或手动填三项生成骨架。进编辑器后点「运行」验证，响应里点选补细节。</p>
+    <Modal
+      title="快速组装"
+      subtitle="一句话让 AI 生成（需在设置配置 LLM API），或手动填三项生成骨架；进编辑器后点「运行」验证"
+      onClose={onClose}
+      footer={
+        <>
+          <button onClick={onClose}>取消</button>
+          <button className="primary" disabled={busy || !url.trim()} onClick={create}>{busy ? '生成中…' : '生成流程'}</button>
+        </>
+      }
+    >
         <div className="field">
           <label>一句话描述（例：每天8点去 https://ex.com/sign 签到，看到签到成功算成功）</label>
           <input value={sentence} onChange={(e) => setSentence(e.target.value)} placeholder="每天8点去 https://ex.com/sign 签到，看到签到成功算成功" />
@@ -137,11 +145,7 @@ function WizardModal({ onClose, onCreated }) {
           <div className="hint">规则模式生成：HTTP 节点（带断言/UA）→ 日志节点「{eventLabel}完成」，cron 每天 8 点（可改），调度默认关闭。</div>
         </div>
         {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
-        <button className="primary" disabled={busy || !url.trim()} onClick={create}>{busy ? '生成中…' : '生成流程'}</button>
-        {' '}
-        <button onClick={onClose}>取消</button>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -253,7 +257,10 @@ export default function FlowList({ onOpen, onLogout }) {
       setToast({ kind: r.failed ? 'fail' : 'ok', text: `批量${action === 'run' ? '运行' : action}：成功 ${r.ok} / 失败 ${r.failed}` });
       if (action === 'run') {
         const first = r.results.find((x) => x.runId);
-        if (first) setModal({ type: 'result', run: await api.run(first.runId), flowId: first.id });
+        if (first) {
+          const target = flows.find((f) => f.id === first.id);
+          setModal({ type: 'logstream', flowId: first.id, flowName: target?.name || '', refresh: Date.now() });
+        }
       }
       load();
     } catch (e) {
@@ -273,8 +280,10 @@ export default function FlowList({ onOpen, onLogout }) {
     setRunning(f.id);
     try {
       const run = await api.runFlow(f.id);
-      setModal({ type: 'result', run, flowId: f.id });
       load();
+      // 统一日志入口：运行完直接看连续日志流（最新一次在最下面）
+      setModal({ type: 'logstream', flowId: f.id, flowName: f.name, refresh: Date.now() });
+      if (run && run.status !== 'success') setToast({ kind: 'fail', text: `运行失败：${run.finalMessage || '执行出错'}` });
     } catch (e) {
       setToast({ kind: 'fail', text: `运行失败: ${e.message}` });
     } finally {
@@ -293,7 +302,7 @@ export default function FlowList({ onOpen, onLogout }) {
     return (
       <span className={`badge ${ok ? 'ok' : 'fail'}`} style={{ cursor: 'pointer' }}
         title="点击查看运行日志"
-        onClick={() => api.run(f.lastRun.id).then((full) => setModal({ type: 'result', run: full, flowId: f.id }))}>
+        onClick={() => setModal({ type: 'logstream', flowId: f.id, flowName: f.name, refresh: Date.now() })}>
         {ok ? '成功' : '失败'} · {fmtTime(f.lastRun.startedAt)}
       </span>
     );
@@ -505,15 +514,17 @@ export default function FlowList({ onOpen, onLogout }) {
       )}
 
       {modal === 'new' && (
-        <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && setModal(null)}>
-          <div className="modal">
-            <h3>新建空白任务</h3>
-            <p style={{ color: 'var(--muted)', fontSize: 13 }}>进入编辑器：左侧拖积木到画布 → 连线 → 点「运行」测试 → 调好后「存为模板」。</p>
-            <button className="primary" onClick={createEmpty}>创建</button>
-            {' '}
-            <button onClick={() => setModal(null)}>取消</button>
-          </div>
-        </div>
+        <Modal
+          title="新建空白任务"
+          subtitle="进入编辑器：左侧拖积木到画布 → 连线 → 点「运行」测试 → 调好后「存为模板」"
+          onClose={() => setModal(null)}
+          footer={
+            <>
+              <button onClick={() => setModal(null)}>取消</button>
+              <button className="primary" onClick={createEmpty}>创建</button>
+            </>
+          }
+        />
       )}
 
       {modal === 'curl' && (
@@ -521,17 +532,17 @@ export default function FlowList({ onOpen, onLogout }) {
       )}
 
       {modal === 'import' && (
-        <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && setModal(null)}>
-          <div className="modal">
-            <h3>导入</h3>
-            <p style={{ color: 'var(--muted)', fontSize: 13 }}>
-              支持 .har（浏览器请求录制）和 .json（CheckQ 模板）。点击下方按钮选择文件。
-            </p>
-            <button className="primary" onClick={() => fileRef.current?.click()}>选择文件</button>
-            {' '}
-            <button onClick={() => setModal(null)}>取消</button>
-          </div>
-        </div>
+        <Modal
+          title="导入"
+          subtitle="支持 .har（浏览器请求录制）和 .json（CheckQ 模板）"
+          onClose={() => setModal(null)}
+          footer={
+            <>
+              <button onClick={() => setModal(null)}>取消</button>
+              <button className="primary" onClick={() => fileRef.current?.click()}>选择文件</button>
+            </>
+          }
+        />
       )}
 
       {modal?.type === 'csv' && (
@@ -542,12 +553,8 @@ export default function FlowList({ onOpen, onLogout }) {
         <InstantiateModal tpl={modal.tpl} onClose={() => setModal(null)} onCreated={(f) => { setModal(null); onOpen(f.id); }} />
       )}
 
-      {modal?.type === 'result' && (
-        <ResultModal run={modal.run} flowId={modal.flowId} onClose={() => setModal(null)} />
-      )}
-
       {modal?.type === 'logstream' && (
-        <LogStream flowId={modal.flowId} flowName={modal.flowName} onClose={() => setModal(null)} />
+        <LogStream key={modal.refresh || modal.flowId} flowId={modal.flowId} flowName={modal.flowName} onClose={() => setModal(null)} />
       )}
 
       {modal?.type === 'template-editor' && (
@@ -601,10 +608,17 @@ function InstantiateModal({ tpl, onClose, onCreated }) {
   };
 
   return (
-    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <h3>从模板创建任务：{tpl.name}</h3>
-        <p style={{ color: 'var(--muted)', fontSize: 12 }}>节点流程与模板相同，只改这里的变量（如 cookie）。留空用默认值。</p>
+    <Modal
+      title={`从模板创建任务：${tpl.name}`}
+      subtitle="节点流程与模板相同，只改这里的变量（如 cookie）；留空用默认值"
+      onClose={onClose}
+      footer={
+        <>
+          <button onClick={onClose}>取消</button>
+          <button className="primary" disabled={busy || vars === null} onClick={submit}>{busy ? '创建中…' : '创建任务'}</button>
+        </>
+      }
+    >
         <div className="field">
           <label>任务名</label>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder={`默认：${tpl.name} · 序号`} />
@@ -621,119 +635,7 @@ function InstantiateModal({ tpl, onClose, onCreated }) {
         ))}
         {vars === null && <p style={{ color: 'var(--muted)' }}>加载变量中…</p>}
         {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
-        <button className="primary" disabled={busy || vars === null} onClick={submit}>{busy ? '创建中…' : '创建任务'}</button>
-        {' '}
-        <button onClick={onClose}>取消</button>
-      </div>
-    </div>
-  );
-}
-
-/** 任务列表页的运行结果弹窗（含历史运行切换） */
-function ResultModal({ run, flowId, onClose }) {
-  const [expanded, setExpanded] = useState(null);
-  const [cur, setCur] = useState(run);
-  const [hist, setHist] = useState(null);
-  useEffect(() => {
-    if (!flowId) return;
-    api.runs(flowId, 30).then(setHist).catch(() => setHist([]));
-  }, [flowId]);
-  useEffect(() => { setCur(run); setExpanded(null); }, [run]);
-  const shown = cur || run;
-  const statusLabel = shown.status === 'success' ? '运行成功' : shown.status === 'failed' ? '运行失败' : '运行中…';
-  const openRun = async (id) => {
-    try { const full = await api.run(id); setCur(full); setExpanded(null); }
-    catch (e) { }
-  };
-  return (
-    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal result-modal">
-        <h3>运行日志：{shown.flowName || ''}</h3>
-        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>
-          {statusLabel} · {shown.startedAt ? fmtTime(shown.startedAt) : ''} · 触发 {shown.trigger || 'manual'}
-          {shown.durationMs ? ` · ${(shown.durationMs / 1000).toFixed(1)}s` : ''}
-        </div>
-        {shown.finalMessage && (
-          <p style={{ color: shown.status === 'failed' ? 'var(--fail)' : 'var(--muted)', fontSize: 13, marginTop: -4 }}>{shown.finalMessage}</p>
-        )}
-        {shown.summary && (
-          <p style={{ color: 'var(--ok)', fontSize: 12, marginTop: -4 }}>摘要：{shown.summary}</p>
-        )}
-        {hist && flowId && (
-          <details className="adv-block">
-            <summary>历史记录（最近 {hist.length} 次，点此切换）</summary>
-            <div className="adv-body" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, paddingBottom: 10 }}>
-              {(hist || []).map((r) => (
-                <button key={r.id} className={`small ${r.id === shown.id ? 'primary' : ''}`} onClick={() => openRun(r.id)}>
-                  {r.status === 'success' ? '成功' : '失败'} {fmtTime(r.startedAt)}
-                </button>
-              ))}
-            </div>
-          </details>
-        )}
-        <div className="result-logs">
-          {(shown.logs || []).length === 0 && <p style={{ color: 'var(--muted)' }}>暂无日志</p>}
-          {(shown.logs || []).map((log, i) => (
-            <div key={i} className="step-row">
-              <div className="step-head" onClick={() => setExpanded(expanded === i ? null : i)}>
-                <span className="idx">{log.index}</span>
-                <span className="dot" style={{ background: log.ok ? 'var(--ok)' : 'var(--fail)', width: 8, height: 8, borderRadius: '50%', flex: 'none' }} />
-                <span className="msg" title={`${log.name} — ${log.message || ''}`}>{log.name} — {log.message}{log.errorType ? ` [${log.errorType}]` : ''}</span>
-                <span style={{ color: 'var(--muted)', fontSize: 11, flex: 'none' }}>{log.ms}ms</span>
-              </div>
-              {expanded === i && (
-                <div className="step-detail">
-                  {log.type === 'http' && log.detail && (
-                    <>
-                      <div><b>{log.detail.method}</b> {log.detail.url}</div>
-                      {log.detail.headers && <pre>{Object.entries(log.detail.headers).map(([k, v]) => `${k}: ${v}`).join('\n')}</pre>}
-                      {log.detail.body && <pre>{log.detail.body}</pre>}
-                    </>
-                  )}
-                  {log.type === 'http' && log.detail?.response && (
-                    <>
-                      <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span>响应 (HTTP {log.detail.response.status})</span>
-                        <span style={{ color: 'var(--muted)', fontSize: 10 }}>编辑器内可用「点选生成逻辑」</span>
-                      </div>
-                      <pre>{log.detail.response.body}</pre>
-                    </>
-                  )}
-                  {log.keywords?.length > 0 && (
-                    <>
-                      <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 6 }}>关键字提取</div>
-                      {log.keywords.map((k, j) => (<div key={j} style={{ color: 'var(--ok)' }}>{k.name}：{k.values.join(', ')}</div>))}
-                    </>
-                  )}
-                  {log.asserts?.length > 0 && (
-                    <>
-                      <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 6 }}>断言</div>
-                      {log.asserts.map((a, j) => (
-                        <div key={j} style={{ color: a.pass ? 'var(--ok)' : 'var(--fail)' }}>
-                          {a.pass ? '✓' : '✗'} {a.label || a.expr}
-                        </div>
-                      ))}
-                    </>
-                  )}
-                  {log.type !== 'http' && log.message && <div style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>{log.message}</div>}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-        {shown.vars && Object.keys(shown.vars).length > 0 && (
-          <details className="adv-block">
-            <summary>最终变量快照（已脱敏）</summary>
-            <div className="adv-body">
-              <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}>{Object.entries(shown.vars).map(([k, v]) => `${k} = ${String(v).slice(0, 120)}`).join('\n')}</pre>
-            </div>
-          </details>
-        )}
-        <div className="result-foot">
-          <button onClick={onClose}>关闭</button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -775,21 +677,24 @@ function CurlImportModal({ onClose, onCreated }) {
   };
 
   return (
-    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ width: 640 }}>
-        <h3>导入 cURL 命令</h3>
-        <p style={{ color: 'var(--muted)', fontSize: 12 }}>粘贴浏览器 "Copy as cURL" 的完整命令，自动解析为 HTTP 请求节点。</p>
+    <Modal
+      title="导入 cURL 命令"
+      subtitle="粘贴浏览器 “Copy as cURL” 的完整命令，自动解析为 HTTP 请求节点"
+      onClose={onClose}
+      width={640}
+      footer={
+        <>
+          <button onClick={onClose}>取消</button>
+          <button className="primary" disabled={busy || !cmd.trim()} onClick={parse}>{busy ? '解析中…' : '解析预览'}</button>
+        </>
+      }
+    >
         <textarea
           className="mono" rows={5}
           placeholder={`curl 'https://example.com/api' \\\n  -H 'cookie: sess=...' \\\n  --data-raw '{"a":1}'`}
           value={cmd}
           onChange={(e) => setCmd(e.target.value)}
         />
-        <div style={{ marginTop: 8 }}>
-          <button className="primary" disabled={busy || !cmd.trim()} onClick={parse}>解析预览</button>
-          {' '}
-          <button onClick={onClose}>取消</button>
-        </div>
         {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
         {preview && (
           <div style={{ marginTop: 10, border: '1px solid var(--border)', borderRadius: 8, padding: 10, fontSize: 12 }}>
@@ -803,8 +708,7 @@ function CurlImportModal({ onClose, onCreated }) {
             <button className="primary" style={{ marginTop: 8 }} disabled={busy} onClick={create}>创建任务</button>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -829,13 +733,18 @@ function CsvImportModal({ tpl, onClose, onDone }) {
   };
 
   return (
-    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ width: 640 }}>
-        <h3>批量创建任务：{tpl.name}</h3>
-        <p style={{ color: 'var(--muted)', fontSize: 12 }}>
-          首行为变量名（如 <code className="mono">name,cookie</code>，name 列可选作任务名），每行一条任务。
-          {tpl.varNames.length > 0 && <> 模板变量：{tpl.varNames.join(', ')}</>}
-        </p>
+    <Modal
+      title={`批量创建任务：${tpl.name}`}
+      subtitle="首行为变量名（如 name,cookie，name 列可选作任务名），每行一条任务"
+      onClose={onClose}
+      width={640}
+      footer={
+        <>
+          <button onClick={onClose}>关闭</button>
+          <button className="primary" disabled={busy || !csv.trim()} onClick={submit}>{busy ? '创建中…' : '批量创建'}</button>
+        </>
+      }
+    >
         <textarea
           className="mono" rows={6}
           placeholder={`name,cookie\n主号,sess=xxx\n备用,sess=yyy`}
@@ -848,11 +757,7 @@ function CsvImportModal({ tpl, onClose, onDone }) {
             已创建 {result.created} 个任务{result.errors?.length ? `，${result.errors.length} 行失败` : ''}
           </p>
         )}
-        <button className="primary" disabled={busy || !csv.trim()} onClick={submit}>{busy ? '创建中…' : '批量创建'}</button>
-        {' '}
-        <button onClick={onClose}>关闭</button>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -870,10 +775,19 @@ function NotificationsModal({ onClose }) {
   };
   const fmt = (ts) => new Date(ts).toLocaleString('zh-CN');
   return (
-    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal notif-modal">
-        <h3>站内通知{data ? `（${data.total} 条 · 未读 ${data.unread}）` : ''}</h3>
-        <p className="notif-hint">任务通知渠道选「站内通知」时，消息会出现在这里；无需任何外部服务。</p>
+    <Modal
+      title={`站内通知${data ? `（${data.total} 条 · 未读 ${data.unread}）` : ''}`}
+      subtitle="任务通知渠道选「站内通知」时，消息会出现在这里；无需任何外部服务"
+      onClose={onClose}
+      className="notif-modal"
+      footer={
+        <>
+          <button className="danger" onClick={clearAll} disabled={busy || !data?.total}>清空</button>
+          <span className="spacer" />
+          <button className="primary" onClick={markAll} disabled={busy || !data?.unread}>全部已读</button>
+        </>
+      }
+    >
         <div className="notif-list">
           {data && data.items.length === 0 && <div className="notif-empty">还没有通知。到任务的「通知渠道」里添加「站内通知」，运行后即可在这里看到结果。</div>}
           {data && data.items.map((n) => (
@@ -888,13 +802,7 @@ function NotificationsModal({ onClose }) {
             </div>
           ))}
         </div>
-        <div className="btn-row" style={{ marginTop: 12 }}>
-          <button className="primary" onClick={markAll} disabled={busy || !data?.unread}>全部已读</button>
-          <button className="danger" onClick={clearAll} disabled={busy || !data?.total}>清空</button>
-          <button onClick={onClose}>关闭</button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -923,15 +831,19 @@ function SettingsModal({ onClose }) {
     ['api', 'API Key'],
   ];
   return (
-    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal settings-modal">
+    <Modal
+      title="设置"
+      subtitle="通知与汇总 / AI 助手 / 账号安全 / API Key"
+      onClose={onClose}
+      className="settings-modal"
+      bodyClassName="settings-split"
+    >
         <div className="settings-nav">
-          <div className="settings-title">设置</div>
           {TABS.map(([id, label]) => (
             <button key={id} className={`settings-tab${tab === id ? ' active' : ''}`} onClick={() => { setTab(id); setMsg(''); setErr(''); }}>{label}</button>
           ))}
         </div>
-        <div className="settings-body">
+        <div className="settings-panel">
           {tab === 'general' && <SettingsFlow onToast={(text) => { setMsg(text); setErr(''); }} />}
 
           {tab === 'ai' && <AiSettings />}
@@ -961,12 +873,8 @@ function SettingsModal({ onClose }) {
 
           {msg && <p style={{ color: 'var(--ok)', fontSize: 12 }}>{msg}</p>}
           {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
-          <div className="settings-foot">
-            <button onClick={onClose}>关闭</button>
-          </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1106,18 +1014,22 @@ function RestoreModal({ onClose, onDone }) {
   };
   const [doneInfo, setDoneInfo] = useState(null);
   return (
-    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ width: 640 }}>
-        <h3>从备份恢复</h3>
-        <p style={{ color: 'var(--muted)', fontSize: 12 }}>粘贴备份 JSON（「备份」按钮下载的文件）。恢复任务带「（恢复）」后缀且默认停用，手动启用后运行。</p>
+    <Modal
+      title="从备份恢复"
+      subtitle="粘贴备份 JSON（「备份」按钮下载的文件）；恢复任务带「（恢复）」后缀且默认停用"
+      onClose={onClose}
+      width={640}
+      footer={
+        <>
+          <button onClick={onClose}>取消</button>
+          <button className="primary" disabled={busy || !text.trim()} onClick={submit}>{busy ? '恢复中…' : '开始恢复'}</button>
+        </>
+      }
+    >
         <textarea className="mono" rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder='{"flows": [...]}' />
         {doneInfo && <p style={{ color: 'var(--ok)', fontSize: 12 }}>已恢复 {doneInfo.createdFlows?.length || 0} 个任务、{doneInfo.createdTemplates?.length || 0} 个模板</p>}
         {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
-        <button className="primary" disabled={busy || !text.trim()} onClick={submit}>{busy ? '恢复中…' : '开始恢复'}</button>
-        {' '}
-        <button onClick={onClose}>取消</button>
-      </div>
-    </div>
+    </Modal>
   );
 }
 /** 模板管理：改名/描述/默认变量编辑/节点数（PRD §4.3 默认变量编辑） */
@@ -1146,14 +1058,17 @@ function TemplateEditorModal({ tpl, onDone }) {
   };
 
   return (
-    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onDone()}>
-      <div className="modal">
-        <h3>管理模板：{tpl.name}</h3>
-        {detail && (
-          <p style={{ color: 'var(--muted)', fontSize: 12 }}>
-            {detail.nodes.length} 个节点 · {vars.length} 个默认变量（实例化时预填）
-          </p>
-        )}
+    <Modal
+      title={`管理模板：${tpl.name}`}
+      subtitle={detail ? `${detail.nodes.length} 个节点 · ${vars.length} 个默认变量（实例化时预填）` : ''}
+      onClose={onDone}
+      footer={
+        <>
+          <button onClick={onDone}>取消</button>
+          <button className="primary" onClick={save}>保存</button>
+        </>
+      }
+    >
         <div className="field">
           <label>模板名</label>
           <input value={name} onChange={(e) => setName(e.target.value)} />
@@ -1179,10 +1094,6 @@ function TemplateEditorModal({ tpl, onDone }) {
           </div>
         </div>
         {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
-        <button className="primary" onClick={save}>保存</button>
-        {' '}
-        <button onClick={onDone}>取消</button>
-      </div>
-    </div>
+    </Modal>
   );
 }

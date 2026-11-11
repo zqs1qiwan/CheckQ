@@ -10,6 +10,7 @@ import ThemeToggle from './ThemeToggle.jsx';
 import ConfigPanel from './ConfigPanel.jsx';
 import RunDrawer from './RunDrawer.jsx';
 import GuideModal from './GuideModal.jsx';
+import Modal from './Modal.jsx';
 import { toast as globalToast } from '../toast.js';
 
 const COLOR = Object.fromEntries(Object.entries(STEP_TYPES).map(([k, v]) => [k, v.color]));
@@ -506,7 +507,6 @@ function FlowEditorInner({ flowId, onBack }) {
             <div className="menu-sep" />
             <button onClick={() => setNotifyOpen(true)}>通知渠道</button>
             <button onClick={testNotify}>测试通知</button>
-            <button onClick={sendSummary}>发送每日汇总</button>
             <button onClick={() => setCookieOpen(true)}>填入 Cookie</button>
             <button onClick={() => setLogOpen(true)}>日志配置</button>
             <button onClick={saveAsTemplate}>存为模板</button>
@@ -617,21 +617,23 @@ function FlowEditorInner({ flowId, onBack }) {
       )}
 
       {tplOpen && (
-        <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && setTplOpen(false)}>
-          <div className="modal">
-            <h3>存为模板</h3>
-            <p style={{ color: 'var(--muted)', fontSize: 12 }}>模板会带走节点/连线/变量/日志/通知，之后可基于它批量创建任务。</p>
-            <div className="field">
-              <label>模板名称</label>
-              <input value={tplName} onChange={(e) => setTplName(e.target.value)} placeholder="如：恩山签到模板" />
-            </div>
-            {tplErr && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{tplErr}</p>}
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <button className="primary" onClick={confirmSaveTemplate}>保存为模板</button>
+        <Modal
+          title="存为模板"
+          subtitle="模板会带走节点 / 连线 / 变量 / 日志 / 通知，之后可基于它批量创建任务"
+          onClose={() => setTplOpen(false)}
+          footer={
+            <>
               <button onClick={() => setTplOpen(false)}>取消</button>
-            </div>
+              <button className="primary" onClick={confirmSaveTemplate}>保存为模板</button>
+            </>
+          }
+        >
+          <div className="field">
+            <label>模板名称</label>
+            <input value={tplName} onChange={(e) => setTplName(e.target.value)} placeholder="如：恩山签到模板" />
           </div>
-        </div>
+          {tplErr && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{tplErr}</p>}
+        </Modal>
       )}
 
     </>
@@ -674,12 +676,18 @@ function CookieHelpModal({ flow, onClose, onSaved }) {
     } catch (e) { setErr(e.message); }
   };
   return (
-    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <h3>统一浏览器登录（自动抓 Cookie）</h3>
-        <p style={{ color: 'var(--muted)', fontSize: 12, lineHeight: 1.7 }}>
-          统一浏览器是路由器上的 Camoufox（与真实浏览器指纹一致）。步骤：
-          <br />
+    <Modal
+      title="统一浏览器登录（自动抓 Cookie）"
+      subtitle="统一浏览器是路由器上的 Camoufox（与真实浏览器指纹一致）"
+      onClose={onClose}
+      footer={
+        <>
+          <button onClick={onClose}>取消</button>
+          <button className="primary" disabled={!cookie.trim()} onClick={save}>保存 cookie</button>
+        </>
+      }
+    >
+        <p className="modal-steps">
           1. 点「打开登录页」→ CheckQ 在统一浏览器打开站点，你在那登录一次
           <br />
           2. 回到这里点「已登录，自动抓」→ CheckQ 自动读 cookie 写进 <code>{'{{cookie}}'}</code>，无需粘贴
@@ -705,11 +713,7 @@ function CookieHelpModal({ flow, onClose, onSaved }) {
         </div>
         {done && <p style={{ color: 'var(--ok)', fontSize: 12 }}>已回填到变量</p>}
         {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
-        <button className="primary" disabled={!cookie.trim()} onClick={save}>保存 cookie</button>
-        {' '}
-        <button onClick={onClose}>取消</button>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -771,9 +775,18 @@ function NotifyModal({ flow, onClose, onSaved, onToast }) {
   };
 
   return (
-    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal notify-modal">
-        <h3>通知渠道：{flow.name}</h3>
+    <Modal
+      title={`通知渠道：${flow.name}`}
+      subtitle="可分别开启成功 / 失败通知；保存后用「测试发送」验证每个渠道"
+      onClose={onClose}
+      className="notify-modal"
+      footer={
+        <>
+          <button onClick={test} disabled={!channels.length}>测试发送</button>
+          <button className="primary" onClick={save}>保存</button>
+        </>
+      }
+    >
         <label className="checkline">
           <input type="checkbox" checked={onSuccess} onChange={(e) => setOnSuccess(e.target.checked)} />
           成功时通知
@@ -818,13 +831,7 @@ function NotifyModal({ flow, onClose, onSaved, onToast }) {
             )}
           </div>
         )}
-        <div className="btn-row" style={{ marginTop: 12 }}>
-          <button className="primary" onClick={save}>保存</button>
-          <button onClick={test} disabled={!channels.length}>测试发送</button>
-          <button onClick={onClose}>关闭</button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -859,9 +866,17 @@ function LogConfigModal({ flow, onClose, onSaved }) {
   );
 
   return (
-    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <h3>日志配置：{flow.name}</h3>
+    <Modal
+      title={`日志配置：${flow.name}`}
+      subtitle="日常用「仅 log 节点」；排障时再打开调试模式"
+      onClose={onClose}
+      footer={
+        <>
+          <button onClick={onClose}>取消</button>
+          <button className="primary" onClick={save}>保存</button>
+        </>
+      }
+    >
         <div className="field">
           <label>记录档位（低档位自动忽略下方内容开关）</label>
           <select value={level} onChange={(e) => setLevel(e.target.value)}>
@@ -922,11 +937,7 @@ function LogConfigModal({ flow, onClose, onSaved }) {
           <button className="small" onClick={() => setKeywords([...keywords, { name: '新规则', regex: '', from: 'response', into: 'summary' }])}>+ 添加规则</button>
         </div>
         {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
-        <button className="primary" onClick={save}>保存</button>
-        {' '}
-        <button onClick={onClose}>关闭</button>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -979,11 +990,11 @@ function VarsEditor({ flow, onVars }) {
         const sensitive = isSensitive(k);
         const [open, setOpen] = useState(!sensitive);
         return (
-          <div key={k} style={{ marginBottom: 8 }}>
+          <div key={k} className="var-row" style={{ marginBottom: 8 }}>
             <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
               <input className="mono" style={{ fontSize: 11, padding: '4px 6px' }} value={k} disabled />
-              <button className="small" style={{ padding: '2px 7px' }} title={open ? '隐藏值' : '显示值'} onClick={() => setOpen(!open)}>{open ? '🙈' : '👁'}</button>
-              <button className="small danger" style={{ padding: '2px 7px' }} onClick={() => remove(k)}>×</button>
+              <button className="small var-eye" title={open ? '隐藏值' : '显示值'} aria-label={open ? '隐藏值' : '显示值'} onClick={() => setOpen(!open)}>{open ? '隐藏' : '显示'}</button>
+              <button className="small danger var-del" title={`删除变量 ${k}`} aria-label={`删除变量 ${k}`} onClick={() => remove(k)}>删除</button>
             </div>
             {open ? (
               <textarea

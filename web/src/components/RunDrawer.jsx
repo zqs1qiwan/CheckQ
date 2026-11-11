@@ -28,6 +28,13 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepP
     setPickFor(null);
   }, [run?.id]);
 
+  // Esc 关闭日志坞
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape' && onClose) onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   useEffect(() => {
     if (tab === 'history' && flowId && hist === null) {
       api.runs(flowId, 30).then(setHist).catch(() => setHist([]));
@@ -77,7 +84,7 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepP
             </>
           )}
         </div>
-        <button className="small" onClick={onClose}>关闭</button>
+        <button className="modal-close drawer-close" onClick={onClose} title="关闭（Esc）" aria-label="关闭">✕</button>
       </div>
 
       <div className="drawer-body" style={{ fontFamily: 'inherit' }}>

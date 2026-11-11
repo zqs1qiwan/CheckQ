@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
+import Modal from './Modal.jsx';
 
 /**
  * 连续日志流（qinglong 面板风格）
@@ -88,18 +89,18 @@ export default function LogStream({ flowId, flowName, onClose, live = false }) {
     .filter((g) => g.items.length > 0);
 
   return (
-    <div className="modal-mask" onClick={(e) => e.target === e.currentTarget && onClose?.()}>
-      <div className="modal logstream-modal">
-        <div className="logstream-head">
-          <h3 style={{ margin: 0 }}>日志 · {flowName || ''}</h3>
-          <div className="logstream-tools">
-            <button className={`small${filter === 'all' ? ' primary' : ''}`} onClick={() => setFilter('all')}>全部</button>
-            <button className={`small${filter === 'error' ? ' primary' : ''}`} onClick={() => setFilter('error')}>仅错误</button>
-            <span className="spacer" />
-            <button className="small" onClick={onClose}>关闭</button>
-          </div>
-        </div>
-        <div className="logstream-body" ref={boxRef}>
+    <Modal
+      title={`日志 · ${flowName || ''}`}
+      subtitle="多次运行连续滚动；点每组的「调试」查看该次运行的每步细节"
+      onClose={onClose}
+      className="logstream-modal"
+      bodyClassName="logstream-wrap"
+    >
+      <div className="logstream-tools">
+        <button className={`small${filter === 'all' ? ' primary' : ''}`} onClick={() => setFilter('all')}>全部</button>
+        <button className={`small${filter === 'error' ? ' primary' : ''}`} onClick={() => setFilter('error')}>仅错误</button>
+      </div>
+      <div className="logstream-body" ref={boxRef}>
           {loading && <div className="empty">加载中…</div>}
           {!loading && visibleGroups.length === 0 && <div className="empty">暂无日志</div>}
           {visibleGroups.map((g) => (
@@ -145,8 +146,7 @@ export default function LogStream({ flowId, flowName, onClose, live = false }) {
               <button className="small" onClick={loadMore}>加载更早的记录</button>
             </div>
           )}
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }

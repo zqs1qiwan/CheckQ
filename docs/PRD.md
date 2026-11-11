@@ -561,18 +561,26 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 | 全量备份 | 设置页"导出全部"（flows/runs/templates/meta 打包 JSON）；"导入恢复"；建议 cron 外部备份 data 目录 | ⬜ P1 |
 | 从其他 CheckQ 迁移 | 备份 JSON 互相导入即完成 | 同上 |
 
-### 4.10 账号与安全
+### 4.10 账号与安全（v0.4.3：多用户 + TOTP 两步验证 + 会话管理）
 
 | 功能 | 设计 | 状态 |
 |---|---|---|
-| 首次启动 | `/api/system/bootstrap`：若仍是随机生成的管理员密码（`generatedPassword=true`）→ 登录页显示「创建管理员账号」（密码+确认），创建后 `needsSetup=false` | ✅ v0.4 |
-| 密码登录 | scrypt hash；**登录失败 5 次/10 分钟锁定（内存计数，429）** | ✅ v0.3.4 |
-| 会话 | cookie qsid 7 天；"退出"清空所有会话 | ✅ |
-| API Key | X-API-Key（存 meta）；设置页可见/重置；MCP/Agent 推荐用 Key | ✅ v0.4 |
-| Passkey/WebAuthn | 无状态 passkey 登录 | ⬜ P2 |
-| HTTPS | 文档建议反代加 TLS；服务本身不内置 | 文档 |
-| 审计 | 关键操作（登录失败/改密码/删任务）console 日志即可，不做持久审计 | 决策 |
-| 敏感输入 | 变量编辑框打码 + 显隐切换；autocomplete=off | ✅（变量面板已打码；显隐 ⬜） |
+| 账号体系 | 多用户（用户名 + 显示名 + 角色），存 `meta.users[]`；旧版单密码启动时自动迁移为 `admin` | ✅ v0.4.3 |
+| 角色 | admin（全部）/ operator（无账号管理）/ viewer（只读，写操作一律 403） | ✅ v0.4.3 |
+| 登录 | 用户名 + 密码（+ 可选两步码）；只传密码也兼容；防用户枚举（同文案 + 等价 scrypt） | ✅ v0.4.3 |
+| 密码存储 | scrypt(N=16384, r=8, p=1) + 16 字节随机盐，`salt:hash`，常量时间比较；**明文永不落盘** | ✅ v0.4.3 |
+| 密码策略 | ≥10 位 + 至少两类字符 + 弱口令库 + 不含用户名；改密后其它设备会话失效 | ✅ v0.4.3 |
+| 两步验证 | TOTP(RFC 6238, SHA1/30s/6 位) + 10 个一次性恢复码（只存 sha256）；绑定/关闭/重置均需「密码 + 动态码」 | ✅ v0.4.3 |
+| 会话 | httpOnly + SameSite=Strict；绝对 7 天 + 空闲 24h；按用户记录，可列出/吊销/退出全部设备 | ✅ v0.4.3 |
+| API Key | 多把可命名，服务端只存 sha256 摘要，明文只显示一次，可吊销 | ✅ v0.4.3 |
+| 用户管理 | 建号 / 改角色 / 停用 / 重置密码 / 重置 2FA / 删除（管理员）；全部进审计 | ✅ v0.4.3 |
+| 审计日志 | 登录、登出、改密、2FA、用户管理、API Key 等关键动作留痕（保留 500 条） | ✅ v0.4.3 |
+| 安全响应头 | CSP / X-Frame-Options / nosniff / Referrer-Policy / Permissions-Policy | ✅ v0.4.3 |
+| CSRF 防护 | 写操作校验 `Origin` 同源 + Cookie SameSite=Strict | ✅ v0.4.3 |
+| 登录限流 | 按 IP 5 次/10 分钟；按账号 8 次锁定 15 分钟 | ✅ v0.4.3 |
+| Passkey / WebAuthn | 免密登录（P2） | ⬜ P2 |
+
+> 安全自查、已知风险与运维手册见 `docs/SECURITY.md`；实现见 `server/src/auth.js`（哈希/策略）、`server/src/totp.js`（TOTP）。
 
 ### 4.11 运维与部署
 

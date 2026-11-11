@@ -1,6 +1,6 @@
-# CheckQ PRD — 可视化 HTTP 自动化流程引擎
+﻿# CheckQ PRD — 可视化 HTTP 自动化流程引擎
 
-版本: 0.4 (PRD) | 基线代码: v0.3.17 | 状态: v0.2/v0.3 P0 全量实现；**v0.4 产品完整度升级**（2026-11-10）——通知 7 渠道原生集成、日志 record 三档（qinglong/qiandao 风格干净日志）、使用引导系统、首次启动 bootstrap、存储立即 flush + 备份评估、WorkBuddy 全量任务自动完成（18/18，事件链）、竞品分析与迭代管理（见 docs/ROADMAP.md / docs/COMPETITIVE-ANALYSIS.md）
+版本: 0.4 (PRD) | 基线代码: v0.3.17 | 状态: v0.2/v0.3 P0 全量实现；**v0.4 产品完整度升级**（2026-11-10）——通知 7 渠道原生集成、日志 record 三档（qinglong/qiandao 风格干净日志）、使用引导系统、首次启动 bootstrap、存储立即 flush + 备份评估、WorkBuddy 全量任务自动完成（19/19，事件链）、竞品分析与迭代管理（见 docs/ROADMAP.md / docs/COMPETITIVE-ANALYSIS.md）
 定位一句话: **像搭积木一样搭建"自动签到/打卡/监控"类 HTTP 流程，一个模板派生多份任务，全程可视化、可调试、可告警。**
 
 > **续建判断依据（2026-11-08 评审）**：本仓库并非空仓——已有 v0.2 可运行基线（DAG 引擎、8 类节点、Pick Panel、模板系统、SSE 日志、cURL/HAR/QD 导入、103 项单测、路由器实测实例）。产品目标（拖拽流程化、条件分支、自定义请求、日志推送、Docker 部署）与现状同向，重建只会丢弃已验证资产。决策：**续建**。缺口用实测数据驱动收敛——现网 QD 采样（39 任务/13 模板，见 docs/QIANDAO-COMPAT.md）定位出 4 个真实阻塞点（cookie 罐/util 转换/表达式层/变量 URL），本轮已全部闭环，QD 任务运行级兼容 ≥ 12/13。
@@ -571,7 +571,7 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 | 功能 | 设计 | 状态 |
 |---|---|---|
 | 事件上报 | `POST /v2/report`（桌面/web/小程序三种客户端指纹），支持批量事件数组 | ✅ v0.4 |
-| 任务事件链 | 桌面对话链（agent_task_created→chat_response）、buddyapp 五连、template_used、playbook、automation、expert_summon/use、skill_info | ✅ v0.4（WorkBuddy 18/18） |
+| 任务事件链 | 桌面对话链（agent_task_created→chat_response）、buddyapp 五连、template_used、playbook、automation、expert_summon/use、skill_info、skill_share | ✅ v0.4（WorkBuddy 19/19） |
 | 专家真实对话 | `POST /v2/chat/completions`（SSE 抓服务端 requestId）→ 使用事件必须带真实 id | ✅ v0.4 |
 | 幂等与回读 | 上报后轮询任务进度，达标才 claim；重复运行不重复领奖 | ✅ v0.4 |
 | 通用化 | 其他站点若有类似埋点/进度接口，可用 script 生成事件体 + http 上报（框架能力，非内置模板） | ✅ 能力具备 |
@@ -706,7 +706,7 @@ GET  /api/runs/:id/stream (SSE)                     ⬜ P1 实时日志
 10. **日志验收（v0.4）**: `record=log` 运行日志只包含 log 节点（+失败步骤），http/script 等技术步骤不可见；`record=log-final` 输出一条合并日志。
 11. **引导验收（v0.4）**: 首次访问自动打开引导；`?` 在首页与编辑器均可打开；6 节内容一屏可读。
 12. **账号与存储验收（v0.4）**: 全新数据目录启动 → 登录页出现「创建管理员账号」→ 创建后可登录；`kill -TERM` 后配置不丢；备份 JSON 可恢复。
-13. **任务完成验收（v0.4）**: WorkBuddy 案例 18/18 任务完成并领奖（+1100 积分），重复运行零重复领奖；生产 cron 自动执行有日志证据。
+13. **任务完成验收（v0.4）**: WorkBuddy 案例 19/19 任务完成并领奖（+1200 积分），重复运行零重复领奖；生产 cron 自动执行有日志证据。
 
 ---
 
@@ -721,4 +721,4 @@ GET  /api/runs/:id/stream (SSE)                     ⬜ P1 实时日志
 7. 生成节点的变量命名策略：自动起名（如点选"积分"→ `points`，中文自动转拼音/语义映射表）vs 统一 `var1/var2`——建议中英文小词表映射 + 冲突自动加后缀，用户随时可改。
 8. 通知渠道范围：v0.4 已覆盖 7 种主流渠道；是否继续扩展 PushPlus / 邮箱 / 自定义卡片？（建议按需再加，保持内核轻量）
 9. 多用户/多账号：当前单管理员 + API Key；是否做多用户隔离（建议 v1.0 后再评估，当前自部署个人场景足够）。
-10. WorkBuddy 案例定位：作为「事件链自动完成任务」的验收样板（已 18/18），是否将事件链能力抽象为通用节点（report 节点）？（建议先保持 script+http 组合，观察第二案例再抽象）。
+10. WorkBuddy 案例定位：作为「事件链自动完成任务」的验收样板（已 19/19），是否将事件链能力抽象为通用节点（report 节点）？（建议先保持 script+http 组合，观察第二案例再抽象）。

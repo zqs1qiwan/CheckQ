@@ -28,7 +28,7 @@ const cookie = (login.headers['set-cookie'] || '').split(';')[0];
 const H = { cookie, 'content-type': 'application/json' };
 
 const COOKIE_VAL = 'gld:sess=abc123def456ghi789jkl012mno345pqr; gld:sess.sig=SIGNATUREVALUE';
-const TG_TOKEN = '123456789:REDACTED-TOKEN';
+const TG_TOKEN = '123456789:TEST_FAKE_TOKEN_FOR_ENCRYPTION_TEST';
 
 const created = await app.inject({
   method: 'POST', url: '/api/flows', headers: H,

@@ -1,36 +1,32 @@
 #!/usr/bin/env node
 /**
  * 生成 GitHub Pages 文档站（wiki）
- *  - 输入：docs/*.md（仓库里的现有文档）
- *  - 输出：wiki/（纯静态，无第三方依赖，可直接被 Pages 托管）
+ *  - 只收录**框架/功能性**文档；不含任何具体签到脚本与账号信息（那是模板市场的事）
+ *  - 输入：docs/*.md（仓库文档，自动同步）+ 本文件内的上手页
+ *  - 输出：wiki/（纯静态，零依赖）
  *  - 用法：node tools/build-wiki.cjs
- *  - CI：.github/workflows/pages.yml 每次 push 到 main 自动构建并发布
  */
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 const OUT = path.join(ROOT, 'wiki');
 const DOCS = path.join(ROOT, 'docs');
-const REPO = 'zqs1qiwan/CheckQ';
-const SITE = `https://${REPO}.github.io/${REPO.split('/')[1]}/`;
+const REPO_OWNER = 'zqs1qiwan';
+const REPO_NAME = 'checkq';
+const SITE = `https://${REPO_OWNER}.github.io/${REPO_NAME}/`;
 
-// ---------- 极简 Markdown → HTML（够用即可） ----------
-function escapeHtml(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
+// ---------- 极简 Markdown → HTML ----------
+const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-function inline(text, base) {
+function inline(text) {
   let out = escapeHtml(text);
-  // 行内代码
   out = out.replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`);
-  // 链接（相对路径转站内链接）
   out = out.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, href) => {
     if (href.startsWith('http')) return `<a href="${href}" target="_blank" rel="noreferrer">${label}</a>`;
-    const clean = href.replace(/^\.\//, '');
-    return `<a href="${clean}">${label}</a>`;
+    return `<a href="${href.replace(/^\.\//, '')}">${label}</a>`;
   });
-  // 粗体 / 斜体
   out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   out = out.replace(/(^|\s)\*([^*\n]+)\*/g, '$1<em>$2</em>');
   return out;
@@ -39,144 +35,134 @@ function inline(text, base) {
 function mdToHtml(md) {
   const lines = md.split(/\r?\n/);
   const html = [];
-  let inCode = false, codeLang = '', codeBuf = [];
+  let inCode = false, codeBuf = [];
   let inTable = false, tableBuf = [];
   let listType = null, listBuf = [];
 
   const flushList = () => {
     if (!listType) return;
     const tag = listType === 'ul' ? 'ul' : 'ol';
-    html.push(`<${tag}>` + listBuf.map((i) => `<li>${inline(i, SITE)}</li>`).join('') + `</${tag}>`);
+    html.push(`<${tag}>` + listBuf.map((i) => `<li>${inline(i)}</li>`).join('') + `</${tag}>`);
     listType = null; listBuf = [];
   };
   const flushTable = () => {
     if (!inTable) return;
     const rows = tableBuf.filter((r) => r.trim());
-    if (!rows.length) { inTable = false; tableBuf = []; return; }
+    inTable = false; tableBuf = [];
+    if (!rows.length) return;
     const cells = (r) => r.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
     const head = cells(rows[0]);
     const body = rows.slice(2).map(cells);
-    html.push('<div class="table-wrap"><table><thead><tr>' + head.map((h) => `<th>${inline(h, SITE)}</th>`).join('') + '</tr></thead><tbody>'
-      + body.map((r) => '<tr>' + r.map((c) => `<td>${inline(c, SITE)}</td>`).join('') + '</tr>').join('')
+    html.push('<div class="table-wrap"><table><thead><tr>' + head.map((h) => `<th>${inline(h)}</th>`).join('') + '</tr></thead><tbody>'
+      + body.map((r) => '<tr>' + r.map((c) => `<td>${inline(c)}</td>`).join('') + '</tr>').join('')
       + '</tbody></table></div>');
-    inTable = false; tableBuf = [];
   };
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+  for (const line of lines) {
     if (/^```/.test(line)) {
-      if (inCode) {
-        html.push(`<pre class="code"><code>${escapeHtml(codeBuf.join('\n'))}</code></pre>`);
-        inCode = false; codeBuf = [];
-      } else {
-        flushList(); flushTable();
-        inCode = true; codeLang = line.slice(3).trim(); codeBuf = [];
-      }
+      if (inCode) { html.push(`<pre class="code"><code>${escapeHtml(codeBuf.join('\n'))}</code></pre>`); inCode = false; codeBuf = []; }
+      else { flushList(); flushTable(); inCode = true; codeBuf = []; }
       continue;
     }
     if (inCode) { codeBuf.push(line); continue; }
-
-    if (/^\|/.test(line)) {
-      flushList();
-      if (!inTable) { inTable = true; tableBuf = []; }
-      tableBuf.push(line);
-      continue;
-    }
+    if (/^\|/.test(line)) { flushList(); if (!inTable) { inTable = true; tableBuf = []; } tableBuf.push(line); continue; }
     flushTable();
-
     const h = line.match(/^(#{1,6})\s+(.*)$/);
     if (h) {
       flushList();
-      const level = h[1].length;
       const id = h[2].trim().toLowerCase().replace(/[^\w\u4e00-\u9fa5]+/g, '-').replace(/^-|-$/g, '');
-      html.push(`<h${level} id="${id}">${inline(h[2], SITE)}</h${level}>`);
+      html.push(`<h${h[1].length} id="${id}">${inline(h[2])}</h${h[1].length}>`);
       continue;
     }
-    if (/^>\s?/.test(line)) {
-      flushList();
-      html.push(`<blockquote>${inline(line.replace(/^>\s?/, ''), SITE)}</blockquote>`);
-      continue;
-    }
+    if (/^>\s?/.test(line)) { flushList(); html.push(`<blockquote>${inline(line.replace(/^>\s?/, ''))}</blockquote>`); continue; }
     if (/^---+$/.test(line)) { flushList(); html.push('<hr />'); continue; }
-
     const li = line.match(/^\s*[-*]\s+(.*)$/);
     const oli = line.match(/^\s*\d+\.\s+(.*)$/);
     if (li || oli) {
       const want = li ? 'ul' : 'ol';
       if (listType && listType !== want) flushList();
-      listType = want;
-      listBuf.push((li || oli)[1]);
-      continue;
+      listType = want; listBuf.push((li || oli)[1]); continue;
     }
     if (!line.trim()) { flushList(); continue; }
     flushList();
-    html.push(`<p>${inline(line, SITE)}</p>`);
+    html.push(`<p>${inline(line)}</p>`);
   }
   flushList(); flushTable();
   if (inCode) html.push(`<pre class="code"><code>${escapeHtml(codeBuf.join('\n'))}</code></pre>`);
   return html.join('\n');
 }
 
-// ---------- 页面集合 ----------
+const plainText = (md) => md
+  .replace(/```[\s\S]*?```/g, ' ')
+  .replace(/[#>*|`]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+// ---------- 页面清单（只讲框架功能，不含具体脚本） ----------
 const PAGES = [
-  { file: 'index.md', title: '概览', desc: 'CheckQ 是什么、怎么用、去哪看' },
-  { file: 'quickstart.md', title: '快速开始', desc: '3 步跑通第一个签到任务' },
-  { file: 'tasks.md', title: '任务与流程', desc: '节点类型、变量、调度、模板' },
-  { file: 'logs.md', title: '日志与通知', desc: '干净日志、连续日志流、12 个通知渠道' },
-  { file: 'security.md', title: '账号与安全', desc: '多用户、2FA、会话、凭据加密、IP 名单' },
-  { file: 'api.md', title: 'API 与 MCP', desc: '开放 API、API Key 权限、外部 Agent 接入' },
-  { file: 'glados.md', title: 'GLaDOS 签到', desc: 'challenge 校验版流程与换 cookie 指引' },
-  { file: 'workbuddy.md', title: 'WorkBuddy 签到', desc: '签到 + 成长中心 + 任务自动完成' },
+  { file: 'index.md', title: '概览', desc: 'CheckQ 是什么、能做什么' },
+  { file: 'quickstart.md', title: '快速开始', desc: '3 步跑通第一个签到' },
+  { file: 'tasks.md', title: '任务与流程', desc: '节点、变量、调度、模板' },
+  { file: 'logs.md', title: '日志与通知', desc: '干净日志、连续日志流、通知渠道' },
+  { file: 'security.md', title: '账号与安全', desc: '多用户、2FA、凭据加密、访问控制' },
+  { file: 'api.md', title: 'API 与 MCP', desc: '开放 API、API Key、外部 Agent 接入' },
+  { file: 'deploy.md', title: '部署与备份', desc: 'Docker、数据目录、备份恢复' },
   { file: 'faq.md', title: '常见问题', desc: '排障速查' },
-  // —— 以下页面直接由仓库 docs/ 自动生成，保证与仓库同步 ——
-  { file: 'reference-api.md', title: 'API 参考', desc: '全部端点（自动同步）', src: 'API.md' },
-  { file: 'reference-mcp.md', title: 'MCP 工具', desc: '17 个工具与接入（自动同步）', src: 'MCP.md' },
-  { file: 'reference-security.md', title: '安全说明', desc: '威胁与防护全表（自动同步）', src: 'SECURITY.md' },
-  { file: 'reference-glados.md', title: 'GLaDOS 详解', desc: 'challenge 机制与排障（自动同步）', src: 'GLaDOS.md' },
-  { file: 'reference-workbuddy.md', title: 'WorkBuddy 详解', desc: '接口与任务清单（自动同步）', src: 'WORKBUDDY.md' },
-  { file: 'reference-agent.md', title: 'Agent 接入指南', desc: '给外部 Agent 什么（自动同步）', src: 'AGENT-ACCESS.md' },
-  { file: 'reference-roadmap.md', title: '路线图', desc: '版本计划（自动同步）', src: 'ROADMAP.md' },
+  { file: 'changelog.md', title: '更新日志', desc: '版本变更（自动生成）', auto: 'changelog' },
+  // —— 以下页面由仓库 docs/ 自动同步 ——
+  { file: 'reference-api.md', title: 'API 参考', desc: '全部端点', src: 'API.md' },
+  { file: 'reference-mcp.md', title: 'MCP 工具', desc: '工具清单与接入', src: 'MCP.md' },
+  { file: 'reference-security.md', title: '安全说明', desc: '威胁与防护全表', src: 'SECURITY.md' },
+  { file: 'reference-agent.md', title: 'Agent 接入指南', desc: '给外部 Agent 什么', src: 'AGENT-ACCESS.md' },
+  { file: 'reference-roadmap.md', title: '路线图', desc: '版本计划', src: 'ROADMAP.md' },
 ];
 
-// 源文档 → 站点页面（从 docs/*.md 摘取/整合）
 const SOURCES = {
-  'index.md': { title: 'CheckQ 概览', body: `# CheckQ 概览
+  'index.md': `# CheckQ 概览
 
-CheckQ 是一个可视化 HTTP 自动化流程引擎：把「每天要做的签到」做成可编辑的流程，支持定时调度、失败重试、通知推送与外部 Agent 接入。
+CheckQ 是一个**可视化 HTTP 自动化流程引擎**（框架 / 平台）：把「每天要做的签到、监控、定时请求」做成可编辑、可复用、可被外部程序驱动的流程。
 
-## 能做什么
+## 核心能力
 
-- **任务**：可视化画布编排 HTTP / 条件 / 赋值 / 提取 / 延迟 / 日志 / 通知 / 脚本 / 遍历 节点
-- **调度**：每个任务独立 cron + 时区 + 抖动，支持手动运行与「调试运行」
-- **日志**：默认只输出人话日志（qinglong/qiandao 风格），可开调试模式看每步请求/响应
-- **通知**：站内通知、Webhook、Bark、Telegram、Server酱、PushPlus、钉钉、企业微信、飞书、Gotify、ntfy、邮件 SMTP 共 12 种
-- **账号**：多用户 + 角色、两步验证（TOTP）、会话可吊销、API Key 作用域与回收日期、IP 允许名单/黑名单
-- **接入**：REST 开放 API（OpenAPI 3.1）+ MCP（17 个工具），外部 Agent 可直接操作签到
+| 能力 | 说明 |
+|---|---|
+| 积木式流程 | HTTP / 条件 / 赋值 / 提取 / 延迟 / 日志 / 通知 / 脚本 / 遍历 节点，拖拽连线即成流程 |
+| 点选生成逻辑 | 运行后点响应里的任意值 → 一键生成提取 / 断言 / 关键字 / 通知 节点 |
+| 导入 | 浏览器 HAR、cURL 命令、JSON 模板导入，自动生成流程图 |
+| 调度 | 每个任务独立 cron + 时区 + 抖动；支持手动运行与「调试运行」 |
+| 日志 | 默认只输出人话日志（qinglong / qiandao 风格），可开调试模式看每步请求与响应 |
+| 通知 | 12 种渠道：站内通知、Webhook、Bark、Telegram、Server酱、PushPlus、钉钉、企业微信、飞书、Gotify、ntfy、邮件 SMTP |
+| 模板 | 调试好的流程存为模板，一份模板派生多份任务，各自填自己的变量 |
+| 账号安全 | 多用户 + 角色、TOTP 两步验证、会话吊销、凭据静态加密、API Key 作用域与 IP 名单 |
+| 开放接口 | REST（OpenAPI 3.1）+ MCP（17 个工具），外部 Agent 可直接操作 |
 
-## 快速入口
+## 设计原则
+
+- **不分享具体脚本**：CheckQ 是平台；具体的签到脚本属于**模板市场**（后续能力），文档只讲框架能力。
+- **干净日志**：默认只有你写的日志节点出现，技术细节按需展开。
+- **凭据不落明文**：cookie / token / 密码加密存储，备份默认脱敏。
+- **终端用户优先**：面板里不写"给你讲道理"的说明文字，说明走悬停标注或按需出现。
+
+## 接下来去哪
 
 | 我想… | 去哪 |
 |---|---|
-| 新建第一个签到 | [快速开始](/quickstart.html) |
-| 了解流程与节点 | [任务与流程](/tasks.html) |
-| 看日志 / 配通知 | [日志与通知](/logs.html) |
+| 跑通第一个任务 | [快速开始](/quickstart.html) |
+| 了解节点与变量 | [任务与流程](/tasks.html) |
+| 配置日志与通知 | [日志与通知](/logs.html) |
 | 给外部程序开接口 | [API 与 MCP](/api.html) |
-| 加账号 / 开两步验证 | [账号与安全](/security.html) |
-| 模板市场、部署、备份 | 见仓库 [README](https://github.com/${REPO}) |
-
-## 部署形态
-
-单容器（Docker），数据落在 \`data/\`（flows/runs/templates/meta/notifications），JSON 存储 + 原子写 + 立即 flush。
-` },
-  'quickstart.md': { title: '快速开始', body: `# 快速开始
+| 部署 / 备份 / 迁移 | [部署与备份](/deploy.html) |
+| 排查问题 | [常见问题](/faq.html) |
+`,
+  'quickstart.md': `# 快速开始
 
 ## 1. 建任务
 
-顶栏「+ 新建任务」→ 画布自带「HTTP 请求 → 日志」两个节点 → 点 HTTP 节点填 URL 与请求头。
+顶栏「+ 新建任务」→ 画布自带「HTTP 请求 → 日志」两个节点 → 点 HTTP 节点填 URL、请求头（需要登录态时带上 cookie）。
 
 ## 2. 跑一次
 
-顶栏「运行」。成功时日志只有一行人话；失败时点日志步骤看响应体。
+顶栏「运行」。成功时日志只有一行人话；失败时点日志步骤可看响应体。
 
 ## 3. 定调度
 
@@ -186,20 +172,24 @@ CheckQ 是一个可视化 HTTP 自动化流程引擎：把「每天要做的签�
 
 任务 ··· →「通知渠道」→ 选类型（站内通知零依赖）→ 填地址 →「测试发送」。
 
-## 5. 自动化（可选）
+## 5. 变成模板（可选）
 
-- **调试运行**：任务 ··· →「调试运行」记录每步请求/响应并展开过程窗口
-- **连续日志流**：任务行「日志」→ 多次运行滚动在一起，可上翻历史、导出
-- **外部 Agent**：设置 → API 密钥 → 生成（只读 + 可运行），配合 [API 与 MCP](/api.html)
-` },
-  'tasks.md': { title: '任务与流程', body: `# 任务与流程
+任务 ··· →「存为模板」→ 之后从模板创建任务时，各自填自己的变量（如 cookie）。
+
+## 6. 自动化（可选）
+
+- **调试运行**：任务 ··· →「调试运行」记录每步请求/响应并展开过程窗口；日常「运行」只输出配置好的日志。
+- **连续日志流**：任务行「日志」→ 多次运行滚动在一起，可上翻历史、导出。
+- **外部 Agent**：设置 → API 密钥 → 生成（只读 + 可运行）→ 配合 [API 与 MCP](/api.html)。
+`,
+  'tasks.md': `# 任务与流程
 
 ## 节点类型
 
 | 类型 | 用途 |
 |---|---|
-| HTTP 请求 | 方法/URL/头/体/断言/超时/后端(fetch·curl)/编码/代理/重试 |
-| 条件判断 | jexl 表达式分流 |
+| HTTP 请求 | 方法 / URL / 头 / 体 / 断言 / 超时 / 后端(fetch·curl) / 编码 / 代理 / 重试 |
+| 条件判断 | jexl 表达式分流（真→true 出口，假→false 出口） |
 | 赋值 | 变量或表达式求值 |
 | 提取 | 正则 / JSON 路径 / 响应头 / Set-Cookie |
 | 延迟 / 随机延迟 | 固定或区间等待（避开整点风控） |
@@ -208,78 +198,89 @@ CheckQ 是一个可视化 HTTP 自动化流程引擎：把「每天要做的签�
 | 脚本 | JS 沙箱（vars/last/steps 只读，1s 超时） |
 | 遍历 | 数组逐项循环（上限 50 轮） |
 
-## 变量
+## 变量与表达式
 
-- 流程变量在编辑器「流程变量」面板维护；敏感值（cookie/token/密码）**落盘加密**，API 返回明文以便编辑
+- 流程变量在编辑器「流程变量」面板维护；敏感值（cookie / token / 密码）**落盘加密**，API 返回明文以便编辑。
 - 模板语法：\`{{var}}\`、\`{{x|urlencode}}\`、\`{{x|num}}\`、\`{{x|sha256}}\`、\`{{now:%Y-%m-%d}}\`
-- 表达式：\`=last.json.code == 0\`（\`vars.xxx\` 取变量）
+- 表达式：\`=last.json.code == 0\`（\`vars.xxx\` 取变量，\`last\` 是上一个响应）
 
 ## 调度
 
-- cron + 时区 + 抖动（0-N 分钟）；空 cron = 只手动运行
-- 调度弹窗里可随时启用/停用
+- 每个任务独立 cron + 时区 + 抖动（0-N 分钟）；空 cron = 只手动运行。
+- 调度弹窗里可随时启用 / 停用；首页健康条显示「下一次调度」及是哪个任务。
 
 ## 模板
 
-- 任务 ··· →「存为模板」；模板携带节点/连线/变量/日志/通知
-- 从模板创建任务时可覆盖变量（如各自的 cookie）
-- 模板导出自动脱敏敏感默认值
-` },
-  'logs.md': { title: '日志与通知', body: `# 日志与通知
+- 存为模板会带走节点 / 连线 / 变量 / 日志 / 通知。
+- 从模板创建任务时逐个覆盖变量；敏感默认值在模板导出时自动脱敏。
+- 模板市场：设置或「模板」页可从 JSON 索引地址批量导入。
+
+## 点选生成逻辑
+
+在编辑器里运行一次 → 日志里展开响应 → 点任意 JSON 值或划选文字 → 选择用途（存为变量 / 断言成功 / 记录到日志 / 加进通知）→ 自动生成标准节点并接到链尾。
+`,
+  'logs.md': `# 日志与通知
 
 ## 干净日志（默认）
 
-记录范围默认「仅 log 节点」：只有你写的日志节点出现，失败步骤始终保留。流程里没有日志节点时自动退回全步骤，避免空白。
+- 记录范围默认「仅 log 节点」：只有你写的日志节点出现；失败步骤始终保留。
+- 流程里没有日志节点时自动退回全步骤，避免"成功但没日志"。
+- 记录档位 all / failure / summary 控制细节多少；关键字规则把值提取进运行摘要。
 
 ## 调试模式
 
-- 任务级：日志配置里勾「调试模式」→ 每次运行都记录请求/响应
-- 单次级：编辑器日志坞勾「调试」→ 仅当次记录
+- **任务级**：日志配置里勾「调试模式」→ 每次运行都记录请求 / 响应。
+- **单次级**：编辑器日志坞勾「调试」→ 仅当次记录，日常运行不受影响。
 
 ## 连续日志流
 
-任务行「日志」→ 多次运行拍平成一条时间线，可「加载更早的记录」，每组可展开调试或导出 .log。
+任务行「日志」→ 多次运行拍平成一条时间线：可「加载更早的记录」，每组可展开调试或导出 .log。
 
 ## 通知渠道（12 种）
 
 站内通知 / Webhook / Bark / Telegram / Server酱 / PushPlus / 钉钉（加签）/ 企业微信 / 飞书（加签）/ Gotify / ntfy / 邮件 SMTP。
 
-- 成功/失败可分别开启
-- 模板支持 {{flow.name}} {{status}} {{message}} {{duration}} {{time}}
-- 每日总推送：设置 → 通知与推送，勾选「推送单位」（任务），可定时推送或立即推送
-` },
-  'security.md': { title: '账号与安全', body: `# 账号与安全
+- 成功 / 失败可分别开启；模板支持 {{flow.name}} {{status}} {{message}} {{duration}} {{time}}。
+- **每日总推送**（可选，默认关）：设置 → 通知与推送 → 勾选「推送单位」（任务），可定时推送或立即推送今日汇总。
+- **界面提示级别**：默认只报错误；可在设置里改为「成功 + 错误」或「全部」。
+`,
+  'security.md': `# 账号与安全
 
-## 账号
+## 账号与角色
 
-- 多用户 + 角色（admin / operator / viewer 只读）
-- 用户名 + 密码登录；密码 scrypt 加盐哈希，明文不落盘
-- 修改用户名/密码：设置 → 账号安全（改用户名需当前密码，改完强制重登）
+- 多用户：用户名 + 密码；角色 admin（全部）/ operator（不能管账号）/ viewer（只读，写操作 403）。
+- 密码 scrypt 加盐哈希存储，明文永不落盘；改用户名需当前密码，改完强制重新登录。
 
 ## 两步验证
 
-TOTP（Google Authenticator / Authy / Aegis），启用后给 10 个一次性恢复码（只显示一次，服务端只存摘要）。
+TOTP（Google Authenticator / Authy / Aegis）：启用后给 10 个一次性恢复码（只显示一次，服务端只存摘要）。
+忘记验证器：恢复码登录，或管理员在「用户管理」重置该用户的 2FA。
 
 ## 会话与 API Key
 
-- 会话：httpOnly + SameSite=Strict，7 天绝对 + 24h 空闲，可查看与吊销
-- API Key：可命名、按作用域发放（只读/可运行/可修改）、可设回收日期、到期自动回收
-- IP 名单：每把 Key 可设允许名单（CIDR）；全局黑名单同时拦登录与 API Key
+- 会话：httpOnly + SameSite=Strict，7 天绝对有效期 + 24 小时空闲失效，可查看 / 吊销 / 退出所有设备。
+- API Key：可命名、按作用域发放（只读 / 可运行 / 可修改）、可设回收日期（到期自动回收）、可随时吊销；列表显示调用次数与来源 IP。
+
+## 访问控制
+
+- 每把 Key 可设 **IP 允许名单**（CIDR）。
+- 全局 **IP 黑名单**：被拉黑的 IP 登录与 API Key 一并拦截。
 
 ## 凭据存储
 
-cookie / token / SMTP 密码等以 AES-256-GCM 加密落盘；密钥在 \`data/.secret\`（600）或环境变量 \`CHECKQ_SECRET\`。备份默认脱敏，完整备份需再输一次密码。
+cookie / token / SMTP 密码等以 AES-256-GCM 加密落盘；密钥在 \`data/.secret\`（600）或环境变量 \`CHECKQ_SECRET\`。
+备份默认脱敏；完整备份需再次输入当前密码。
 
 ## Web 加固
 
-CSP / X-Frame-Options / nosniff / Referrer-Policy，写操作校验 Origin 同源（CSRF），登录按 IP 与账号双层限流。
-` },
-  'api.md': { title: 'API 与 MCP', body: `# API 与 MCP
+CSP / X-Frame-Options / nosniff / Referrer-Policy；写操作校验 Origin 同源（CSRF）；登录按 IP 与账号双层限流；审计日志记录关键动作。
+`,
+  'api.md': `# API 与 MCP
 
 ## 基础 API
 
 - \`GET /api\` —— 接口索引（免登录）
-- \`GET /api/openapi.json\` —— OpenAPI 3.1 机器可读描述
+- \`GET /api/openapi.json\` —— OpenAPI 3.1 机器可读描述（可自动生成客户端）
 
 ## 认证
 
@@ -293,7 +294,7 @@ CSP / X-Frame-Options / nosniff / Referrer-Policy，写操作校验 Origin 同�
 | 任务详情 | GET | /api/flows/:id |
 | 跑一次 | POST | /api/flows/:id/run |
 | 连续日志流 | GET | /api/flows/:id/logs?limit=200 |
-| 换变量 | PUT | /api/flows/:id |
+| 改变量 / 调度 | PUT | /api/flows/:id |
 | 历史运行 | GET | /api/runs?flowId=&limit=30 |
 | 模板 | GET | /api/templates |
 | 运维统计 | GET | /api/system/stats |
@@ -309,48 +310,43 @@ CSP / X-Frame-Options / nosniff / Referrer-Policy，写操作校验 Origin 同�
   "args": ["/path/CheckQ/mcp/checkq-mcp.cjs"],
   "env": { "CHECKQ_URL": "http://checkq.local:18888", "CHECKQ_API_KEY": "cq_xxx" } } } }
 \`\`\`
-` },
-  'glados.md': { title: 'GLaDOS 签到', body: `# GLaDOS 签到
 
-## 原理
+## 给外部 Agent 的东西
 
-服务端自 2026-11-04 起强制 challenge 校验：先取 nonce，等 ≥2.5s，用 \`proof=SHA256(nonce+".glados-observe-v1")\` 提交，缺 challenge 只给 Base 1 分。
+只有**基址 + 一把 Key**；建议只勾「只读 + 可运行」，把「可修改」留给人工。详见 [Agent 接入指南](/reference-agent.html)。
+`,
+  'deploy.md': `# 部署与备份
 
-## 模板
+## 部署
 
-首页「模板」区 → GLaDOS 每日签到（challenge 校验）→ 「+ 创建任务」→ 填 cookie 与 ua。
+单容器（Docker），数据落在 \`data/\`（flows / runs / templates / meta / notifications），JSON 存储 + 原子写 + 立即落盘。
 
-## 验证
+\`\`\`bash
+docker run -d --name checkq --restart unless-stopped -p 18888:8888 \\
+  -v /path/checkq/data:/data -e TZ=Asia/Shanghai \\
+  -e PORT=8888 -e DATA_DIR=/data checkq:latest
+\`\`\`
 
-- 今日已签：日志显示 \`Checkin! Got N Points\` 或 \`Today's observation logged…\`
-- 次日 00:13 cron 自动跑；\`/api/user/points\` 的当日 change 应恢复到 7~13
+## 数据目录
 
-## 排障
-
-| 现象 | 处理 |
+| 文件 | 内容 |
 |---|---|
-| 没有权限（code -2） | 用 curl 复现同请求：curl 也失败 = cookie 失效 |
-| device-mismatch（code 4） | ua 与签发 cookie 的浏览器不一致 |
-| 仍只加 1 分 | challenge 未通过：检查等待 ≥2.7s 与 proof 计算 |
-` },
-  'workbuddy.md': { title: 'WorkBuddy 签到', body: `# WorkBuddy 签到
+| flows.json | 任务定义（含加密后的敏感变量） |
+| runs.json | 运行记录 |
+| templates.json | 模板 |
+| meta.json | 账号、API Key 摘要、审计、界面偏好 |
+| notifications.json | 站内通知 |
+| .secret | 凭据加密密钥（600，务必与数据一起备份） |
 
-## 两个任务
+## 备份与恢复
 
-| 任务 | 内容 | cron |
-|---|---|---|
-| 每日签到 + 成长中心 | 签到、旅行礼物、连登兑换、盲盒、汇总 | 5 */4 * * * |
-| 任务自动完成（全量） | 19 项任务行为事件上报 + 领奖 | 25 6 * * * |
+- 任务页「备份」→ 下载**脱敏**备份（敏感值清空，适合分享与存档）。
+- 任务页「完整备份」→ 需再输一次当前密码，含明文凭据，用于自己迁移。
+- 恢复：粘贴备份 JSON → 生成带「（恢复）」后缀的停用任务 → 手动启用。
 
-## 积分口径
-
-签到状态接口返回 \`daily_credit=100, today_credit=100, total_credits=900\`：100 是每日签到的固定奖励，900 = 9 天 × 100。任务奖励（+50/+100 积分、+5 能量）走另一套成长值/能量池，不叠加进 \`total_credits\`。
-
-## Token
-
-Token 有效期约 27 天。**不做自动续期**：到期前在任务变量里换新 \`wbToken\`（面板「流程变量」），或管理员/运维用 \`tools/wb-sync-token.cjs\` 手动同步一次。
-` },
-  'faq.md': { title: '常见问题', body: `# 常见问题
+> 迁移到新机器时，请把 \`data/.secret\` 一并带走，否则已加密的凭据无法解密。
+`,
+  'faq.md': `# 常见问题
 
 | 现象 | 处理 |
 |---|---|
@@ -360,28 +356,38 @@ Token 有效期约 27 天。**不做自动续期**：到期前在任务变量里
 | 变量未定义 | 日志配置开启变量快照，或看运行记录里的「未定义变量」 |
 | 提示太吵 | 设置 → 通知与推送 → 界面提示 → 仅错误 |
 | 日志太啰嗦 | 任务 ··· → 日志配置 → 记录范围「仅 log 节点」 |
-| 忘记密码 | 管理员重置；或按 \`docs/SECURITY.md\` 的容器命令重置 |
+| 忘记密码 | 管理员重置；或按安全说明里的容器命令重置 |
 | 忘记两步验证码 | 用恢复码；管理员可在「用户管理」重置 2FA |
-| 日志窗口滚动带跑背景 | 已修复：打开弹窗会锁定背景滚动 |
-` },
+| 弹窗里滚动会带着背景滚 | 已修复：打开弹窗会锁定背景滚动 |
+| API Key 报权限不足 | 缺哪种能力就补勾哪种作用域（只读 / 可运行 / 可修改） |
+`,
 };
 
+// ---------- 静态资源 ----------
 const CSS = `
 :root { --bg:#0f1115; --panel:#161a20; --panel2:#1c2129; --border:#2a303a; --text:#e8e6e1; --muted:#9aa1ad; --accent:#6b93f0; --ok:#4caf7d; --warn:#d9a441; --code-bg:#11141a; }
 html[data-mode='light'] { --bg:#f6f7f9; --panel:#fff; --panel2:#f0f2f5; --border:#d7dae0; --text:#1b1f24; --muted:#5b6472; --accent:#2f6feb; --ok:#1a7f43; --warn:#9a6700; --code-bg:#f6f8fa; }
 * { box-sizing: border-box; }
-body { margin:0; background: var(--bg); color: var(--text); font: 15px/1.65 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+body { margin:0; background: var(--bg); color: var(--text); font: 15px/1.7 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
 a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
 .wrap { display: flex; min-height: 100vh; }
-aside { width: 264px; flex: none; border-right: 1px solid var(--border); background: var(--panel); padding: 22px 16px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+aside { width: 272px; flex: none; border-right: 1px solid var(--border); background: var(--panel); padding: 20px 14px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
 .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 17px; margin-bottom: 4px; }
 .brand span { color: var(--accent); }
-.brand-sub { color: var(--muted); font-size: 12.5px; margin-bottom: 18px; }
+.brand-sub { color: var(--muted); font-size: 12.5px; margin-bottom: 14px; }
+#search { width: 100%; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--input-bg, var(--panel2)); color: var(--text); font-size: 13px; margin-bottom: 12px; }
+#search:focus { outline: none; border-color: var(--accent); }
+#results { margin: -6px 0 12px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; display: none; }
+#results.on { display: block; }
+#results a { display: block; padding: 7px 10px; font-size: 12.5px; color: var(--text); border-bottom: 1px solid var(--border); }
+#results a:last-child { border-bottom: none; }
+#results a:hover { background: var(--panel2); text-decoration: none; }
+#results em { display: block; font-style: normal; color: var(--muted); font-size: 11.5px; }
 nav a { display:block; padding: 7px 10px; border-radius: 7px; color: var(--text); font-size: 14px; margin-bottom: 2px; }
 nav a:hover { background: var(--panel2); text-decoration: none; }
 nav a.on { background: var(--panel2); font-weight: 600; }
 nav a em { display:block; font-style: normal; color: var(--muted); font-size: 12px; }
-main { flex: 1 1 auto; min-width: 0; padding: 34px 42px 80px; max-width: 980px; }
+main { flex: 1 1 auto; min-width: 0; padding: 34px 42px 80px; max-width: 1000px; }
 h1 { font-size: 28px; margin: 0 0 6px; } h2 { font-size: 20px; margin: 30px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
 h3 { font-size: 16px; margin: 22px 0 8px; } p { margin: 0 0 12px; }
 code { background: var(--code-bg); border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; font-size: 13px; font-family: ui-monospace, Consolas, monospace; }
@@ -395,9 +401,41 @@ blockquote { margin: 0 0 14px; padding: 8px 14px; border-left: 3px solid var(--a
 ul, ol { margin: 0 0 14px; padding-left: 22px; } li { margin: 3px 0; }
 hr { border: none; border-top: 1px solid var(--border); margin: 22px 0; }
 .foot { color: var(--muted); font-size: 12.5px; margin-top: 30px; padding-top: 14px; border-top: 1px solid var(--border); }
-@media (max-width: 860px) { aside { position: static; height: auto; width: 100%; } .wrap { flex-direction: column; } main { padding: 22px 18px 60px; } }
+.log { font-size: 12.5px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--code-bg); margin-bottom: 12px; }
+.log b { color: var(--accent); }
+@media (max-width: 880px) { aside { position: static; height: auto; width: 100%; } .wrap { flex-direction: column; } main { padding: 22px 18px 60px; } }
 `;
 
+const SEARCH_JS = `
+(function () {
+  var input = document.getElementById('search');
+  var box = document.getElementById('results');
+  var index = [];
+  fetch('./search-index.json').then(function (r) { return r.json(); }).then(function (d) { index = d; });
+  function esc(s) { return s.replace(/[&<>]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]; }); }
+  function run() {
+    var q = input.value.trim().toLowerCase();
+    if (!q) { box.classList.remove('on'); box.innerHTML = ''; return; }
+    var hits = [];
+    for (var i = 0; i < index.length; i++) {
+      var it = index[i];
+      var pos = it.text.toLowerCase().indexOf(q);
+      if (pos < 0 && it.title.toLowerCase().indexOf(q) < 0) continue;
+      var start = Math.max(0, pos - 40);
+      var snippet = (pos >= 0 ? it.text.slice(start, start + 120) : it.text.slice(0, 120));
+      hits.push('<a href="' + it.file + '">' + esc(it.title) + '<em>' + esc(snippet) + '…</em></a>');
+      if (hits.length >= 8) break;
+    }
+    box.innerHTML = hits.join('') || '<a href="javascript:void(0)">没有匹配</a>';
+    box.classList.add('on');
+  }
+  input.addEventListener('input', run);
+  input.addEventListener('keydown', function (e) { if (e.key === 'Escape') { input.value = ''; run(); input.blur(); } });
+  document.addEventListener('click', function (e) { if (!box.contains(e.target) && e.target !== input) box.classList.remove('on'); });
+})();
+`;
+
+// ---------- 生成 ----------
 function navHtml(current) {
   return PAGES.map((p) => {
     const file = p.file.replace(/\.md$/, '.html');
@@ -405,7 +443,7 @@ function navHtml(current) {
   }).join('\n');
 }
 
-function page({ file, title, desc, body }) {
+function page({ file, title, desc, body, extraHead = '' }) {
   return `<!doctype html>
 <html lang="zh-CN" data-mode="dark">
 <head>
@@ -414,24 +452,53 @@ function page({ file, title, desc, body }) {
 <title>${title} · CheckQ 文档</title>
 <meta name="description" content="${desc}" />
 <link rel="stylesheet" href="./assets/style.css" />
+${extraHead}
 </head>
 <body>
 <div class="wrap">
   <aside>
     <div class="brand">Check<span>Q</span></div>
     <div class="brand-sub">自动化签到引擎 · 文档</div>
+    <input id="search" type="search" placeholder="搜索文档…" autocomplete="off" />
+    <div id="results"></div>
     <nav>
 ${navHtml(file)}
     </nav>
-    <div class="brand-sub" style="margin-top:18px"><a href="https://github.com/${REPO}">GitHub 仓库 →</a></div>
+    <div class="brand-sub" style="margin-top:18px"><a href="https://github.com/${REPO_OWNER}/${REPO_NAME}">GitHub 仓库 →</a></div>
   </aside>
   <main>
 ${body}
-    <div class="foot">CheckQ 文档 · 由 <code>tools/build-wiki.cjs</code> 从 <code>docs/</code> 生成 · <a href="https://github.com/${REPO}/issues">反馈问题</a></div>
+    <div class="foot">CheckQ 文档 · 由 <code>tools/build-wiki.cjs</code> 生成 · <a href="https://github.com/${REPO_OWNER}/${REPO_NAME}/issues">反馈问题</a></div>
   </main>
 </div>
+<script>${SEARCH_JS}</script>
 </body>
 </html>
+`;
+}
+
+// 更新日志（从 git log 生成）
+function changelogHtml() {
+  let lines = [];
+  try {
+    const out = execSync('git log --date=short --pretty=format:"%ad|%h|%s" -n 150', { cwd: ROOT, encoding: 'utf8' });
+    lines = out.split('\n').filter(Boolean);
+  } catch { /* 没有 git 历史时忽略 */ }
+  const items = lines.map((l) => {
+    const [date, hash, subject] = l.split('|');
+    return `<li><span class="hash">${hash}</span> ${inline(subject || '')} <span class="date">${date}</span></li>`;
+  }).join('');
+  const grouped = {};
+  for (const l of lines) {
+    const [date, hash, subject] = l.split('|');
+    (grouped[date] = grouped[date] || []).push(`<li><code>${hash}</code> ${inline(subject || '')}</li>`);
+  }
+  const sections = Object.entries(grouped).map(([d, items]) => `<h3>${d}</h3><ul>${items.join('')}</ul>`).join('');
+  return `# 更新日志
+
+按提交时间倒序（来自 git 历史）。
+
+${sections || '<p>暂无记录</p>'}
 `;
 }
 
@@ -439,30 +506,32 @@ fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(path.join(OUT, 'assets'), { recursive: true });
 fs.writeFileSync(path.join(OUT, 'assets', 'style.css'), CSS, 'utf8');
 
+const searchIndex = [];
 for (const p of PAGES) {
   let title = p.title;
   let desc = p.desc;
   let body = '';
-  if (p.src) {
-    // 来自仓库 docs/ 的完整文档（自动同步）
+  let md = '';
+  if (p.auto === 'changelog') {
+    md = changelogHtml();
+  } else if (p.src) {
     const docFile = path.join(DOCS, p.src);
     if (!fs.existsSync(docFile)) { console.log('MISS doc source:', p.src); continue; }
-    const raw = fs.readFileSync(docFile, 'utf8');
-    body = mdToHtml(raw);
+    md = fs.readFileSync(docFile, 'utf8');
   } else {
     const src = SOURCES[p.file];
     if (!src) { console.log('MISS source:', p.file); continue; }
-    title = src.title;
-    body = mdToHtml(src.body);
+    if (typeof src === 'string') { md = src; }
+    else { title = src.title || title; md = src.body || ''; }
   }
+  body = mdToHtml(md);
   const html = page({ file: p.file, title, desc, body });
   fs.writeFileSync(path.join(OUT, p.file.replace(/\.md$/, '.html')), html, 'utf8');
+  searchIndex.push({ file: p.file.replace(/\.md$/, '.html'), title, desc, text: plainText(md).slice(0, 4000) });
   console.log('generated', p.file);
 }
 
-// 404
+fs.writeFileSync(path.join(OUT, 'search-index.json'), JSON.stringify(searchIndex), 'utf8');
 fs.writeFileSync(path.join(OUT, '404.html'), page({ file: 'index.md', title: '页面不存在', desc: '', body: '<h1>404</h1><p>没有这个页面，<a href="./index.html">回首页</a>。</p>' }), 'utf8');
-
-// noindex（避免与主站重复内容）
 fs.writeFileSync(path.join(OUT, 'robots.txt'), 'User-agent: *\nAllow: /\n', 'utf8');
-console.log('wiki built →', path.relative(ROOT, OUT));
+console.log('wiki built →', path.relative(ROOT, OUT), `(${PAGES.length} 页)`);

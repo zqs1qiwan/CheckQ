@@ -454,7 +454,10 @@ export class Store {
       expiresAt: k.expiresAt || null,
       expired: !!(k.expiresAt && k.expiresAt < Date.now()),
       daysLeft: k.expiresAt ? Math.ceil((k.expiresAt - Date.now()) / 86400e3) : null,
+      expiresSoon: !!(k.expiresAt && k.expiresAt > Date.now() && k.expiresAt - Date.now() <= 7 * 86400e3),
       allowedIps: Array.isArray(k.allowedIps) ? k.allowedIps : [],
+      useCount: k.useCount || 0,
+      lastUsedIp: k.lastUsedIp || null,
     }));
   }
 
@@ -479,9 +482,16 @@ export class Store {
     return true;
   }
 
-  findApiKeyByHash(hash) {
+  findApiKeyByHash(hash, ip = '') {
     const k = this.meta.apiKeys.find((x) => x.hash === hash && !x.disabled);
-    if (k) { k.lastUsedAt = Date.now(); this.flush(); }
+    if (k) {
+      const firstUse = !k.useCount;
+      k.lastUsedAt = Date.now();
+      k.useCount = (k.useCount || 0) + 1;
+      if (ip) k.lastUsedIp = String(ip).slice(0, 64);
+      this.flush();
+      if (firstUse) this.audit('apikey.first-use', `名称=${k.name}`, '');
+    }
     return k || null;
   }
 

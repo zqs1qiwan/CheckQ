@@ -7,7 +7,7 @@ Docker 一行部署，导入浏览器 HAR 自动生成流程，条件分支 / �
 
 ## 📖 文档中心（GitHub Pages）
 
-完整文档站：**<https://zqs1qiwan.github.io/CheckQ/>**
+完整文档站：**<https://zqs1qiwan.github.io/checkq/>**
 
 - 入口：面板顶栏「说明书」图标 → 使用引导；「文档中心」图标 → 文档站
 - 站点由 `tools/build-wiki.cjs` 从 `docs/` 自动生成（`push` 到 main 时由 `.github/workflows/pages.yml` 自动发布）
@@ -40,7 +40,7 @@ Docker 一行部署，导入浏览器 HAR 自动生成流程，条件分支 / �
 
 ```bash
 mkdir checkq && cd checkq
-curl -O https://raw.githubusercontent.com/zqs1qiwan/CheckQ/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/zqs1qiwan/checkq/main/docker-compose.yml
 # 或克隆本仓库后:
 docker compose up -d --build
 ```

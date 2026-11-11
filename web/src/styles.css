@@ -877,3 +877,33 @@ button.icon-text svg { flex: none; }
 .guide-wiki:hover { color: var(--accent); text-decoration: none; }
 a.iconbtn { text-decoration: none; color: var(--text); }
 a.iconbtn:hover { border-color: var(--muted); background: var(--hover-tint); text-decoration: none; }
+
+/* =====================================================================
+   首页大 Tab（任务 / 模板）—— 顶部分栏，GitHub 风格
+   ===================================================================== */
+.big-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 4px 0 18px; }
+.big-tabs button {
+  background: transparent; border: none; border-bottom: 2px solid transparent;
+  border-radius: 0; height: 38px; padding: 0 14px;
+  font-size: var(--fs-lg); color: var(--muted); font-weight: 500;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.big-tabs button:hover { color: var(--text); background: transparent; }
+.big-tabs button.on { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.big-tabs button em {
+  font-style: normal; font-size: var(--fs-xs); color: var(--muted);
+  background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 999px; padding: 1px 7px; line-height: 1.5;
+}
+
+/* 行内菜单靠近视口底部时向上展开 */
+.row-menu.up .menu-pop { top: auto; bottom: calc(100% + 6px); }
+
+/* 批量创建（CSV）说明块 */
+.csv-help { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--panel2); padding: 12px 14px; margin-bottom: 10px; }
+.csv-help-title { font-weight: 600; font-size: var(--fs-md); margin-bottom: 6px; }
+.csv-help ol { margin: 0 0 8px; padding-left: 20px; font-size: var(--fs-sm); color: var(--muted); }
+.csv-help ol li { margin: 2px 0; }
+.csv-help ol b { color: var(--text); }
+.csv-example { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+.csv-example code { display: block; background: var(--panel); }

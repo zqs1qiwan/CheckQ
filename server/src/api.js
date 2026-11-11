@@ -514,7 +514,7 @@ export function buildServer({ dataDir, port }) {
     // 1) API Key（外部 Agent / 脚本）：先识别，再按作用域判定
     const auth = req.headers['x-api-key'];
     if (auth) {
-      const key = store.findApiKeyByHash(hashApiKey(auth));
+      const key = store.findApiKeyByHash(hashApiKey(auth), ip);
       if (key) {
         // 3) Key 级 IP 允许名单（空 = 不限制）
         if (Array.isArray(key.allowedIps) && key.allowedIps.length && !ipAllowed(ip, key.allowedIps)) {

@@ -4,33 +4,34 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>API 参考 · CheckQ 文档</title>
-<meta name="description" content="全部端点（自动同步）" />
+<meta name="description" content="全部端点" />
 <link rel="stylesheet" href="./assets/style.css" />
+
 </head>
 <body>
 <div class="wrap">
   <aside>
     <div class="brand">Check<span>Q</span></div>
     <div class="brand-sub">自动化签到引擎 · 文档</div>
+    <input id="search" type="search" placeholder="搜索文档…" autocomplete="off" />
+    <div id="results"></div>
     <nav>
-<a class="" href="index.html">概览<em>CheckQ 是什么、怎么用、去哪看</em></a>
-<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个签到任务</em></a>
-<a class="" href="tasks.html">任务与流程<em>节点类型、变量、调度、模板</em></a>
-<a class="" href="logs.html">日志与通知<em>干净日志、连续日志流、12 个通知渠道</em></a>
-<a class="" href="security.html">账号与安全<em>多用户、2FA、会话、凭据加密、IP 名单</em></a>
-<a class="" href="api.html">API 与 MCP<em>开放 API、API Key 权限、外部 Agent 接入</em></a>
-<a class="" href="glados.html">GLaDOS 签到<em>challenge 校验版流程与换 cookie 指引</em></a>
-<a class="" href="workbuddy.html">WorkBuddy 签到<em>签到 + 成长中心 + 任务自动完成</em></a>
+<a class="" href="index.html">概览<em>CheckQ 是什么、能做什么</em></a>
+<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个签到</em></a>
+<a class="" href="tasks.html">任务与流程<em>节点、变量、调度、模板</em></a>
+<a class="" href="logs.html">日志与通知<em>干净日志、连续日志流、通知渠道</em></a>
+<a class="" href="security.html">账号与安全<em>多用户、2FA、凭据加密、访问控制</em></a>
+<a class="" href="api.html">API 与 MCP<em>开放 API、API Key、外部 Agent 接入</em></a>
+<a class="" href="deploy.html">部署与备份<em>Docker、数据目录、备份恢复</em></a>
 <a class="" href="faq.html">常见问题<em>排障速查</em></a>
-<a class="on" href="reference-api.html">API 参考<em>全部端点（自动同步）</em></a>
-<a class="" href="reference-mcp.html">MCP 工具<em>17 个工具与接入（自动同步）</em></a>
-<a class="" href="reference-security.html">安全说明<em>威胁与防护全表（自动同步）</em></a>
-<a class="" href="reference-glados.html">GLaDOS 详解<em>challenge 机制与排障（自动同步）</em></a>
-<a class="" href="reference-workbuddy.html">WorkBuddy 详解<em>接口与任务清单（自动同步）</em></a>
-<a class="" href="reference-agent.html">Agent 接入指南<em>给外部 Agent 什么（自动同步）</em></a>
-<a class="" href="reference-roadmap.html">路线图<em>版本计划（自动同步）</em></a>
+<a class="" href="changelog.html">更新日志<em>版本变更（自动生成）</em></a>
+<a class="on" href="reference-api.html">API 参考<em>全部端点</em></a>
+<a class="" href="reference-mcp.html">MCP 工具<em>工具清单与接入</em></a>
+<a class="" href="reference-security.html">安全说明<em>威胁与防护全表</em></a>
+<a class="" href="reference-agent.html">Agent 接入指南<em>给外部 Agent 什么</em></a>
+<a class="" href="reference-roadmap.html">路线图<em>版本计划</em></a>
     </nav>
-    <div class="brand-sub" style="margin-top:18px"><a href="https://github.com/zqs1qiwan/CheckQ">GitHub 仓库 →</a></div>
+    <div class="brand-sub" style="margin-top:18px"><a href="https://github.com/zqs1qiwan/checkq">GitHub 仓库 →</a></div>
   </aside>
   <main>
 <h1 id="checkq-rest-api-ai-ready-参考">CheckQ REST API — AI-ready 参考</h1>
@@ -104,8 +105,36 @@ curl -s -b cq.txt -X POST http://host:8888/api/system/apikey
 # 2. 用 Key 跑任务
 curl -s -H 'X-API-Key: &lt;key&gt;' http://host:8888/api/flows
 curl -s -H 'X-API-Key: &lt;key&gt;' -X POST http://host:8888/api/flows/&lt;id&gt;/run</code></pre>
-    <div class="foot">CheckQ 文档 · 由 <code>tools/build-wiki.cjs</code> 从 <code>docs/</code> 生成 · <a href="https://github.com/zqs1qiwan/CheckQ/issues">反馈问题</a></div>
+    <div class="foot">CheckQ 文档 · 由 <code>tools/build-wiki.cjs</code> 生成 · <a href="https://github.com/zqs1qiwan/checkq/issues">反馈问题</a></div>
   </main>
 </div>
+<script>
+(function () {
+  var input = document.getElementById('search');
+  var box = document.getElementById('results');
+  var index = [];
+  fetch('./search-index.json').then(function (r) { return r.json(); }).then(function (d) { index = d; });
+  function esc(s) { return s.replace(/[&<>]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]; }); }
+  function run() {
+    var q = input.value.trim().toLowerCase();
+    if (!q) { box.classList.remove('on'); box.innerHTML = ''; return; }
+    var hits = [];
+    for (var i = 0; i < index.length; i++) {
+      var it = index[i];
+      var pos = it.text.toLowerCase().indexOf(q);
+      if (pos < 0 && it.title.toLowerCase().indexOf(q) < 0) continue;
+      var start = Math.max(0, pos - 40);
+      var snippet = (pos >= 0 ? it.text.slice(start, start + 120) : it.text.slice(0, 120));
+      hits.push('<a href="' + it.file + '">' + esc(it.title) + '<em>' + esc(snippet) + '…</em></a>');
+      if (hits.length >= 8) break;
+    }
+    box.innerHTML = hits.join('') || '<a href="javascript:void(0)">没有匹配</a>';
+    box.classList.add('on');
+  }
+  input.addEventListener('input', run);
+  input.addEventListener('keydown', function (e) { if (e.key === 'Escape') { input.value = ''; run(); input.blur(); } });
+  document.addEventListener('click', function (e) { if (!box.contains(e.target) && e.target !== input) box.classList.remove('on'); });
+})();
+</script>
 </body>
 </html>

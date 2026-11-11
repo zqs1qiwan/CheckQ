@@ -83,7 +83,7 @@ export default function GuideModal({ onClose }) {
           <p key={i} style={{ margin: '0 0 10px', lineHeight: 1.7, fontSize: 13 }}>{line}</p>
         ))}
         <div className="guide-foot">
-          <a className="guide-wiki" href="https://zqs1qiwan.github.io/CheckQ/" target="_blank" rel="noreferrer">
+          <a className="guide-wiki" href="https://zqs1qiwan.github.io/checkq/" target="_blank" rel="noreferrer">
             <IconBook size={14} /> 完整文档
           </a>
           <button className="primary" onClick={onClose}>开始使用</button>

@@ -104,12 +104,15 @@ export default function ApiKeysPanel({ onToast }) {
                   <b>{k.name}</b>
                   {scopeBadges(k.scopes).map((s) => <span key={s.id} className={`chip chip-${s.id}`}>{s.label}</span>)}
                   {k.allowedIps?.length ? <span className="chip chip-mute">IP 限 {k.allowedIps.length}</span> : null}
+                  {k.expiresSoon ? <span className="chip chip-write">即将到期</span> : null}
                 </div>
                 <div className="key-meta">
                   <code className="mono">{k.prefix}…</code>
                   <span>创建 {fmt(k.createdAt)}</span>
                   <span>{k.expiresAt ? (k.expired ? '已过期' : `${k.daysLeft} 天后回收`) : '永不过期'}</span>
                   <span>{k.lastUsedAt ? `最近使用 ${fmt(k.lastUsedAt)}` : '未使用'}</span>
+                  <span>{k.useCount ? `调用 ${k.useCount} 次` : ''}</span>
+                  {k.lastUsedIp ? <span>来源 {k.lastUsedIp}</span> : null}
                 </div>
               </div>
               <div className="key-ops">

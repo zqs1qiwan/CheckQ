@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import ThemeToggle from './ThemeToggle.jsx';
-import GuideModal from './GuideModal.jsx';
 import LogStream from './LogStream.jsx';
 import Modal from './Modal.jsx';
 import { IconBell, IconBook, IconKey, IconUsers, IconShield, IconSparkle, IconGear, IconGlobe } from './Icons.jsx';
@@ -161,8 +160,9 @@ export default function FlowList({ onOpen, onLogout }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all'); // all | scheduled | recent-failed
   const [stats, setStats] = useState(null);
-  const [guideOpen, setGuideOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [viewTab, setViewTab] = useState('flows'); // 首页大 tab：任务 / 模板
+  const [marketUrl, setMarketUrl] = useState('');
   const [unread, setUnread] = useState(0);
   const [me, setMe] = useState(null);
   const [selected, setSelected] = useState(new Set());
@@ -180,9 +180,19 @@ export default function FlowList({ onOpen, onLogout }) {
 
   useEffect(() => { load(); }, []);
 
-  // 首次访问自动打开一次使用引导
+  // 行内「···」菜单靠近视口底部时改为向上展开，避免被裁掉
   useEffect(() => {
-    try { if (!localStorage.getItem('checkq-guide-seen')) setGuideOpen(true); } catch {}
+    const onToggle = (e) => {
+      const d = e.target;
+      if (!(d instanceof HTMLElement) || !d.matches('details.row-menu')) return;
+      const pop = d.querySelector('.menu-pop');
+      if (!pop) return;
+      d.classList.remove('up');
+      const r = pop.getBoundingClientRect();
+      if (r.bottom > window.innerHeight - 8) d.classList.add('up');
+    };
+    document.addEventListener('toggle', onToggle, true);
+    return () => document.removeEventListener('toggle', onToggle, true);
   }, []);
 
   // 当前登录身份（用户名 / 角色）
@@ -332,7 +342,6 @@ export default function FlowList({ onOpen, onLogout }) {
             <button onClick={() => setModal('curl')} disabled={importBusy}>导入 cURL 命令</button>
             <button onClick={() => setModal('import')} disabled={importBusy}>导入 HAR / JSON</button>
             <div className="menu-sep" />
-            <button onClick={() => setModal('settings')}>设置</button>
             <button onClick={onLogout}>退出登录</button>
           </div>
         </details>
@@ -346,9 +355,8 @@ export default function FlowList({ onOpen, onLogout }) {
         <button className="iconbtn bell-btn" onClick={() => setNotifOpen(true)} title="站内通知" aria-label="站内通知">
           <IconBell size={16} />{unread > 0 && <span className="bell-dot">{unread > 99 ? '99+' : unread}</span>}
         </button>
-        <button className="iconbtn" onClick={() => setGuideOpen(true)} title="使用说明" aria-label="使用说明"><IconBook size={16} /></button>
-        <a className="iconbtn" href="https://zqs1qiwan.github.io/CheckQ/" target="_blank" rel="noreferrer" title="文档中心" aria-label="文档中心"><IconGlobe size={16} /></a>
-        <button className="iconbtn" onClick={() => setModal('settings-api')} title="API 密钥" aria-label="API 密钥"><IconKey size={16} /></button>
+        <a className="iconbtn" href="https://zqs1qiwan.github.io/checkq/" target="_blank" rel="noreferrer" title="文档中心" aria-label="文档中心"><IconGlobe size={16} /></a>
+        <button className="iconbtn" onClick={() => setModal('settings')} title="设置" aria-label="设置"><IconGear size={16} /></button>
         <input
           ref={fileRef} type="file" accept=".har,.json" style={{ display: 'none' }}
           onChange={(e) => { const f = e.target.files[0]; if (f) doImport(f); e.target.value = ''; }}
@@ -369,11 +377,13 @@ export default function FlowList({ onOpen, onLogout }) {
             ) : <span className="badge muted">暂无调度</span>}
           </div>
         )}
-        <div className="page-head">
-          <h2>模板</h2>
-          <span style={{ color: 'var(--muted)', fontSize: 12 }}>一个模板，多份任务；变量（cookie 等）在创建任务时各自填写</span>
+        <div className="big-tabs">
+          <button className={viewTab === 'flows' ? 'on' : ''} onClick={() => setViewTab('flows')}>任务 <em>{flows?.length ?? 0}</em></button>
+          <button className={viewTab === 'tpls' ? 'on' : ''} onClick={() => setViewTab('tpls')}>模板 <em>{templates?.length ?? 0}</em></button>
         </div>
 
+        {viewTab === 'tpls' && (
+        <>
         {templates && templates.length > 0 ? (
           <div className="tpl-grid">
             {templates.map((t) => (
@@ -420,8 +430,28 @@ export default function FlowList({ onOpen, onLogout }) {
           </div>
         )}
 
-        <div className="page-head" style={{ marginTop: 28 }}>
-          <h2>任务</h2>
+        <div className="page-head" style={{ marginTop: 20 }}>
+          <h2>模板市场</h2>
+          <span style={{ color: 'var(--muted)', fontSize: 12 }}>从 JSON 索引地址导入一批模板</span>
+        </div>
+        <div className="field-inline" style={{ maxWidth: 560 }}>
+          <div className="field" style={{ flex: '1 1 auto' }}>
+            <label>索引地址</label>
+            <input className="mono" placeholder="https://example.com/templates.json" value={marketUrl} onChange={(e) => setMarketUrl(e.target.value)} />
+          </div>
+          <div className="field" style={{ flex: '0 0 auto', display: 'flex', alignItems: 'flex-end' }}>
+            <button className="small" onClick={async () => {
+              try { await api.templateFromUrl(marketUrl); setMarketUrl(''); load(); setToast({ kind: 'ok', text: '模板已导入' }); }
+              catch (e) { setToast({ kind: 'fail', text: e.message }); }
+            }}>导入</button>
+          </div>
+        </div>
+        </>
+        )}
+
+        {viewTab === 'flows' && (
+        <>
+        <div className="page-head" style={{ marginTop: 8 }}>
           <span className="spacer" />
           {selected.size > 0 && (
             <span className="btn-row">
@@ -529,6 +559,8 @@ export default function FlowList({ onOpen, onLogout }) {
             </table>
           </div>
         )}
+        </>
+        )}
       </div>
 
       {modal === 'wizard' && (
@@ -599,9 +631,6 @@ export default function FlowList({ onOpen, onLogout }) {
         <NotificationsModal onClose={() => { setNotifOpen(false); api.notifications(1).then((r) => setUnread(r.unread || 0)).catch(() => {}); }} />
       )}
 
-      {guideOpen && (
-        <GuideModal onClose={() => { setGuideOpen(false); try { localStorage.setItem('checkq-guide-seen', '1'); } catch {} }} />
-      )}
     </>
   );
 }
@@ -768,11 +797,30 @@ function CsvImportModal({ tpl, onClose, onDone }) {
         </>
       }
     >
+                >
+        <div className="csv-help">
+          <div className="csv-help-title">怎么填</div>
+          <ol>
+            <li>第一行 = 列名（变量名），只写一次</li>
+            <li>从第二行开始，<b>每一行就是一个新任务</b></li>
+            <li>第一列写任务名，后面的列按第一行的变量名依次填值</li>
+          </ol>
+          <div className="csv-example">
+            <code>任务名,cookie</code>
+            <code>账号A,sess=aaaa1111</code>
+            <code>账号B,sess=bbbb2222</code>
+          </div>
+          <div className="hint">
+            {tpl.varNames.length > 0
+              ? <>模板需要这些变量：{tpl.varNames.join('、')}；名字要和第一行完全一致。</>
+              : <>这个模板没有变量，只填任务名即可。</>}
+          </div>
+        </div>
         <textarea
-          className="mono" rows={6}
-          placeholder={`name,cookie\n主号,sess=xxx\n备用,sess=yyy`}
-          value={csv}
-          onChange={(e) => setCsv(e.target.value)}
+        className="mono" rows={7}
+        placeholder={'任务名,cookie\n账号A,sess=aaaa1111\n账号B,sess=bbbb2222'}
+        value={csv}
+        onChange={(e) => setCsv(e.target.value)}
         />
         {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
         {result && (

@@ -17,6 +17,7 @@
 | 作用域 | `read` 查看 / `run` 运行任务 / `write` 改配置；权限不足返回 403 |
 | 回收日期 | 到期自动失效并从列表移除（过期请求返回 401「已过期并被回收」） |
 | 限流 | 登录 5 次/10 分钟（IP）+ 8 次/15 分钟（账号）；API 调用无固定限流 |
+| IP 名单 | 每把 Key 可设 **IP 允许名单**（CIDR）；另有**全局 IP 黑名单**（登录与 API Key 同时生效）；不名单外返回 403 |
 
 最小示例：
 
@@ -160,6 +161,11 @@ data: { "id":"run-xxx", "status":"success", "durationMs":..., "summary":"...", "
 | GET | /api/system/apikeys | API Key 列表（含作用域） |
 | POST | /api/system/apikeys | 生成 API Key（可指定 scopes: read/run/write） |
 | DELETE | /api/system/apikeys/:id | 吊销 API Key |
+| PUT | /api/system/apikeys/:id | 改 Key（scopes / allowedIps / expiresAt / name） |
+| GET | /api/system/ip-blocklist | 全局 IP 黑名单（管理员） |
+| PUT | /api/system/ip-blocklist | 加入黑名单（body: { ip }，支持 CIDR） |
+| DELETE | /api/system/ip-blocklist/:ip | 移出黑名单 |
+
 | GET | /api/system/push-targets | 可推送单位（带通知渠道的任务） |
 | GET | /api/flows/:id/logs | 连续日志流（多次运行的人话日志） |
 | GET | /api/system/backup | 脱敏备份（凭据已清空） |

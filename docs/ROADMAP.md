@@ -49,6 +49,8 @@
 
 | 开放 API 索引 + OpenAPI 描述 + Key 回收日期 | ✅ 2026-11-11（docs/AGENT-ACCESS.md） |
 
+| IP 允许名单（Key 级）+ 全局 IP 黑名单 | ✅ 2026-11-11（docs/SECURITY.md §6.1） |
+
 ## P1（体验）
 
 | 项 | 说明 |

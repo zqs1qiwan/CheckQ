@@ -19,6 +19,7 @@ import { Store, hashPwd, verifyPwd } from './store.js';
 import { checkPassword, checkUsername, ROLES, PASSWORD_MIN, hashApiKey, newApiKey } from './auth.js';
 import { generateSecret, verifyTotp, generateRecoveryCodes, hashRecoveryCode, verifyRecoveryCode, otpauthUri } from './totp.js';
 import { buildOpenApi } from './openapi.js';
+import { ipAllowed, normalizeIp } from './iprange.js';
 import { Engine, redactVars } from './engine.js';
 import { validateFlow } from './model.js';
 import { importHar } from './har-import.js';
@@ -64,6 +65,16 @@ export function buildServer({ dataDir, port }) {
   };
   const ACCOUNT_FAIL_LIMIT = 8;          // 单账号连续失败上限
   const ACCOUNT_FAIL_WINDOW = 15 * 60e3; // 单账号锁定窗口
+
+  /**
+   * 取客户端真实 IP：
+   * - 优先 X-Forwarded-For 第一个地址（反代/局域网可信场景）
+   * - 其次 req.ip（注意：Docker 端口映射时容器看到的是网关地址，如 172.17.0.1）
+   */
+  function clientIp(req) {
+    const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    return normalizeIp(xff || req.ip || '');
+  }
 
   /** 当前会话（过期即清理） */
   function currentSession(req) {
@@ -493,11 +504,23 @@ export function buildServer({ dataDir, port }) {
   app.addHook('onRequest', async (req, reply) => {
     const path = req.url.split('?')[0];
 
+    // 0) 全局 IP 黑名单（登录与 API Key 都拦）
+    const ip = clientIp(req);
+    if (ip && store.listBlockedIps().some((rule) => ipAllowed(ip, [rule]))) {
+      store.audit('ip.blocked', `IP=${ip}`, '');
+      return reply.code(403).send({ error: `IP ${ip} 已被列入黑名单` });
+    }
+
     // 1) API Key（外部 Agent / 脚本）：先识别，再按作用域判定
     const auth = req.headers['x-api-key'];
     if (auth) {
       const key = store.findApiKeyByHash(hashApiKey(auth));
       if (key) {
+        // 3) Key 级 IP 允许名单（空 = 不限制）
+        if (Array.isArray(key.allowedIps) && key.allowedIps.length && !ipAllowed(ip, key.allowedIps)) {
+          store.audit('apikey.ip-denied', `名称=${key.name} IP=${ip}`, '');
+          return reply.code(403).send({ error: `IP ${ip} 不在该 API Key 的允许名单内` });
+        }
         // 到期回收：过期 Key 直接失效并从库里清掉
         if (key.expiresAt && key.expiresAt < Date.now()) {
           store.revokeApiKey(key.id);
@@ -972,11 +995,55 @@ export function buildServer({ dataDir, port }) {
       if (d.getTime() <= Date.now()) return reply.code(400).send({ error: '回收日期必须晚于现在' });
       expiresAt = d.getTime();
     }
+    const allowedIps = Array.isArray(req.body?.allowedIps)
+      ? req.body.allowedIps.map((x) => String(x || '').trim()).filter(Boolean)
+      : [];
     const { key, hash, prefix } = newApiKey();
-    const k = store.addApiKey({ name: String(name || 'API Key').slice(0, 40), hash, prefix, userId: req.user?.id || null, scopes: useScopes, expiresAt });
+    const k = store.addApiKey({ name: String(name || 'API Key').slice(0, 40), hash, prefix, userId: req.user?.id || null, scopes: useScopes, expiresAt, allowedIps });
     store.audit('apikey.create', `名称=${k.name} 权限=${useScopes.join('/')}${expiresAt ? ' 到期=' + new Date(expiresAt).toISOString().slice(0, 10) : ''}`, req.user?.username || '');
-    return { ok: true, apiKey: key, key: { id: k.id, name: k.name, prefix: k.prefix, createdAt: k.createdAt, scopes: useScopes, expiresAt } };
+    return { ok: true, apiKey: key, key: { id: k.id, name: k.name, prefix: k.prefix, createdAt: k.createdAt, scopes: useScopes, expiresAt, allowedIps } };
   });
+  app.put('/api/system/apikeys/:id', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    const patch = {};
+    const b = req.body || {};
+    if (Array.isArray(b.scopes)) patch.scopes = b.scopes.filter((s) => ['read', 'run', 'write'].includes(s));
+    if (Array.isArray(b.allowedIps)) patch.allowedIps = b.allowedIps.map((x) => String(x || '').trim()).filter(Boolean);
+    if (b.name !== undefined) patch.name = String(b.name).slice(0, 40);
+    if (b.expiresAt !== undefined) {
+      if (!b.expiresAt) patch.expiresAt = null;
+      else {
+        const d = new Date(b.expiresAt);
+        if (Number.isNaN(d.getTime())) return reply.code(400).send({ error: '回收日期格式无效' });
+        patch.expiresAt = d.getTime();
+      }
+    }
+    const k = store.updateApiKey(req.params.id, patch);
+    if (!k) return reply.code(404).send({ error: '不存在' });
+    store.audit('apikey.update', `名称=${k.name}`, req.user?.username || '');
+    return { ok: true, key: store.listApiKeys().find((x) => x.id === k.id) };
+  });
+
+  // ---- IP 黑名单（全局）----
+  app.get('/api/system/ip-blocklist', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    return { ips: store.listBlockedIps() };
+  });
+  app.put('/api/system/ip-blocklist', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    const ip = String((req.body || {}).ip || '').trim();
+    if (!ip) return reply.code(400).send({ error: 'IP 不能为空' });
+    store.blockIp(ip);
+    store.audit('ip.block', `IP=${ip}`, req.user?.username || '');
+    return { ok: true, ips: store.listBlockedIps() };
+  });
+  app.delete('/api/system/ip-blocklist/:ip', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return;
+    store.unblockIp(req.params.ip);
+    store.audit('ip.unblock', `IP=${req.params.ip}`, req.user?.username || '');
+    return { ok: true, ips: store.listBlockedIps() };
+  });
+
   app.delete('/api/system/apikeys/:id', async (req, reply) => {
     if (!requireAdmin(req, reply)) return;
     const ok = store.revokeApiKey(req.params.id);

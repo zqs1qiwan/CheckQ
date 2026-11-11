@@ -33,6 +33,7 @@ export class Store {
     // ---- 账号体系（v0.4.3）：多用户 + 角色 + 2FA + 审计 ----
     this.meta.users = Array.isArray(this.meta.users) ? this.meta.users : [];
     this.meta.apiKeys = Array.isArray(this.meta.apiKeys) ? this.meta.apiKeys : [];
+    this.meta.ipBlocklist = Array.isArray(this.meta.ipBlocklist) ? this.meta.ipBlocklist : [];
     this.meta.audit = Array.isArray(this.meta.audit) ? this.meta.audit : [];
 
     // 迁移：旧版单密码 meta.passwordHash → admin 用户；并删除明文密码提示
@@ -453,15 +454,17 @@ export class Store {
       expiresAt: k.expiresAt || null,
       expired: !!(k.expiresAt && k.expiresAt < Date.now()),
       daysLeft: k.expiresAt ? Math.ceil((k.expiresAt - Date.now()) / 86400e3) : null,
+      allowedIps: Array.isArray(k.allowedIps) ? k.allowedIps : [],
     }));
   }
 
-  addApiKey({ name, hash, prefix, userId, scopes, expiresAt }) {
+  addApiKey({ name, hash, prefix, userId, scopes, expiresAt, allowedIps }) {
     const k = {
       id: crypto.randomUUID(), name: name || 'API Key', hash, prefix, userId: userId || null,
       createdAt: Date.now(), lastUsedAt: null, disabled: false,
       scopes: Array.isArray(scopes) && scopes.length ? scopes : ['read', 'run', 'write'],
       expiresAt: expiresAt || null,
+      allowedIps: Array.isArray(allowedIps) ? allowedIps.filter(Boolean) : [],
     };
     this.meta.apiKeys.push(k);
     this.flush();
@@ -480,6 +483,42 @@ export class Store {
     const k = this.meta.apiKeys.find((x) => x.hash === hash && !x.disabled);
     if (k) { k.lastUsedAt = Date.now(); this.flush(); }
     return k || null;
+  }
+
+  // 更新 API Key（作用域 / 允许 IP / 名称）
+  updateApiKey(id, patch) {
+    const k = this.meta.apiKeys.find((x) => x.id === id);
+    if (!k) return null;
+    if (patch.name !== undefined) k.name = String(patch.name).slice(0, 40);
+    if (patch.scopes !== undefined && Array.isArray(patch.scopes)) {
+      k.scopes = patch.scopes.filter((s) => ['read', 'run', 'write'].includes(s));
+    }
+    if (patch.allowedIps !== undefined && Array.isArray(patch.allowedIps)) {
+      k.allowedIps = patch.allowedIps.map((x) => String(x || '').trim()).filter(Boolean);
+    }
+    if (patch.expiresAt !== undefined) k.expiresAt = patch.expiresAt || null;
+    this.flush();
+    return k;
+  }
+
+  // ---- IP 黑名单 ----
+  listBlockedIps() {
+    return [...new Set(this.meta.ipBlocklist.map((x) => String(x).trim()).filter(Boolean))];
+  }
+
+  blockIp(ip) {
+    const v = String(ip || '').trim();
+    if (!v) return this.listBlockedIps();
+    if (!this.meta.ipBlocklist.includes(v)) this.meta.ipBlocklist.push(v);
+    this.flush();
+    return this.listBlockedIps();
+  }
+
+  unblockIp(ip) {
+    const v = String(ip || '').trim();
+    this.meta.ipBlocklist = this.meta.ipBlocklist.filter((x) => String(x).trim() !== v);
+    this.flush();
+    return this.listBlockedIps();
   }
 
   // ---- audit ----

@@ -27,10 +27,15 @@ export default function AccountPanel({ onToast }) {
   // 会话
   const [sessions, setSessions] = useState([]);
 
+  // IP 黑名单（访问控制）
+  const [blocked, setBlocked] = useState([]);
+  const [newIp, setNewIp] = useState('');
+  const loadBlocked = () => api.ipBlocklist().then((r) => setBlocked(r.ips || [])).catch(() => setBlocked([]));
+
   const loadMe = () => api.me().then((r) => setMe(r.authenticated ? r : null)).catch(() => setMe(null));
   const loadSessions = () => api.sessions().then((r) => setSessions(r.sessions || [])).catch(() => setSessions([]));
 
-  useEffect(() => { loadMe(); loadSessions(); }, []);
+  useEffect(() => { loadMe(); loadSessions(); loadBlocked(); }, []);
 
   const changePassword = async () => {
     setPwMsg(''); setPwErr('');
@@ -217,6 +222,37 @@ export default function AccountPanel({ onToast }) {
           </div>
         )}
         {totpErr && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{totpErr}</p>}
+      </div>
+
+      <div className="acc-card">
+        <div className="acc-card-head">访问控制（IP 黑名单）</div>
+        <div className="hint" style={{ marginBottom: 8 }}>
+          列入黑名单的 IP 无法登录、也无法使用任何 API Key（对登录态与 Key 同时生效）。
+        </div>
+        <div className="field-inline">
+          <div className="field">
+            <label>新增黑名单 IP（支持 CIDR，如 192.168.1.0/24）</label>
+            <input className="mono" value={newIp} onChange={(e) => setNewIp(e.target.value)} placeholder="192.168.9.9" />
+          </div>
+          <div className="field" style={{ display: 'flex', alignItems: 'flex-end' }}>
+            <button className="small" onClick={async () => {
+              if (!newIp.trim()) return;
+              try { const r = await api.blockIp(newIp.trim()); setBlocked(r.ips || []); setNewIp(''); onToast('已加入黑名单'); }
+              catch (e) { onToast(e.message); }
+            }}>加入黑名单</button>
+          </div>
+        </div>
+        {blocked.length === 0 ? <div className="hint">暂无黑名单</div> : blocked.map((ip) => (
+          <div key={ip} className="acc-row">
+            <span className="mono">{ip}</span>
+            <span className="acc-row-actions">
+              <button className="small danger" onClick={async () => {
+                try { const r = await api.unblockIp(ip); setBlocked(r.ips || []); onToast('已移出黑名单'); }
+                catch (e) { onToast(e.message); }
+              }}>移出</button>
+            </span>
+          </div>
+        ))}
       </div>
 
       <div className="acc-card">

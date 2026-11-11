@@ -16,6 +16,8 @@ const ROOT = path.join(__dirname, '..');
 const DIRS = [path.join(ROOT, 'web/src/components'), path.join(ROOT, 'web/src')];
 
 const EXPLAIN_WORDS = ['说明', '建议', '例如', '例：', '请先', '可以用', '可以在这里', '也就是说', '注意：', '提示：', '建议使用'];
+// 空态 / 状态反馈（允许常驻）
+const EMPTY_STATE = /暂无|还没有|没有可推送|^—$|未设置|未启用|未配置/;
 const files = new Set();
 for (const d of DIRS) {
   if (!fs.existsSync(d)) continue;
@@ -52,10 +54,29 @@ for (const file of files) {
     if (/login-hint/.test(line)) {
       findings.push({ file: rel, line: n, rule: 'login-hint 常驻说明', text: line.trim().slice(0, 60) });
     }
+    // 4) section-desc / section-sub：分区下方的常驻说明段
+    const desc = line.match(/className="section-desc"[^>]*>([^<]+)</);
+    if (desc && desc[1].trim() && !EMPTY_STATE.test(desc[1])) {
+      findings.push({ file: rel, line: n, rule: '分区说明段常驻', text: desc[1].trim().slice(0, 60) });
+    }
+    // 5) label 里的括号解释（应改为 title 悬停标注）
+    const labelParen = line.match(/<label[^>]*>([^<]*[（(][^<]{6,}[）)])/);
+    if (labelParen) {
+      findings.push({ file: rel, line: n, rule: 'label 括号说明（改 title 悬停）', text: labelParen[1].trim().slice(0, 60) });
+    }
+    // 6) 独立的 <p> 说明段（≥22 个中文字符视为说明）
+    const pTag = line.match(/<p[^>]*>([^<]+)</);
+    if (pTag) {
+      const t = pTag[1].trim();
+      const zh = (t.match(/[\u4e00-\u9fa5]/g) || []).length;
+      if (zh >= 22 && !EMPTY_STATE.test(t) && !/style={{ color: 'var\(--(ok|fail|warn)'\)/.test(line)) {
+        findings.push({ file: rel, line: n, rule: '常驻说明段落', text: t.slice(0, 60) });
+      }
+    }
   });
 
-  // 4) 超长中文句子（>45 字）视为说明性文案
-  const longText = src.match(/[\u4e00-\u9fa5，。；、：]{45,}/g);
+  // 7) 超长中文句子（>40 字）视为说明性文案
+  const longText = src.match(/[\u4e00-\u9fa5，。；、：]{40,}/g);
   for (const t of longText || []) {
     const ln = src.slice(0, src.indexOf(t)).split(/\r?\n/).length;
     findings.push({ file: rel, line: ln, rule: '超长中文句子', text: t.slice(0, 60) });

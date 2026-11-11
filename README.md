@@ -104,6 +104,23 @@ cd server && npm install && npm run dev
 cd web && npm install && npm run dev   # http://localhost:5173，/api 代理到 8888
 # 单测
 cd server && node test/engine.test.js && node test/engine-v02.test.js && node test/curl-import.test.js && node test/logging.test.js
+# 全量单测
+cd server && for f in test/*.test.js; do node $f; done
+```
+
+质量护栏（都可用本地命令跑，命中即 exit 1）：
+
+| 工具 | 作用 |
+|---|---|
+| `node tools/ui-smoke.cjs <baseUrl>` | UI 冒烟检查：无依赖 CDP 驱动真实浏览器，按 7 种视口 × 明暗主题逐项体检（横向溢出 / 顶栏重叠 / 图标按钮框 / 下拉菜单被裁 / 弹窗 ✕·Esc·滚动锁 / 页面出现 undefined·NaN / 控制台报错） |
+| `node tools/copy-audit.cjs` | 文案金标准审计：无常驻说明性文字、无说明性副标题、label 无括号说明 |
+| `node tools/secret-scan.cjs` | 秘密扫描：工作区 + 完整 git 历史的高危凭据 + 仓库内容政策 |
+
+UI 冒烟检查需要先起一个本地实例（默认 `http://localhost:19998`）：
+
+```bash
+cd server && PORT=19998 DATA_DIR=/tmp/cq-ui ADMIN_PASSWORD=test1234 node src/index.js
+node tools/ui-smoke.cjs http://localhost:19998
 ```
 
 技术栈：Fastify / React 18 / @xyflow/react / zustand / jexl / croner。零数据库依赖，数据落在 `/data`（flows.json、runs.json、templates.json）。

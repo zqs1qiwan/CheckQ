@@ -134,7 +134,7 @@ export default function AccountPanel({ onToast }) {
           <div className="field"><label title="3-32 位字母数字。修改后其它设备会登出，需用新用户名重新登录">新用户名</label>
             <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={me.user.username} autoComplete="username" />
           </div>
-          <div className="field"><label>显示名（面板里展示的名字，可选）</label>
+          <div className="field"><label title="面板里展示的名字，可选">显示名</label>
             <input value={newDisplay} onChange={(e) => setNewDisplay(e.target.value)} placeholder={me.user.displayName} />
           </div>
           <div className="field"><label>当前密码（确认身份）</label>
@@ -168,7 +168,7 @@ export default function AccountPanel({ onToast }) {
           <>
             {me?.user.totpEnabled ? (
               <>
-                <div className="field"><label>账号密码（用于确认身份）</label>
+                <div className="field"><label title="用于确认身份">账号密码</label>
                   <input type="password" value={totpPassword} onChange={(e) => setTotpPassword(e.target.value)} />
                 </div>
                 <div className="field"><label>当前动态码</label>
@@ -181,7 +181,7 @@ export default function AccountPanel({ onToast }) {
               </>
             ) : (
               <>
-                <div className="field"><label>账号密码（用于确认身份）</label>
+                <div className="field"><label title="用于确认身份">账号密码</label>
                   <input type="password" value={totpPassword} onChange={(e) => setTotpPassword(e.target.value)} />
                 </div>
                 <button className="small primary" onClick={startEnroll}>开始绑定</button>
@@ -191,10 +191,10 @@ export default function AccountPanel({ onToast }) {
         )}
         {enroll && (
           <>
-            <div className="field"><label title="把密钥加入验证器 App，或直接导入 otpauth 链接">密钥（Base32）</label>
+            <div className="field"><label title="Base32 格式的密钥">密钥</label>
               <input className="mono" readOnly value={enroll.secret} onFocus={(e) => e.target.select()} />
             </div>
-            <div className="field"><label>otpauth 链接（可被 App 直接导入）</label>
+            <div className="field"><label title="可被验证器 App 直接导入">otpauth 链接</label>
               <input className="mono" readOnly value={enroll.uri} onFocus={(e) => e.target.select()} />
             </div>
             <div className="field"><label>验证码</label>

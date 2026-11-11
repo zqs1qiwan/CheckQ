@@ -66,9 +66,8 @@ export default function ApiKeysPanel({ onToast }) {
       <div className="page-head-row">
         <div>
           <h3 className="section-title">API 密钥</h3>
-          <p className="section-desc">用于调用 REST API 与 MCP。明文只在生成时显示一次。</p>
         </div>
-        <button className="primary" onClick={() => setCreating(true)}>生成新密钥</button>
+        <button className="primary" title="用于调用 REST API 与 MCP；明文只在生成时显示一次" onClick={() => setCreating(true)}>生成新密钥</button>
       </div>
 
       {created && (

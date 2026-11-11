@@ -875,7 +875,7 @@ function LogConfigModal({ flow, onClose, onSaved }) {
       }
     >
         <div className="field">
-          <label>记录档位（低档位自动忽略下方内容开关）</label>
+          <label title="低档位会自动忽略下方的内容开关">记录档位</label>
           <select value={level} onChange={(e) => setLevel(e.target.value)}>
             <option value="all">all —— 全部步骤完整记录（调试期）</option>
             <option value="failure">failure —— 仅失败步骤完整记录（稳定运行期）</option>
@@ -883,7 +883,7 @@ function LogConfigModal({ flow, onClose, onSaved }) {
           </select>
         </div>
         <div className="field">
-          <label>记录范围（决定运行日志里出现哪些步骤）</label>
+          <label title="决定运行日志里出现哪些步骤">记录范围</label>
           <select value={record} onChange={(e) => setRecord(e.target.value)}>
             <option value="log">仅 log 节点（默认：日常干净日志，只有你写的 log 才出现）</option>
             <option value="log-final">合并为一条（所有 log 合并成最终一条日志）</option>
@@ -898,18 +898,18 @@ function LogConfigModal({ flow, onClose, onSaved }) {
           </div>
         </div>
         <div className="field">
-          <label>记录内容开关（仅 all 档生效）</label>
+          <label title="仅在「全部」档位生效">记录内容开关</label>
           {chk('reqHeaders', '请求头')}
           {chk('reqBody', '请求体')}
           {chk('resBody', '响应体')}
           {chk('varsSnapshot', '运行后变量快照')}
         </div>
         <div className="field">
-          <label>响应体截断长度（字符，0 = 不记录）</label>
+          <label title="单位为字符，填 0 表示不记录响应体">响应体截断长度</label>
           <input className="mono" type="number" min={0} max={100000} value={resBodyLimit} onChange={(e) => setResBodyLimit(e.target.value)} />
         </div>
         <div className="field">
-          <label>关键字规则（命中值进运行摘要；仅影响日志/通知，不影响流程执行）</label>
+          <label title="命中值进运行摘要；只影响日志与通知，不影响流程执行">关键字规则</label>
           {keywords.map((k, i) => (
             <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 8, marginBottom: 8 }}>
               <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>

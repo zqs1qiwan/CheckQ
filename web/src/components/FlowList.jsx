@@ -931,7 +931,7 @@ function AiSettings() {
   return (
     <>
       <div className="field">
-        <label>AI 助手（快速组装 LLM，OpenAI 兼容接口{configured ? ' · 已配置' : ' · 未配置'}）</label>
+        <label title="快速组装用的 LLM，OpenAI 兼容接口">AI 助手{configured ? ' · 已配置' : ' · 未配置'}</label>
         <input placeholder="Base URL，例：https://api.deepseek.com/v1" value={cfg.baseUrl} onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value })} />
       </div>
       <div className="field-inline">
@@ -1035,7 +1035,7 @@ function SettingsFlow({ onToast }) {
         </div>
       </div>
       <div className="field">
-        <label>模板市场（从 URL 导入索引 JSON）</label>
+        <label title="从 URL 导入索引 JSON">模板市场</label>
         <div style={{ display: 'flex', gap: 6 }}>
           <input className="mono" placeholder="https://.../template.json" value={marketUrl} onChange={(e) => setMarketUrl(e.target.value)} />
           <button className="small" onClick={async () => {
@@ -1127,7 +1127,7 @@ function TemplateEditorModal({ tpl, onDone }) {
           <input value={desc} onChange={(e) => setDesc(e.target.value)} />
         </div>
         <div className="field">
-          <label>默认变量值（敏感项建议留空，实例化时再填真实值）</label>
+          <label title="敏感项建议留空，实例化时再填真实值">默认变量值</label>
           {vars.map((v, i) => (
             <div key={i} style={{ marginBottom: 8 }}>
               <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>

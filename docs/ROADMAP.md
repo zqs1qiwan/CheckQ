@@ -7,6 +7,7 @@
 - 引擎：10 种节点（http/condition/set/extract/delay/random-delay/log/notify/script/foreach），单链 DAG，500 步上限；
 - 存储：JSON 文件（flows/runs/templates/meta/notifications），原子写 + 变更立即 flush + SIGTERM flush；
 - 调度：croner，每任务独立 cron/时区/抖动；
+- 日志：默认干净模式（只出 log 节点）+ 连续日志流 + 调试模式；
 - 通知：12 渠道原生集成（站内/Webhook/Bark/Telegram/Server酱/PushPlus/钉钉/企业微信/飞书/Gotify/ntfy/邮件SMTP）+ 站内通知中心；
 - 日志：level 三档 + record 三档（all/log/log-final）+ 关键字摘要；
 - API：REST + X-API-Key；MCP：stdio 10 工具；
@@ -26,6 +27,13 @@
 | 存储可靠性（立即 flush / SIGTERM flush） | ✅ |
 | WorkBuddy 19/19 任务自动完成 | ✅（71 节点流程，生产 cron 25 6 * * *） |
 | UI 全量遍历（设置/日志/通知/引导/调度/导入/批量/移动端） | ✅ 2026-11-11（修复日志配置白屏） |
+
+| 日志干净模式（默认只出 log 节点 + 失败步骤） | ✅ 2026-11-11（无 log 节点自动退回全步骤） |
+| 连续日志流（多次运行一条时间线，可上翻历史） | ✅ 2026-11-11（`GET /api/flows/:id/logs` + 首页 LogStream） |
+| 调试模式（任务级 + 单次运行临时开启） | ✅ 2026-11-11（`log.debug` / `run {debug:true}`） |
+| 界面提示级别（默认仅错误） | ✅ 2026-11-11（`GET/PUT /api/system/ui`） |
+| 每日总推送独立可选（默认关）+ 立即推送 | ✅ 2026-11-11（面板汇总始终实时） |
+| GLaDOS challenge 校验版签到流程 | ✅ 2026-11-11（13 节点，真实 cookie 实跑通过） |
 
 ## P1（体验）
 

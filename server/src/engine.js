@@ -48,7 +48,7 @@ export class Engine {
   }
 
   /** 执行流程。debugStopId: 调试模式，跑到该节点（含）即止。returns { ok, logs, vars, finalMessage } */
-  async run({ trigger = 'manual', runId, logSink, debugStopId } = {}) {
+  async run({ trigger = 'manual', runId, logSink, debugStopId, debug } = {}) {
     const flow = this.flow;
     const vars = { ...(flow.vars || {}) };
     const state = { vars, last: null, steps: {}, cookieJar: new CookieJar() };
@@ -64,8 +64,8 @@ export class Engine {
     // 流程里根本没有 log 节点时，clean 模式会一条不剩 → 自动退回全步骤（避免"日志空白"）
     const hasLogNode = (flow.nodes || []).some((n) => n && n.type === 'log');
     const effectiveRecord = (logRecord === 'log' || logRecord === 'log-final') && !hasLogNode ? 'all' : logRecord;
-    // 调试模式：保留每步请求/响应细节（日常不用，出问题时在日志配置里打开）
-    const debugMode = logCfg?.debug === true;
+    // 调试模式：保留每步请求/响应细节（日常不用，出问题时在日志配置里打开；也可单次运行临时开启）
+    const debugMode = logCfg?.debug === true || debug === true;
     const shouldDisplay = (sl) => {
       if (debugMode) return true;
       if (effectiveRecord === 'all') return true;

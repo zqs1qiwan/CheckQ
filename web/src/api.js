@@ -36,14 +36,14 @@ export const api = {
   createFlow: (flow) => req('POST', '/api/flows', flow),
   updateFlow: (id, patch) => req('PUT', `/api/flows/${id}`, patch),
   deleteFlow: (id) => req('DELETE', `/api/flows/${id}`),
-  runFlow: (id, debugStopId) => req('POST', `/api/flows/${id}/run`, debugStopId ? { debugStopId } : {}),
+  runFlow: (id, debugStopId, debug) => req('POST', `/api/flows/${id}/run`, { ...(debugStopId ? { debugStopId } : {}), ...(debug ? { debug: true } : {}) }),
   // SSE 流式运行（PRD §4.7.3）：onStart/onLog 实时回调，返回完整 run 对象
-  runFlowStream: async (id, { debugStopId, onStart, onLog } = {}) => {
+  runFlowStream: async (id, { debugStopId, debug, onStart, onLog } = {}) => {
     const res = await fetch(`/api/flows/${id}/run`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ stream: true, ...(debugStopId ? { debugStopId } : {}) }),
+      body: JSON.stringify({ stream: true, ...(debugStopId ? { debugStopId } : {}), ...(debug ? { debug: true } : {}) }),
     });
     if (res.status === 401) {
       if (on401) on401();

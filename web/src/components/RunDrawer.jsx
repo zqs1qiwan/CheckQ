@@ -8,12 +8,18 @@ function fmtTime(ts) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepPick }) {
+export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepPick, debug: debugProp, onDebugChange }) {
   const [tab, setTab] = useState('logs');
   const [hist, setHist] = useState(null);
   const [expanded, setExpanded] = useState(null); // log index
   const [override, setOverride] = useState(null); // 历史点开的完整 run
   const [pickFor, setPickFor] = useState(null); // {stepId, body} 当前点选的响应
+  const [debugLocal, setDebugLocal] = useState(false); // 调试模式（受控优先）
+  const debug = debugProp !== undefined ? debugProp : debugLocal;
+  const setDebug = (v) => {
+    setDebugLocal(v);
+    if (onDebugChange) onDebugChange(v);
+  };
 
   useEffect(() => {
     setOverride(null);
@@ -34,7 +40,6 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepP
   const statusLabel = shown.status === 'success' ? '执行成功' : shown.status === 'failed' ? '执行失败' : '执行中';
   const failLog = shown.logs?.find((l) => !l.ok);
   const [errFilter, setErrFilter] = useState('all'); // all | network | assert | engine
-  const [debug, setDebug] = useState(false); // 调试模式：显示每步请求/响应细节
   // 日常只看「人话」：log 节点输出 + 失败步骤；调试模式才展开全部步骤
   const cleanLogs = (shown.logs || []).filter((l) => l.type === 'log' || !l.ok);
   const visibleLogs = (debug ? (shown.logs || []) : cleanLogs).filter((l) => errFilter === 'all' || l.errorType === errFilter || (errFilter === 'network' && l.errorType === 'network'));

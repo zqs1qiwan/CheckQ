@@ -67,6 +67,7 @@ function FlowEditorInner({ flowId, onBack }) {
   const [logOpen, setLogOpen] = useState(false);
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [debugRun, setDebugRun] = useState(false); // 单次运行调试模式（记录每步请求/响应）
   const [cookieOpen, setCookieOpen] = useState(false);
   const [tplOpen, setTplOpen] = useState(false);
   const [tplName, setTplName] = useState('');
@@ -254,6 +255,7 @@ function FlowEditorInner({ flowId, onBack }) {
     setRunResult({ id: 'pending', status: 'running', logs: [] });
     try {
       const r = await api.runFlowStream(flow.id, {
+        debug: debugRun,
         onStart: () => {
           setRunResult({ id: 'pending', status: 'running', logs: [] });
           setRunStatusAll(null);
@@ -273,7 +275,7 @@ function FlowEditorInner({ flowId, onBack }) {
     } catch (e) {
       setRunResult({ id: 'err', status: 'failed', logs: [], finalMessage: e.message, durationMs: 0 });
     }
-  }, [dirty, save, flow?.id]);
+  }, [dirty, save, flow?.id, debugRun]);
 
   const testNotify = async () => {
     try {
@@ -314,6 +316,7 @@ function FlowEditorInner({ flowId, onBack }) {
     try {
       const r = await api.runFlowStream(flow.id, {
         debugStopId: nodeId,
+        debug: debugRun,
         onStart: () => {
           setRunResult({ id: 'pending', status: 'running', logs: [] });
           setRunStatusAll(null);
@@ -592,7 +595,7 @@ function FlowEditorInner({ flowId, onBack }) {
         </div>
 
         {drawerOpen && (
-          <RunDrawer run={runResult} flowId={flow.id} onClose={() => setDrawerOpen(false)} onPickResponse={handlePickResponse} onRepPick={replaceFailedNode} />
+          <RunDrawer run={runResult} flowId={flow.id} onClose={() => setDrawerOpen(false)} onPickResponse={handlePickResponse} onRepPick={replaceFailedNode} debug={debugRun} onDebugChange={setDebugRun} />
         )}
       </div>
 

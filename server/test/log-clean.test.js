@@ -73,6 +73,15 @@ await ok('显式 record=all 时保留全部步骤', async () => {
   assert.strictEqual(r.logs.length, 2);
 });
 
+await ok('单次运行临时开启调试（run({debug:true})）', async () => {
+  mockFetch();
+  const f = { id: 't', name: 't', vars: {}, log: { record: 'log' }, nodes: [httpNode('h1'), logNode('l1', '完成')], edges };
+  const r = await new Engine(f).run({ debug: true });
+  const httpLog = r.logs.find((l) => l.type === 'http');
+  assert.ok(httpLog, '调试运行应记录 http 步骤');
+  assert.ok(httpLog.detail?.response?.body, '调试运行应记录响应体');
+});
+
 // ---- API 层 ----
 const dir = fs.mkdtempSync(os.tmpdir() + '/cq-logclean-');
 const { buildServer } = await import('../src/api.js');

@@ -70,7 +70,7 @@ export function buildServer({ dataDir, port }) {
   };
   const queuedSet = new Set(); // 等待中的 flowId（排队中徽章）
   const runner = {
-    async runFlow(flow, trigger, { debugStopId, onLog } = {}) {
+    async runFlow(flow, trigger, { debugStopId, onLog, debug } = {}) {
       const isQueued = runningFlows.has(flow.id);
       if (isQueued) queuedSet.add(flow.id);
       try {
@@ -84,7 +84,7 @@ export function buildServer({ dataDir, port }) {
           };
           try {
             const engine = new Engine(flow);
-            const result = await engine.run({ trigger, runId, debugStopId, logSink: onLog });
+            const result = await engine.run({ trigger, runId, debugStopId, debug: debug === true, logSink: onLog });
             run.status = result.ok ? 'success' : 'failed';
             run.logs = result.logs;
             run.finalMessage = result.finalMessage || (result.ok ? '' : '执行失败');
@@ -784,6 +784,7 @@ export function buildServer({ dataDir, port }) {
       push('start', { flowId: f.id, flowName: f.name, queued });
       const run = await runner.runFlow(f, debugStopId ? 'debug' : 'manual', {
         debugStopId,
+        debug: (req.body || {}).debug === true,
         onLog: (log) => push('log', log),
       });
       push('done', run);
@@ -791,7 +792,7 @@ export function buildServer({ dataDir, port }) {
       return reply;
     }
 
-    const run = await runner.runFlow(f, debugStopId ? 'debug' : 'manual', { debugStopId });
+    const run = await runner.runFlow(f, debugStopId ? 'debug' : 'manual', { debugStopId, debug: (req.body || {}).debug === true });
     return run; // 完整 run 对象（含 logs），前端直接渲染
   });
 

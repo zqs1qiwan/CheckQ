@@ -491,27 +491,14 @@ export function buildServer({ dataDir, port }) {
   // ---- auth ----
   app.addHook('onRequest', async (req, reply) => {
     const path = req.url.split('?')[0];
-    const pub = path === '/api/login' || path === '/api/health' || path === '/api/system/bootstrap' || path === '/api/me' || !path.startsWith('/api/');
-    if (pub) return;
-    const sess = currentSession(req);
-    if (sess) {
-      const user = store.getUser(sess.userId);
-      if (!user || user.disabled) { sessions.delete(sess.qsid); return reply.code(401).send({ error: '账号不可用' }); }
-      req.user = user;
-      req.session = sess;
-      // 只读角色：禁止一切写操作
-      if (user.role === 'viewer' && !['GET', 'HEAD'].includes(req.method)) {
-        return reply.code(403).send({ error: '只读账号不能执行写操作' });
-      }
-      return;
-    }
+
+    // 1) API Key（外部 Agent / 脚本）：先识别，再按作用域判定
     const auth = req.headers['x-api-key'];
     if (auth) {
       const key = store.findApiKeyByHash(hashApiKey(auth));
       if (key) {
         // 作用域：read=查看 / run=运行任务 / write=增删改配置
         const scopes = Array.isArray(key.scopes) && key.scopes.length ? key.scopes : ['read', 'run', 'write'];
-        const path = req.url.split('?')[0];
         const need = ['GET', 'HEAD'].includes(req.method) ? 'read'
           : (/^\/api\/flows\/[^/]+\/run$/.test(path) ? 'run' : 'write');
         if (!scopes.includes(need)) {
@@ -524,6 +511,24 @@ export function buildServer({ dataDir, port }) {
       // 兼容旧的单条 meta.apiKey（全权限）
       if (store.meta.apiKey && auth === store.meta.apiKey) { req.legacyApiKey = true; return; }
     }
+
+    // 2) 浏览器会话
+    const sess = currentSession(req);
+    if (sess) {
+      const user = store.getUser(sess.userId);
+      if (!user || user.disabled) { sessions.delete(sess.qsid); return reply.code(401).send({ error: '账号不可用' }); }
+      req.user = user;
+      req.session = sess;
+      // 只读角色：禁止一切写操作
+      if (user.role === 'viewer' && !['GET', 'HEAD'].includes(req.method)) {
+        return reply.code(403).send({ error: '只读账号不能执行写操作' });
+      }
+      return;
+    }
+
+    // 3) 公开接口
+    const pub = path === '/api/login' || path === '/api/health' || path === '/api/system/bootstrap' || path === '/api/me' || !path.startsWith('/api/');
+    if (pub) return;
     return reply.code(401).send({ error: '未登录' });
   });
 

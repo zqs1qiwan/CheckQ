@@ -962,6 +962,56 @@ export function buildServer({ dataDir, port }) {
     return r;
   });
 
+  /**
+   * 连续日志流（qinglong 面板风格）：把该任务多次运行的日志拍平成一条可滚动的时间线。
+   * query: limit=总行数（默认 200，最大 2000）, before=runId（取更早的历史）
+   * 返回 { entries: [{runId, startedAt, status, index, name, message, type, ok, ms, summary, finalMessage}], runs, hasMore }
+   */
+  app.get('/api/flows/:id/logs', async (req, reply) => {
+    const f = store.getFlow(req.params.id);
+    if (!f) return reply.code(404).send({ error: 'not found' });
+    const q = req.query || {};
+    const limit = Math.min(Math.max(Number(q.limit) || 200, 20), 2000);
+    const before = q.before ? String(q.before) : null;
+    const all = store.listRuns(f.id, 500);
+    const runs = before ? all.slice(all.findIndex((r) => r.id === before) + 1) : all;
+    const entries = [];
+    for (const r of runs) {
+      const lines = (r.logs || []).map((l) => ({
+        runId: r.id,
+        startedAt: r.startedAt,
+        status: r.status,
+        index: l.index,
+        name: l.name,
+        message: l.message || '',
+        type: l.type,
+        ok: l.ok !== false,
+        ms: l.ms || 0,
+        summary: r.summary || '',
+        finalMessage: r.finalMessage || '',
+      }));
+      entries.push(...lines);
+      if (entries.length >= limit) break;
+    }
+    const truncated = entries.slice(0, limit);
+    return {
+      entries: truncated,
+      runs: runs.slice(0, 60).map((r) => ({ id: r.id, startedAt: r.startedAt, status: r.status, count: (r.logs || []).length, summary: r.summary || '', finalMessage: r.finalMessage || '' })),
+      hasMore: entries.length > truncated.length || runs.length > 60,
+      nextBefore: runs.length ? runs[Math.min(runs.length - 1, 60)].id : null,
+    };
+  });
+
+  // 界面偏好（提示级别等）：全局设置
+  app.get('/api/system/ui', async () => ({ toastLevel: store.meta.ui?.toastLevel || 'error' }));
+  app.put('/api/system/ui', async (req) => {
+    const level = String((req.body || {}).toastLevel || 'error');
+    const allowed = ['error', 'success', 'all'];
+    store.meta.ui = { ...(store.meta.ui || {}), toastLevel: allowed.includes(level) ? level : 'error' };
+    store.flush();
+    return store.meta.ui;
+  });
+
   // ---- import ----
   app.post('/api/import/har', async (req, reply) => {
     let text;

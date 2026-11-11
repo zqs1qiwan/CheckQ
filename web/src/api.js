@@ -106,6 +106,7 @@ export const api = {
   templateFromUrl: (url) => req('POST', '/api/templates/from-url', { url }),
   notifyTest: (flowId) => req('POST', `/api/flows/${flowId}/notify-test`, {}),
   dailySummary: (flowId) => req('POST', '/api/system/daily-summary', flowId ? { flowId } : {}),
+  pushDailySummary: (opts) => req('POST', '/api/system/daily-summary', opts || {}),
   batch: (ids, action) => req('POST', '/api/flows/batch', { ids, action }),
   browserLoginStart: (flowId, url) => req('POST', '/api/browser-login/start', { flowId, url }),
   browserLoginCapture: (flowId, tabId) => req('POST', '/api/browser-login/capture', { flowId, tabId }),
@@ -114,4 +115,7 @@ export const api = {
   notifications: (limit = 50) => req('GET', `/api/notifications?limit=${limit}`),
   markNotificationsRead: (ids) => req('POST', '/api/notifications/read', ids ? { ids } : {}),
   clearNotifications: () => req('DELETE', '/api/notifications'),
+  flowLogs: (id, { limit = 200, before = null } = {}) => req('GET', `/api/flows/${id}/logs?limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ''}`),
+  uiSettings: () => req('GET', '/api/system/ui'),
+  saveUiSettings: (patch) => req('PUT', '/api/system/ui', patch),
 };

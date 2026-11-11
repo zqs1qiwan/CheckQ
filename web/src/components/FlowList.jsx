@@ -2,11 +2,18 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import ThemeToggle from './ThemeToggle.jsx';
 import GuideModal from './GuideModal.jsx';
+import LogStream from './LogStream.jsx';
+import { toast as globalToast, setToastLevel, getToastLevel } from '../toast.js';
 
 function fmtTime(ts) {
   const d = new Date(ts);
   const p = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** 统一走全局提示总线（受「设置 → 提示级别」控制） */
+function setToast({ kind, text }) {
+  globalToast(text, kind === 'fail' ? 'fail' : kind === 'ok' ? 'ok' : 'info');
 }
 
 /** 自然语言式向导（菜单式）：填站点/事件 → 生成流程骨架（全程不写正则） */
@@ -138,20 +145,9 @@ function WizardModal({ onClose, onCreated }) {
   );
 }
 
-function Toast({ toast, onClose }) {
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(onClose, 4000);
-    return () => clearTimeout(t);
-  }, [toast]);
-  if (!toast) return null;
-  return <div className={`toast ${toast.kind || 'ok'}`}>{toast.text}</div>;
-}
-
 export default function FlowList({ onOpen, onLogout }) {
   const [flows, setFlows] = useState(null);
   const [templates, setTemplates] = useState(null);
-  const [toast, setToast] = useState(null);
   const [modal, setModal] = useState(null); // 'new' | 'import' | 'template-editor' | {type:'instantiate', tpl} | {type:'result', run}
   const [importBusy, setImportBusy] = useState(false);
   const [running, setRunning] = useState(null); // flowId -> 'running'
@@ -287,16 +283,8 @@ export default function FlowList({ onOpen, onLogout }) {
   };
 
   const openLog = async (f) => {
-    try {
-      const full = f.lastRun ? await api.run(f.lastRun.id) : (await api.runs(f.id, 1))[0];
-      if (!full) {
-        setToast({ kind: 'fail', text: '该任务还没有运行记录，先点「运行」' });
-        return;
-      }
-      setModal({ type: 'result', run: full, flowId: f.id });
-    } catch (e) {
-      setToast({ kind: 'fail', text: e.message });
-    }
+    // 打开连续日志流（多次运行滚动在一起）
+    setModal({ type: 'logstream', flowId: f.id, flowName: f.name });
   };
 
   const lastStatus = (f) => {
@@ -558,6 +546,10 @@ export default function FlowList({ onOpen, onLogout }) {
         <ResultModal run={modal.run} flowId={modal.flowId} onClose={() => setModal(null)} />
       )}
 
+      {modal?.type === 'logstream' && (
+        <LogStream flowId={modal.flowId} flowName={modal.flowName} onClose={() => setModal(null)} />
+      )}
+
       {modal?.type === 'template-editor' && (
         <TemplateEditorModal tpl={modal.tpl} onDone={() => { setModal(null); load(); }} />
       )}
@@ -577,8 +569,6 @@ export default function FlowList({ onOpen, onLogout }) {
       {guideOpen && (
         <GuideModal onClose={() => { setGuideOpen(false); try { localStorage.setItem('checkq-guide-seen', '1'); } catch {} }} />
       )}
-
-      <Toast toast={toast} onClose={() => setToast(null)} />
     </>
   );
 }
@@ -1022,33 +1012,68 @@ function AiSettings() {
   );
 }
 
-/* 设置内：每日汇总定时 */
+/* 设置内：每日总推送（可选）+ 界面提示级别 */
 function SettingsFlow({ onToast }) {
   const [cfg, setCfg] = useState({ enabled: false, time: '08:00', timezone: 'Asia/Shanghai', targetFlowId: '' });
   const [flows, setFlows] = useState([]);
   const [marketUrl, setMarketUrl] = useState('');
+  const [level, setLevel] = useState(getToastLevel());
+  const [pushing, setPushing] = useState(false);
   useEffect(() => {
     api.dailySummaryConfig().then(setCfg).catch(() => {});
     api.flows().then(setFlows).catch(() => setFlows([]));
   }, []);
+  const changeLevel = async (v) => {
+    setLevel(v);
+    setToastLevel(v);
+    try { await api.saveUiSettings({ toastLevel: v }); } catch (e) { onToast(e.message); }
+  };
+  const pushNow = async () => {
+    if (!cfg.targetFlowId) { onToast('先选择一个带通知渠道的任务'); return; }
+    setPushing(true);
+    try {
+      const r = await api.pushDailySummary({ flowId: cfg.targetFlowId });
+      onToast(`已推送：${r.text || '今日汇总'}`);
+    } catch (e) { onToast(e.message); }
+    finally { setPushing(false); }
+  };
   return (
     <>
       <div className="field">
-        <label>每日汇总（自动）</label>
+        <label>界面提示</label>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input type="radio" name="toast-level" style={{ width: 'auto' }} checked={level === 'error'} onChange={() => changeLevel('error')} />
+          仅错误提示（默认，日常最安静）
+        </label>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input type="radio" name="toast-level" style={{ width: 'auto' }} checked={level === 'success'} onChange={() => changeLevel('success')} />
+          成功 + 错误提示
+        </label>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input type="radio" name="toast-level" style={{ width: 'auto' }} checked={level === 'all'} onChange={() => changeLevel('all')} />
+          全部提示
+        </label>
+        <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 4, lineHeight: 1.5 }}>
+          面板上的「今日汇总」始终是实时数据，打开首页就能看到；这里只控制右上角弹出的提示。
+        </div>
+      </div>
+      <div className="field">
+        <label>每日总推送（可选，默认关）</label>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input type="checkbox" style={{ width: 'auto' }} checked={!!cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} />
-          每天 {cfg.time} 自动发送到所选任务的通知渠道
+          每天 {cfg.time} 把今日汇总推送到所选任务的通知渠道
         </label>
-        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
           <input type="time" style={{ width: 110 }} value={cfg.time} onChange={(e) => setCfg({ ...cfg, time: e.target.value })} />
           <select value={cfg.targetFlowId || ''} onChange={(e) => setCfg({ ...cfg, targetFlowId: e.target.value })}>
             <option value="">选有渠道的任务</option>
             {flows.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
           <button className="small" onClick={async () => {
-            try { const r = await api.saveDailySummaryConfig(cfg); setCfg(r); onToast('每日汇总已保存'); }
+            try { const r = await api.saveDailySummaryConfig(cfg); setCfg(r); onToast('每日总推送设置已保存'); }
             catch (e) { onToast(e.message); }
           }}>保存</button>
+          <button className="small" onClick={pushNow} disabled={pushing}>{pushing ? '推送中…' : '立即推送今日汇总'}</button>
         </div>
       </div>
       <div className="field">

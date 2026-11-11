@@ -34,7 +34,10 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepP
   const statusLabel = shown.status === 'success' ? '执行成功' : shown.status === 'failed' ? '执行失败' : '执行中';
   const failLog = shown.logs?.find((l) => !l.ok);
   const [errFilter, setErrFilter] = useState('all'); // all | network | assert | engine
-  const visibleLogs = (shown.logs || []).filter((l) => errFilter === 'all' || l.errorType === errFilter || (errFilter === 'network' && l.errorType === 'network'));
+  const [debug, setDebug] = useState(false); // 调试模式：显示每步请求/响应细节
+  // 日常只看「人话」：log 节点输出 + 失败步骤；调试模式才展开全部步骤
+  const cleanLogs = (shown.logs || []).filter((l) => l.type === 'log' || !l.ok);
+  const visibleLogs = (debug ? (shown.logs || []) : cleanLogs).filter((l) => errFilter === 'all' || l.errorType === errFilter || (errFilter === 'network' && l.errorType === 'network'));
 
   return (
     <div className="run-drawer">
@@ -55,12 +58,18 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepP
           <button className={tab === 'vars' ? 'active' : ''} onClick={() => setTab('vars')}>变量快照</button>
           <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>历史记录</button>
           {tab === 'logs' && (
-            <select value={errFilter} onChange={(e) => setErrFilter(e.target.value)} style={{ fontSize: 12, padding: '4px 6px' }} title="错误分类筛选">
-              <option value="all">全部步骤</option>
-              <option value="network">网络失败</option>
-              <option value="assert">断言失败</option>
-              <option value="engine">引擎/配置</option>
-            </select>
+            <>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, whiteSpace: 'nowrap' }} title="调试模式：显示每一步的请求/响应细节">
+                <input type="checkbox" style={{ width: 'auto' }} checked={debug} onChange={(e) => setDebug(e.target.checked)} />
+                调试
+              </label>
+              <select value={errFilter} onChange={(e) => setErrFilter(e.target.value)} style={{ fontSize: 12, padding: '4px 6px' }} title="错误分类筛选">
+                <option value="all">全部步骤</option>
+                <option value="network">网络失败</option>
+                <option value="assert">断言失败</option>
+                <option value="engine">引擎/配置</option>
+              </select>
+            </>
           )}
         </div>
         <button className="small" onClick={onClose}>关闭</button>
@@ -70,7 +79,7 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepP
         {tab === 'logs' && (
           <>
             {!visibleLogs?.length ? (
-              <div className="empty" style={{ padding: 30 }}>暂无日志</div>
+              <div className="empty" style={{ padding: 30 }}>暂无日志（默认只显示 log 节点输出与失败步骤；勾选「调试」查看每步细节）</div>
             ) : (
               visibleLogs.map((log, i) => (
                 <div key={i} className="step-row">

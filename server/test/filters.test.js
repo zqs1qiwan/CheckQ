@@ -55,5 +55,10 @@ check('now:%f 毫秒', /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/.test(nowFu
 const day = renderTemplate('{{t|now:%Y-%m-%d}}', {});
 check('模板 now 日期', /^\d{4}-\d{2}-\d{2}$/.test(day), true);
 
+// num filter: strip backend fixed-point noise
+check('filter num strips trailing zeros', renderTemplate('{{v|num}}', { v: '10.0000000000000000' }), '10');
+check('filter num keeps real decimals', renderTemplate('{{v|num}}', { v: '1128.500000' }), '1128.5');
+check('filter num passthrough for non-number', renderTemplate('{{v|num}}', { v: 'abc' }), 'abc');
+
 console.log(`${passed}/${passed + failed} passed`);
 process.exit(failed ? 1 : 0);

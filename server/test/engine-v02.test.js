@@ -36,8 +36,8 @@ async function ok(name, fn) {
 function httpNode(id, config) {
   return { id, type: 'http', name: id, x: 0, y: 0, config };
 }
-function flow(nodes, edges, vars = {}) {
-  return { id: 't', name: 't', vars, nodes, edges };
+function flow(nodes, edges, vars = {}, log = null) {
+  return { id: 't', name: 't', vars, nodes, edges, ...(log ? { log } : {}) };
 }
 
 // ========== 1. 节点级重试：网络错误 ==========
@@ -163,7 +163,7 @@ await ok('charset=gbk 正确解码中文', async () => {
   const f = flow([
     httpNode('a', { method: 'GET', url: 'https://example.com/gbk', headers: [], body: '', asserts: [], charset: 'gbk' }),
     { id: 'b', type: 'log', name: 'show', x: 100, y: 0, config: { text: '内容: {{last.jsonText}}' } },
-  ], [{ id: 'e1', source: 'a', target: 'b' }]);
+  ], [{ id: 'e1', source: 'a', target: 'b' }], {}, { level: 'all', record: 'all' });
   const res = await new Engine(f).run({});
   assert.strictEqual(res.ok, true);
   assert.ok(res.logs.some((l) => l.type === 'http' && l.detail?.response?.body?.includes('你好')), '响应体应解码为中文');
@@ -218,7 +218,7 @@ await ok('foreach 源为 JSON 字符串数组 → 正常遍历', async () => {
     { id: 'e1', source: 'f', sourceHandle: 'each', target: 'a' },
     { id: 'e2', source: 'f', sourceHandle: 'next', target: 'l' },
     { id: 'e3', source: 'a', target: 'l' },
-  ], { codes: '["x","y"]' });
+  ], { codes: '["x","y"]' }, { level: 'all', record: 'all' });
   const res = await new Engine(f).run({});
   assert.strictEqual(res.ok, true, res.logs.map((l) => l.message).join('; '));
   assert.ok(res.logs.some((l) => l.type === 'http' && l.detail?.url === 'https://example.com/t/x'), '第一轮应请求 code=x');

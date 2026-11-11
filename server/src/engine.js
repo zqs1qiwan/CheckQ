@@ -59,9 +59,16 @@ export class Engine {
     // 低档位（failure/summary）强制忽略 include（见 run 末尾裁剪），include 只在 level=all 生效
     const logCfg = (flow.log && typeof flow.log === 'object') ? flow.log : null;
     const logLevel = logCfg?.level || 'all';
-    const logRecord = logCfg?.record || 'all';
+    // 记录范围默认 clean：只留 log 节点（人话）+ 失败步骤；'all' 保留全部步骤
+    const logRecord = logCfg?.record || 'log';
+    // 流程里根本没有 log 节点时，clean 模式会一条不剩 → 自动退回全步骤（避免"日志空白"）
+    const hasLogNode = (flow.nodes || []).some((n) => n && n.type === 'log');
+    const effectiveRecord = (logRecord === 'log' || logRecord === 'log-final') && !hasLogNode ? 'all' : logRecord;
+    // 调试模式：保留每步请求/响应细节（日常不用，出问题时在日志配置里打开）
+    const debugMode = logCfg?.debug === true;
     const shouldDisplay = (sl) => {
-      if (logRecord === 'all') return true;
+      if (debugMode) return true;
+      if (effectiveRecord === 'all') return true;
       if (!sl.ok) return true; // 失败步骤永远保留
       return sl.type === 'log';
     };
@@ -190,9 +197,9 @@ export class Engine {
     //   log       = 仅 log 节点 + 失败步骤（qinglong/qiandao 风格，用户只看调教好的干净日志）
     //   log-final = 合并所有 log 节点为一条汇总日志 + 失败步骤
     let trimmedLogs = logs;
-    if (logRecord === 'log' || logRecord === 'log-final') {
+    if (!debugMode && (effectiveRecord === 'log' || effectiveRecord === 'log-final')) {
       const displayed = logs.filter((l) => shouldDisplay(l));
-      if (logRecord === 'log-final') {
+      if (effectiveRecord === 'log-final') {
         const logLines = logs.filter((l) => l.type === 'log' && l.ok).map((l) => (l.message || '').trim()).filter(Boolean);
         const merged = logLines.join('； ');
         const finalEntry = { stepId: null, index: 1, name: '汇总', type: 'log', ok: !failed, message: merged || (finalMessage || '流程执行完成'), detail: null, ms: 0 };
@@ -214,6 +221,9 @@ export class Engine {
         };
       });
     }
+
+    // 非调试模式：成功步骤不落请求/响应细节（保留失败步骤详情便于排障）
+    // 注：clean 模式下 http 步骤本就不入日志，故此处无需再裁剪。
 
     // 运行摘要：关键字提取结果汇总（PRD：每次运行关心什么值，一眼可见）
     const summary = keywordResults.length

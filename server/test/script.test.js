@@ -15,7 +15,8 @@ await ok('script 返回对象合并回 vars', async () => {
   const r = await new Engine(f).run({});
   assert.strictEqual(r.ok, true);
   assert.strictEqual(r.vars.doubled, '42');
-  assert.ok(r.logs[1].message.includes('d=42'), r.logs[1].message);
+  const line = r.logs.find((l) => l.type === 'log');
+  assert.ok(line && line.message.includes('d=42'), JSON.stringify(r.logs.map((l) => l.message)));
 });
 await ok('script 拿不到 require（沙箱隔离）', async () => {
   const f = flow([scriptNode('return { x: require("fs") };')]);

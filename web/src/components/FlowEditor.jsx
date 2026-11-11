@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow, ReactFlowProvider, Background, Controls, MiniMap, addEdge,
   useNodesState, useEdgesState, Handle, Position, MarkerType, useReactFlow,
@@ -10,6 +10,7 @@ import ThemeToggle from './ThemeToggle.jsx';
 import ConfigPanel from './ConfigPanel.jsx';
 import RunDrawer from './RunDrawer.jsx';
 import GuideModal from './GuideModal.jsx';
+import { toast as globalToast } from '../toast.js';
 
 const COLOR = Object.fromEntries(Object.entries(STEP_TYPES).map(([k, v]) => [k, v.color]));
 
@@ -70,7 +71,6 @@ function FlowEditorInner({ flowId, onBack }) {
   const [tplOpen, setTplOpen] = useState(false);
   const [tplName, setTplName] = useState('');
   const [tplErr, setTplErr] = useState('');
-  const [toast, setToast] = useState(null);
   const saveTimer = useRef(null);
   const stateRef = useRef({});
   const historyRef = useRef({ past: [], future: [] });
@@ -159,8 +159,7 @@ function FlowEditorInner({ flowId, onBack }) {
   });
 
   const showToast = (text, kind = 'fail') => {
-    setToast({ text, kind });
-    setTimeout(() => setToast(null), 3500);
+    globalToast(text, kind === 'ok' ? 'ok' : 'fail');
   };
 
   const save = useCallback(async () => {
@@ -632,7 +631,6 @@ function FlowEditorInner({ flowId, onBack }) {
         </div>
       )}
 
-      {toast && <div className={`toast ${toast.kind}`} onClick={() => setToast(null)}>{toast.text}</div>}
     </>
   );
 }
@@ -830,7 +828,8 @@ function NotifyModal({ flow, onClose, onSaved, onToast }) {
 function LogConfigModal({ flow, onClose, onSaved }) {
   const cur = flow.log && typeof flow.log === 'object' ? flow.log : {};
   const [level, setLevel] = useState(cur.level || 'all');
-  const [record, setRecord] = useState(cur.record || 'all');
+  const [record, setRecord] = useState(cur.record || 'log');
+  const [debug, setDebug] = useState(cur.debug === true);
   const [include, setInclude] = useState({
     reqHeaders: cur.include?.reqHeaders !== false,
     reqBody: cur.include?.reqBody !== false,
@@ -843,7 +842,7 @@ function LogConfigModal({ flow, onClose, onSaved }) {
 
   const save = async () => {
     try {
-      const nf = await api.updateFlow(flow.id, { log: { level, record, include, resBodyLimit: Number(resBodyLimit) || 0, keywords } });
+      const nf = await api.updateFlow(flow.id, { log: { level, record, debug, include, resBodyLimit: Number(resBodyLimit) || 0, keywords } });
       onSaved(nf);
       onClose();
     } catch (e) { setErr(e.message); }
@@ -871,10 +870,17 @@ function LogConfigModal({ flow, onClose, onSaved }) {
         <div className="field">
           <label>记录范围（决定运行日志里出现哪些步骤）</label>
           <select value={record} onChange={(e) => setRecord(e.target.value)}>
-            <option value="all">全部步骤（调试：每个节点一行）</option>
-            <option value="log">仅 log 节点（qinglong/qiandao 风格：只看调教好的干净日志）</option>
+            <option value="log">仅 log 节点（默认：日常干净日志，只有你写的 log 才出现）</option>
             <option value="log-final">合并为一条（所有 log 合并成最终一条日志）</option>
+            <option value="all">全部步骤（每个节点一行）</option>
           </select>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 13 }}>
+            <input type="checkbox" style={{ width: 'auto' }} checked={debug} onChange={(e) => setDebug(e.target.checked)} />
+            调试模式（保留每步请求/响应细节；日常请关闭）
+          </label>
+          <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 4, lineHeight: 1.5 }}>
+            调试模式开启后，运行日志会记录完整的请求头/请求体/响应体，排障用；关闭时只留人话日志与失败步骤。
+          </div>
         </div>
         <div className="field">
           <label>记录内容开关（仅 all 档生效）</label>

@@ -279,6 +279,12 @@ function applyFilter(cur, name, arg) {
   if (name === 'trim') return String(cur ?? '').trim();
   if (name === 'int') return parseInt(cur, 10);
   if (name === 'float') return parseFloat(cur);
+  // num：把 "10.0000000000000000" 这类后端定点数转成人话（去掉多余小数位）
+  if (name === 'num') {
+    const n = Number(cur);
+    if (!Number.isFinite(n)) return String(cur ?? '');
+    return String(Math.round(n * 1e6) / 1e6);
+  }
   // QD jinja 兼容（GAP-C3）：default 空值回退 / striptags 去 HTML 标签
   if (name === 'default') return (cur === undefined || cur === null || cur === '') ? (arg ?? '') : cur;
   if (name === 'striptags') return String(cur ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();

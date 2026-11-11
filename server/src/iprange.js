@@ -34,6 +34,13 @@ function toBigInt(ip) {
   return null;
 }
 
+/** 前缀掩码：保留高 bits 位（/8 = 255.0.0.0） */
+function prefixMask(bits, totalBits) {
+  if (bits <= 0) return 0n;
+  const all = (1n << BigInt(totalBits)) - 1n;
+  return (all << BigInt(totalBits - bits)) & all;
+}
+
 /** 解析 CIDR / 单 IP → { big, bits, fam } */
 export function parseCidr(spec) {
   const s = String(spec || '').trim();
@@ -48,8 +55,8 @@ export function parseCidr(spec) {
     if (!Number.isInteger(n) || n < 0 || n > parsed.bits) return null;
     bits = n;
   }
-  const mask = bits === 0 ? 0n : ((1n << BigInt(bits)) - 1n);
-  const base = parsed.big & ~mask;
+  const mask = prefixMask(bits, parsed.bits);
+  const base = parsed.big & mask;
   return { big: base, bits, fam: parsed.fam, mask };
 }
 
@@ -64,8 +71,7 @@ export function ipAllowed(ip, cidrList) {
     const c = parseCidr(rule);
     if (!c) continue;
     if (c.fam !== target.fam) continue;
-    const mask = c.bits === 0 ? 0n : ((1n << BigInt(c.bits)) - 1n);
-    if ((target.big & ~mask) === c.big) return true;
+    if ((target.big & c.mask) === c.big) return true;
   }
   return false;
 }

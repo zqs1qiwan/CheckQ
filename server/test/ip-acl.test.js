@@ -18,8 +18,13 @@ await app.ready();
 const { ipAllowed, parseCidr } = await import('../src/iprange.js');
 
 let passed = 0, failed = 0;
-const check = (name, cond, extra = '') => {
-  if (cond) { passed++; console.log(`  PASS ${name}`); }
+const check = async (name, cond, extra = '') => {
+  let ok = false;
+  try {
+    const r = typeof cond === 'function' ? await cond() : await cond;
+    ok = !!r;
+  } catch (e) { ok = false; extra = String(e.message); }
+  if (ok) { passed++; console.log(`  PASS ${name}`); }
   else { failed++; console.log(`  FAIL ${name} ${extra}`); }
 };
 
@@ -45,6 +50,17 @@ const mk = await app.inject({
 });
 assert.strictEqual(mk.statusCode, 200, mk.body);
 const key = mk.json().apiKey;
+
+
+await check('CIDR：/8 边界（10.0.0.0 与 10.255.255.255）都命中', () =>
+  ipAllowed('10.0.0.0', ['10.0.0.0/8']) === true && ipAllowed('10.255.255.255', ['10.0.0.0/8']) === true
+  && ipAllowed('11.0.0.0', ['10.0.0.0/8']) === false);
+
+await check('CIDR：/24 边界（192.168.1.0 与 .255）命中，.256 不命中', () =>
+  ipAllowed('192.168.1.0', ['192.168.1.0/24']) === true && ipAllowed('192.168.1.255', ['192.168.1.0/24']) === true
+  && ipAllowed('192.168.1.256', ['192.168.1.0/24']) === false && ipAllowed('192.168.2.0', ['192.168.1.0/24']) === false);
+
+await check('CIDR：/0 匹配所有 IPv4', () => ipAllowed('8.8.8.8', ['0.0.0.0/0']) === true);
 
 await check('Key 允许名单：名单外 IP 被拒（403）', async () => {
   const r = await app.inject({ method: 'GET', url: '/api/flows', headers: { 'x-api-key': key } });

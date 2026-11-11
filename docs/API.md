@@ -85,15 +85,16 @@ X-API-Key: <key>
 ### 任务 (Flows)
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/flows | 列表（摘要：id/name/note/cron/timezone/enabled/jitterMinutes/varsCount/nodesCount/tplId/lastRun/nextRunAt） |
+| GET | /api/flows | 列表（摘要：id/name/note/cron/timezone/enabled/jitterMinutes/varsCount/nodesCount/tplId/template/lastRun/nextRunAt）。`template` = `{ id, name, stale, missing }`，`stale:true` 表示模板有更新、本任务尚未同步 |
 | POST | /api/flows | 创建（body = Flow 对象；空 nodes 允许，仅草稿） |
-| GET | /api/flows/:id | 详情（含 nodes/edges/vars/log/notify） |
+| GET | /api/flows/:id | 详情（含 nodes/edges/vars/log/notify/template） |
 | PUT | /api/flows/:id | 更新（部分字段合并） |
 | DELETE | /api/flows/:id | 删除 |
 | POST | /api/flows/:id/run | `{ stream?: bool }` 运行；stream=true → SSE（start/log/done） |
 | POST | /api/flows/:id/clone | 克隆为「·副本 N」，enabled:false |
 | POST | /api/flows/:id/curl | 生成等价 curl 命令（变量代入） |
-| POST | /api/flows/batch | `{ action: run|enable|disable|delete, ids: [] }` |
+| POST | /api/flows/:id/sync-template | 同步到模板当前版本（流程图/日志覆盖，任务自己的变量值与通知渠道保留） |
+| POST | /api/flows/batch | `{ action: run\|enable\|disable\|delete\|sync-template, ids: [] }` |
 | POST | /api/flows/:id/notify-test | 测试通知渠道 |
 
 ### 运行记录
@@ -105,13 +106,14 @@ X-API-Key: <key>
 ### 模板
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/templates | 列表 |
+| GET | /api/templates | 列表（含 `updatedAt` 版本号与 `staleTasks` 待更新任务数） |
 | POST | /api/templates | 从流程创建模板 `{ flowId, name }` |
 | GET | /api/templates/:id | 详情 |
-| PUT | /api/templates/:id | 更新 |
+| PUT | /api/templates/:id | 更新（改 nodes/edges/vars/log/notify 会推进版本号） |
 | DELETE | /api/templates/:id | 删除 |
-| POST | /api/templates/:id/instantiate | `{ vars? }` 实例化为任务 |
+| POST | /api/templates/:id/instantiate | `{ vars? }` 实例化为任务（记录模板版本） |
 | POST | /api/templates/:id/instantiate-csv | CSV 批量实例化 |
+| POST | /api/templates/:id/sync | 把该模板下所有派生任务同步到当前版本 |
 | GET | /api/templates/:id/export | 导出 JSON |
 | POST | /api/templates/from-url | 从 URL 导入模板索引 |
 

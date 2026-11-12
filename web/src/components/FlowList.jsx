@@ -255,15 +255,10 @@ export default function FlowList({ onOpen, onLogout }) {
     const ids = [...selected];
     if (!ids.length) return;
     if (action === 'delete' && !(await confirmDialog({ title: '删除任务', message: `删除选中的 ${ids.length} 个任务？不可恢复`, confirmText: '删除', danger: true }))) return;
-    if (action === 'sync-template' && !(await confirmDialog({
-      title: '更新到模板版本',
-      message: `把选中的 ${ids.length} 个任务同步到各自模板的当前版本？流程图与日志配置会被模板覆盖，任务自己的变量值保留。`,
-      confirmText: '更新',
-    }))) return;
     setBatchBusy(true);
     try {
       const r = await api.batch(ids, action);
-      const label = { run: '运行', enable: '启用', disable: '停用', delete: '删除', 'sync-template': '更新模板' }[action] || action;
+      const label = { run: '运行', enable: '启用', disable: '停用', delete: '删除' }[action] || action;
       setToast({ kind: r.failed ? 'fail' : 'ok', text: `批量${label}：成功 ${r.ok} / 失败 ${r.failed}` });
       if (action === 'run') {
         const first = r.results.find((x) => x.runId);
@@ -304,17 +299,6 @@ export default function FlowList({ onOpen, onLogout }) {
   const openLog = async (f) => {
     // 打开连续日志流（多次运行滚动在一起）
     setModal({ type: 'logstream', flowId: f.id, flowName: f.name });
-  };
-
-  // 模板联动：把任务同步到模板当前版本（流程图/日志覆盖，变量保留本任务的值）
-  const syncTemplate = async (f) => {
-    try {
-      await api.syncFlowTemplate(f.id);
-      setToast({ kind: 'ok', text: `「${f.name}」已同步到模板当前版本` });
-      load();
-    } catch (e) {
-      setToast({ kind: 'fail', text: e.message });
-    }
   };
 
   const lastStatus = (f) => {
@@ -391,20 +375,9 @@ export default function FlowList({ onOpen, onLogout }) {
                 <div className="tpl-desc">{t.desc || '—'}</div>
                 <div className="tpl-meta">
                   {t.nodesCount} 步 · {t.varNames.length} 个变量 · 已建 {t.taskCount} 个任务
-                  {t.staleTasks > 0 && <span className="chip chip-write" style={{ marginLeft: 6 }}>{t.staleTasks} 个待更新</span>}
                 </div>
                 <div className="tpl-actions">
                   <button className="small primary" onClick={() => setModal({ type: 'instantiate', tpl: t })}>+ 创建任务</button>
-                  {t.taskCount > 0 && (
-                    <button className="small" title="把这个模板的当前版本同步到它创建的所有任务（流程图/日志覆盖，任务变量保留）"
-                      onClick={async () => {
-                        try {
-                          const r = await api.syncTemplateTasks(t.id);
-                          setToast({ kind: 'ok', text: `已把「${t.name}」同步到 ${r.okCount} 个任务` });
-                          load();
-                        } catch (e) { setToast({ kind: 'fail', text: e.message }); }
-                      }}>更新派生任务</button>
-                  )}
                   <Dropdown trigger="···" triggerClass="dd-row" align="right" width={170} ariaLabel="模板更多操作">
                     <button onClick={() => setModal({ type: 'csv', tpl: t })}>批量创建</button>
                     <button onClick={() => setModal({ type: 'template-editor', tpl: t })}>管理模板</button>
@@ -466,7 +439,6 @@ export default function FlowList({ onOpen, onLogout }) {
               <button className="small primary" disabled={batchBusy} onClick={() => doBatch('run')}>批量运行</button>
               <button className="small" disabled={batchBusy} onClick={() => doBatch('enable')}>启用</button>
               <button className="small" disabled={batchBusy} onClick={() => doBatch('disable')}>停用</button>
-              <button className="small" disabled={batchBusy} title="把选中的任务同步到各自模板的当前版本" onClick={() => doBatch('sync-template')}>更新模板</button>
               <button className="small danger" disabled={batchBusy} onClick={() => doBatch('delete')}>删除</button>
               <button className="small" onClick={() => setSelected(new Set())}>取消</button>
             </span>
@@ -527,12 +499,8 @@ export default function FlowList({ onOpen, onLogout }) {
                       <a className="flow-name" href="#" onClick={(e) => { e.preventDefault(); onOpen(f.id); }}>{f.name}</a>
                       {f.note ? <div style={{ color: 'var(--muted)', fontSize: 12 }}>{f.note}</div> : null}
                       {f.template && (
-                        <div className="tpl-tag" title={f.template.stale
-                          ? `来源模板「${f.template.name}」已更新，可点「··· → 更新到模板版本」同步流程`
-                          : `来自模板「${f.template.name}」`}>
-                          <span className={`chip ${f.template.stale ? 'chip-write' : 'chip-mute'}`}>
-                            {f.template.stale ? '模板已更新' : '模板'}
-                          </span>
+                        <div className="tpl-tag" title={`来自模板「${f.template.name}」：流程始终跟随模板，模板一改这里立刻跟着变`}>
+                          <span className="chip chip-mute">模板</span>
                           <span className="tpl-tag-name">{f.template.name}</span>
                         </div>
                       )}
@@ -555,9 +523,6 @@ export default function FlowList({ onOpen, onLogout }) {
                         <Dropdown trigger="···" triggerClass="dd-row" align="right" width={170} ariaLabel="任务更多操作">
                           <button onClick={() => onOpen(f.id)}>编辑</button>
                           <button onClick={() => setModal({ type: 'info', flow: f })}>任务信息…</button>
-                          {f.template?.stale && (
-                            <button onClick={() => syncTemplate(f)}>更新到模板版本</button>
-                          )}
                           <button onClick={async () => {
                             try {
                               await api.cloneFlow(f.id);

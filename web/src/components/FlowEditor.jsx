@@ -174,7 +174,7 @@ function FlowEditorInner({ flowId, onBack }) {
     if (!f) return;
     setSaving(true);
     try {
-      await api.updateFlow(f.id, {
+      const updated = await api.updateFlow(f.id, {
         nodes: ns.map((n) => ({
           id: n.id, type: n.data.type, name: n.data.name,
           x: Math.round(n.position.x), y: Math.round(n.position.y),
@@ -185,13 +185,18 @@ function FlowEditorInner({ flowId, onBack }) {
           id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle,
         })),
       });
+      // 派生任务改了脚本内容 → 服务端自动转成独立任务，提示一次
+      if (updated && updated.detached) {
+        setFlow((cur) => ({ ...cur, template: null }));
+        showToast(`已转为独立任务，不再跟随模板「${updated.detached}」`, 'ok');
+      }
       setDirty(false);
     } catch (e) {
       showToast(`保存失败: ${e.message}`);
     } finally {
       setSaving(false);
     }
-  }, []);
+  }, [showToast]);
 
   const markDirty = useCallback(() => {
     setDirty(true);
@@ -484,6 +489,11 @@ function FlowEditorInner({ flowId, onBack }) {
           onChange={(e) => { setFlow({ ...flow, name: e.target.value }); markDirty(); }}
           onBlur={() => api.updateFlow(flow.id, { name: flow.name }).catch((e) => showToast(e.message))}
         />
+        {flow.template && (
+          <span className="chip chip-mute tpl-chip" title={`流程始终跟随模板「${flow.template.name}」；改这里的流程会把这个任务转成独立任务`}>
+            模板 {flow.template.name}
+          </span>
+        )}
         <button className="small" onClick={() => setScheduleOpen(true)} title="cron / 时区 / 抖动 / 启用调度">调度</button>
         <button className={`small${showPalette ? ' active' : ''}`} onClick={() => setShowPalette((v) => !v)} title="显示/收起步骤积木">积木</button>
         <button className={`small${showConfig ? ' active' : ''}`} onClick={() => setShowConfig((v) => !v)} title="显示/收起参数面板">参数</button>

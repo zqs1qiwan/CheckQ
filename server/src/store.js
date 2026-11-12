@@ -10,6 +10,37 @@ import { Cron } from 'croner';
 import { hashPwd, checkPassword } from './auth.js';
 import { secretKey, encryptSecrets, decryptSecrets, maskSecrets } from './secret.js';
 
+/**
+ * 稳定序列化（对象键排序）：比较流程图时忽略 JSON 键顺序，避免「同内容不同顺序」被误判为改动
+ */
+function stable(v) {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v ?? null);
+  if (Array.isArray(v)) return `[${v.map(stable).join(',')}]`;
+  const keys = Object.keys(v).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stable(v[k])}`).join(',')}}`;
+}
+
+/**
+ * 比较两份流程图的「脚本内容」是否相同（忽略节点坐标 x/y）：
+ * 派生任务只挪了节点位置 → 仍算没改脚本（继续跟随模板）；
+ * 改了节点配置 / 增删节点 / 改了连线 → 算改了脚本（转为独立任务）。
+ */
+function sameLogic(nodesA, edgesA, nodesB, edgesB) {
+  const norm = (nodes, edges) => stable({
+    nodes: (nodes || [])
+      .map((n) => ({
+        id: n.id, type: n.type, name: n.name,
+        config: n.config || {},
+        genBy: n.genBy || null,
+      }))
+      .sort((a, b) => String(a.id).localeCompare(String(b.id))),
+    edges: (edges || [])
+      .map((e) => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle || null }))
+      .sort((a, b) => String(a.id).localeCompare(String(b.id))),
+  });
+  return norm(nodesA, edgesA) === norm(nodesB, edgesB);
+}
+
 export class Store {
   #persistTimer = null;
 
@@ -36,19 +67,15 @@ export class Store {
     this.meta.ipBlocklist = Array.isArray(this.meta.ipBlocklist) ? this.meta.ipBlocklist : [];
     this.meta.audit = Array.isArray(this.meta.audit) ? this.meta.audit : [];
 
-    // 迁移：老数据没有「模板版本」字段 → 视为已与模板同步，避免一上线就误报「模板已更新」
-    let tplMigrated = 0;
+    // 迁移：老数据里的「模板版本标记」已不需要（派生任务现在始终跟随模板），清掉
+    let tplCleaned = 0;
     for (const f of this.flows) {
-      if (f.tplId && f.tplUpdatedAt === undefined) {
-        const tpl = this.templates.find((t) => t.id === f.tplId);
-        f.tplUpdatedAt = tpl ? (tpl.updatedAt || tpl.createdAt || 0) : 0;
-        tplMigrated++;
-      }
+      if (f.tplUpdatedAt !== undefined) { delete f.tplUpdatedAt; tplCleaned++; }
     }
     for (const t of this.templates) {
       if (t.updatedAt === undefined) t.updatedAt = t.createdAt || Date.now();
     }
-    if (tplMigrated) console.log(`[CheckQ] 已为 ${tplMigrated} 个模板派生任务补上模板版本标记`);
+    if (tplCleaned) console.log(`[CheckQ] 已清理 ${tplCleaned} 个任务的旧模板版本标记`);
 
     // 迁移：旧版单密码 meta.passwordHash → admin 用户；并删除明文密码提示
     if (!this.meta.users.length && this.meta.passwordHash) {      this.meta.users.push({
@@ -168,19 +195,44 @@ export class Store {
           job.stop();
         } catch { /* 无效 cron 不显示 */ }
       }
+      const resolved = this.resolveFlow(f);   // 派生任务显示的是模板当前版本
       return {
         id: f.id, name: f.name, note: f.note, cron: f.cron, timezone: f.timezone,
         enabled: f.enabled, jitterMinutes: f.jitterMinutes || 0, varsCount: Object.keys(f.vars || {}).length,
-        nodesCount: (f.nodes || []).length, tplId: f.tplId || null,
-        template: this.templateInfo(f),   // { id, name, stale } —— 模板联动标注
+        nodesCount: (resolved.nodes || []).length, tplId: f.tplId || null,
+        template: this.templateInfo(f),        // { id, name } —— 来源模板标注
         lastRun,
         nextRunAt,
       };
     });
   }
 
-  getFlow(id) {
+  /** 原始存储的任务（不做模板解析）—— 写路径用 */
+  getFlowRaw(id) {
     return this.flows.find((f) => f.id === id) || null;
+  }
+
+  /**
+   * 派生任务 = 模板 + 各自的参数：流程图始终用模板当前版本。
+   * 模板还在 → 用模板的节点/连线/日志配置（模板一改，任务立刻跟着变）；
+   * 模板被删 → 用自己存的那份（保证「删模板不影响已建任务」）。
+   */
+  resolveFlow(f) {
+    if (!f) return f;
+    if (!f.tplId) return { ...f };
+    const tpl = this.getTemplate(f.tplId);
+    if (!tpl) return { ...f };
+    return {
+      ...f,
+      nodes: tpl.nodes || [],
+      edges: tpl.edges || [],
+      log: tpl.log || null,
+    };
+  }
+
+  getFlow(id) {
+    const f = this.getFlowRaw(id);
+    return f ? this.resolveFlow(f) : null;
   }
 
   createFlow(data) {
@@ -202,7 +254,6 @@ export class Store {
       notify: data.notify || {},
       log: data.log || null,
       tplId: data.tplId || null,
-      tplUpdatedAt: data.tplUpdatedAt || 0,   // 已同步到的模板版本
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -212,15 +263,26 @@ export class Store {
   }
 
   updateFlow(id, patch) {
-    const f = this.getFlow(id);
+    const f = this.getFlowRaw(id);
     if (!f) return null;
     const allowed = ['name', 'note', 'cron', 'timezone', 'enabled', 'vars', 'nodes', 'edges', 'notify', 'log', 'jitterMinutes', 'tplId'];
+    // 派生任务改了「脚本内容」→ 自动转成独立任务（否则模板下次更新会把用户的改动覆盖掉）
+    let detached = null;
+    if (f.tplId && (patch.nodes !== undefined || patch.edges !== undefined)) {
+      const tpl = this.getTemplate(f.tplId);
+      if (tpl && !sameLogic(patch.nodes ?? f.nodes, patch.edges ?? f.edges, tpl.nodes, tpl.edges)) {
+        detached = tpl.name;
+        f.tplId = null;
+      }
+    }
     for (const k of allowed) {
       if (patch[k] !== undefined) f[k] = patch[k];
     }
     f.updatedAt = Date.now();
     this.flush();
-    return f;
+    const out = this.resolveFlow(f);
+    if (detached) out.detached = detached;   // 只在返回值里提示一次，不落盘
+    return out;
   }
 
   deleteFlow(id) {
@@ -241,9 +303,7 @@ export class Store {
       varNames: t.varNames || [],
       nodesCount: (t.nodes || []).length,
       taskCount: this.flows.filter((f) => f.tplId === t.id).length,
-      // 模板版本：派生任务据此判断是否落后
       updatedAt: t.updatedAt || t.createdAt || 0,
-      staleTasks: this.flows.filter((f) => f.tplId === t.id && this.templateDrift(f)).length,
     }));
   }
 
@@ -267,7 +327,7 @@ export class Store {
       // 模板携带通知渠道（带通知的模板实例自动带上通知）：flow.notify 经模板边界不丢失
       notify: data.notify || {},
       createdAt: now,
-      updatedAt: now,             // 版本号：派生任务记录自己同步到哪一版
+      updatedAt: now,
     };
     this.templates.push(tpl);
     this.flush();
@@ -277,9 +337,6 @@ export class Store {
   updateTemplate(id, patch) {
     const t = this.getTemplate(id);
     if (!t) return null;
-    // 内容字段变化才算「新版本」（改名/描述不影响派生任务）
-    const contentKeys = ['vars', 'varNames', 'log', 'nodes', 'edges', 'notify'];
-    const contentChanged = contentKeys.some((k) => patch[k] !== undefined);
     for (const k of ['name', 'desc', 'vars', 'varNames', 'log', 'nodes', 'edges', 'notify']) {
       if (patch[k] !== undefined) t[k] = patch[k];
     }
@@ -289,73 +346,48 @@ export class Store {
     } else if (patch.vars !== undefined) {
       t.varNames = Object.keys(t.vars);
     }
-    if (contentChanged) t.updatedAt = Date.now();
+    t.updatedAt = Date.now();
+    // 派生任务立刻跟随：把新版本写进它们各自的副本（模板被删时任务仍能用最后这份）
+    this.refreshDerived(t);
     this.flush();
     return t;
   }
 
-  /** 派生任务是否落后于模板（模板在任务创建/上次同步之后又改过） */
-  templateDrift(flow) {
-    if (!flow || !flow.tplId) return false;
-    const tpl = this.getTemplate(flow.tplId);
-    if (!tpl) return false;
-    const tplVersion = tpl.updatedAt || tpl.createdAt || 0;
-    return tplVersion > (flow.tplUpdatedAt || 0);
+  /** 模板内容变化 → 派生任务的本地副本同步刷新（读取时本来就用模板当前版本，这里只是保底） */
+  refreshDerived(tpl) {
+    for (const f of this.flows) {
+      if (f.tplId !== tpl.id) continue;
+      f.nodes = JSON.parse(JSON.stringify(tpl.nodes || []));
+      f.edges = JSON.parse(JSON.stringify(tpl.edges || []));
+      f.log = tpl.log ? JSON.parse(JSON.stringify(tpl.log)) : null;
+      const vars = { ...(f.vars || {}) };
+      for (const vn of tpl.varNames || []) if (vars[vn] === undefined) vars[vn] = '';
+      f.vars = vars;
+      f.updatedAt = Date.now();
+    }
   }
 
-  /** 模板信息（派生任务用：模板名 + 是否落后 + 版本） */
+  /** 模板信息（派生任务用：来源模板名） */
   templateInfo(flow) {
     if (!flow || !flow.tplId) return null;
     const tpl = this.getTemplate(flow.tplId);
-    if (!tpl) return { id: flow.tplId, name: '(模板已删除)', missing: true, stale: false };
-    return {
-      id: tpl.id,
-      name: tpl.name,
-      missing: false,
-      stale: this.templateDrift(flow),
-      tplUpdatedAt: tpl.updatedAt || tpl.createdAt || 0,
-      syncedAt: flow.tplUpdatedAt || 0,
-    };
-  }
-
-  /**
-   * 把派生任务同步到模板当前版本：
-   *  - 覆盖 流程图(nodes/edges) / 日志配置 / 通知渠道
-   *  - 变量保留任务自己的值（模板新增的变量补空值）
-   *  - 记录同步到的模板版本
-   */
-  syncFlowWithTemplate(flowId, { keepNotify = true } = {}) {
-    const f = this.getFlow(flowId);
-    if (!f) return null;
-    if (!f.tplId) return { error: '该任务不是从模板创建的' };
-    const tpl = this.getTemplate(f.tplId);
-    if (!tpl) return { error: '模板已被删除' };
-    f.nodes = JSON.parse(JSON.stringify(tpl.nodes || []));
-    f.edges = JSON.parse(JSON.stringify(tpl.edges || []));
-    f.log = tpl.log ? JSON.parse(JSON.stringify(tpl.log)) : null;
-    if (!keepNotify) f.notify = JSON.parse(JSON.stringify(tpl.notify || {}));
-    const vars = { ...(f.vars || {}) };
-    for (const vn of tpl.varNames || []) if (vars[vn] === undefined) vars[vn] = '';
-    f.vars = vars;
-    f.tplUpdatedAt = tpl.updatedAt || tpl.createdAt || Date.now();
-    f.updatedAt = Date.now();
-    this.flush();
-    return f;
+    if (!tpl) return { id: flow.tplId, name: '(模板已删除)', missing: true };
+    return { id: tpl.id, name: tpl.name, missing: false };
   }
 
   deleteTemplate(id) {
     const i = this.templates.findIndex((t) => t.id === id);
     if (i < 0) return false;
+    // 模板删了：派生任务保留最后一份流程图（resolveFlow 找不到模板就用本地副本），照常能跑
     this.templates.splice(i, 1);
     this.flush();
     return true;
   }
 
-  /** 从模板生成任务实例：克隆节点图 + 可选覆盖变量。默认名 = 模板名 · 序号 */
+  /** 从模板生成任务实例：任务 = 模板 + 自己的变量（流程图始终跟随模板） */
   instantiateTemplate(tplId, { name, vars, note } = {}) {
     const tpl = this.getTemplate(tplId);
     if (!tpl) return null;
-    // 模板删除后生成的新任务仍独立可用（克隆而非引用）
     const mergedVars = { ...(tpl.vars || {}), ...(vars || {}) };
     const seq = this.flows.filter((f) => f.tplId === tplId).length + 1;
     return this.createFlow({
@@ -367,8 +399,6 @@ export class Store {
       log: tpl.log,
       notify: tpl.notify || {},
       tplId,
-      // 记录「同步到模板的哪一版」→ 模板再更新时能标出落后的任务
-      tplUpdatedAt: tpl.updatedAt || tpl.createdAt || Date.now(),
     });
   }
 

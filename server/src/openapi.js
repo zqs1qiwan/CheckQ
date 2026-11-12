@@ -133,18 +133,6 @@ export function buildOpenApi() {
           errors: [401, 403],
         }),
       },
-      '/api/templates/{id}/sync': {
-        post: op('把该模板下的所有派生任务同步到模板当前版本', {
-          tags: ['templates'], scope: 'write', parameters: [idParam()],
-          errors: [401, 403, 404],
-        }),
-      },
-      '/api/flows/{id}/sync-template': {
-        post: op('把任务同步到其模板的当前版本（流程图/日志覆盖，变量保留本任务值）', {
-          tags: ['flows'], scope: 'write', parameters: [idParam()],
-          errors: [401, 403, 404],
-        }),
-      },
       '/api/notifications': { get: op('站内通知列表', { tags: ['meta'], parameters: [{ name: 'limit', in: 'query', schema: { type: 'integer', default: 50 } }], schema: { type: 'object' } }) },
       '/api/system/stats': { get: op('运维统计（任务数/今日运行/成功率/下次调度）', { tags: ['meta'], schema: { type: 'object' } }) },
       '/api/system/push-targets': { get: op('可推送单位（带通知渠道的任务）', { tags: ['meta'], schema: { type: 'array', items: { type: 'object' } } }) },

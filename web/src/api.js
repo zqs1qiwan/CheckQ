@@ -116,9 +116,6 @@ export const api = {
   instantiate: (tplId, body) => req('POST', `/api/templates/${tplId}/instantiate`, body),
   exportTemplate: (tplId) => req('GET', `/api/templates/${tplId}/export`),
   instantiateCsv: (tplId, csv) => req('POST', `/api/templates/${tplId}/instantiate-csv`, { csv }),
-  // 模板联动：把任务 / 该模板下所有任务同步到模板当前版本
-  syncFlowTemplate: (flowId) => req('POST', `/api/flows/${flowId}/sync-template`, {}),
-  syncTemplateTasks: (tplId) => req('POST', `/api/templates/${tplId}/sync`, {}),
   importCurl: (command) => req('POST', '/api/import/curl', { command }),
   importHar: (formData) => req('POST', '/api/import/har', formData, true),
   stats: () => req('GET', '/api/system/stats'),

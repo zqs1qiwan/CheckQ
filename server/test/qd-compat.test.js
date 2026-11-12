@@ -56,15 +56,15 @@ check('纯变量不受影响', renderTemplate('{{cookie}}', { cookie: 'x=1' }), 
 check('表达式中变量缺失置空', renderTemplate('{{md5("a"+nope)}}', {}), '0cc175b9c0f1b6a831c399e269772661');
 // jinja 空格风格 {{ __log__ | striptags }}
 check('空格管道 striptags', renderTemplate('{{ v | striptags }}', { v: '<b>OK</b>' }), 'OK');
-// 表达式内 or / 括号内管道 / 后置管道（smzdm 签名实测形态）
+// 表达式内 or / 括号内管道 / 后置管道（真实站点签名形态）
 check('表达式内 or 兜底', renderTemplate('{{(title or \'kindle\')}}', {}), 'kindle');
 check('表达式内 or 有值', renderTemplate('{{(title or \'kindle\')}}', { title: 'book' }), 'book');
 check('拼接中含 or 括号', renderTemplate('{{"kw="+(title or \'kindle\')+"&end"}}', {}), 'kw=kindle&end');
 check('括号内管道不顶断表达式', renderTemplate('{{md5("a"+type|upper+"b")}}', { type: 'sms' }), md5hex('aSMSb'));
 check('变量后置管道 default', renderTemplate('{{followid|default(\'15598\')}}', {}), '15598');
 check('拼接中后置管道', renderTemplate('{{"id="+followid|default(\'42\')+"!"}}', {}), 'id=42!');
-// smzdm idx5 真实签名表达式（含全角引号字面量段）
-check('smzdm 签名完整渲染', renderTemplate('{{md5("f=ANDROID&keyword="+(title or \'kindle\')+"&keyword_id=“+followid|default(\'15598\')+”&type="+type|upper+"&v=8.7.8")|upper}}', { type: 'sms' }),
+// 真实签名表达式（含全角引号字面量段）
+check('签名表达式完整渲染', renderTemplate('{{md5("f=ANDROID&keyword="+(title or \'kindle\')+"&keyword_id=“+followid|default(\'15598\')+”&type="+type|upper+"&v=8.7.8")|upper}}', { type: 'sms' }),
   md5hex('f=ANDROID&keyword=kindle&keyword_id=“+followid|default(\'15598\')+”&type=SMS&v=8.7.8').toUpperCase());
 
 // ---- 导入转换（GAP-C2/C4）----

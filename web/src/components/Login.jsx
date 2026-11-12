@@ -69,7 +69,7 @@ export default function Login({ onOk }) {
       <div className="login-wrap">
         <form className="login-card" onSubmit={submitSetup}>
           <h1>Check<em style={{ color: 'var(--accent)' }}>Q</em></h1>
-          <p className="sub">首次启动 · 创建管理员账号</p>
+          <p className="sub">首次启动，创建管理员账号</p>
           <input placeholder="用户名（字母数字，3-32 位）" value={username} autoFocus onChange={(e) => setUsername(e.target.value)} />
           <input type="password" placeholder="登录密码（至少 10 位，含两类字符）" value={password} onChange={(e) => setPassword(e.target.value)} />
           <input type="password" placeholder="再输入一次" value={confirm} onChange={(e) => setConfirm(e.target.value)} />

@@ -21,7 +21,7 @@
 | 认证方式 | 45/87 请求显式带 Cookie 头；4 个模板纯登录链（无 Cookie 头，靠会话） | **必须有 run 级 cookie 罐**（GAP-C1） |
 | 变量 | 13/13 模板使用 `{{var}}`；以 cookie 为主（9），username/password（2） | 变量渲染语义必须与 QD 一致（trim、缺省置空） |
 | 表达式 | `urlencode` 过滤器 ×5 模板；`md5(拼接)|upper` 签名 ×2；`multiply(timestamp('float'),1000)|int` ×2；`default()` ×2；`or` 兜底 ×1；`striptags` ×1 | **模板表达式层需函数式求值**（GAP-C3） |
-| QD 内部 API | `api://util/delay/N` ×9 处（smzdm 类防风控延时）；`api://util/unicode` / `urldecode` / `localhost/util/string/replace` 若干（日志中文转码） | **导入器必须转换而非丢弃**（GAP-C2） |
+| QD 内部 API | `api://util/delay/N` ×9 处（某站点类防风控延时）；`api://util/unicode` / `urldecode` / `localhost/util/string/replace` 若干（日志中文转码） | **导入器必须转换而非丢弃**（GAP-C2） |
 | 特殊出口 | 1 个模板 URL 为纯变量（代理求解服务地址） | 导入器放行变量 URL（GAP-C4） |
 | 链长 | 1–27 请求/模板（中位 3） | 长链编辑体验重要；27 步模板实测转换后 43 节点 |
 | TLS 风控 | 至少 1 个站点（GL 类）需非 Node 指纹 | curl 后端 ✅ v0.2 已有 |
@@ -54,7 +54,7 @@
 | 编号 | 差距 | 方案 | 状态 |
 |---|---|---|---|
 | GAP-C1 | 无 run 级 cookie 罐，登录链断裂 | `server/src/cookiejar.js`：响应 Set-Cookie 自动入罐（Domain 属性子域共享、空值删除、显式头同名优先），后续同域请求自动携带；`cookieJar:false` 节点级退出；命中时 stepLog `detail.jar` 标记 | ✅ + 单测/端到端回声服务实测 |
-| GAP-C2 | `api://util/*` 导入被丢弃，smzdm 类延时链断裂 | 导入器转换：`util/delay/N` → delay 节点；`util/unicode` / `util/urldecode` → log 节点（content/s 参数还原为模板文本；本引擎响应已解码无需真转码） | ✅ + 单测 |
+| GAP-C2 | `api://util/*` 导入被丢弃，某站点类延时链断裂 | 导入器转换：`util/delay/N` → delay 节点；`util/unicode` / `util/urldecode` → log 节点（content/s 参数还原为模板文本；本引擎响应已解码无需真转码） | ✅ + 单测 |
 | GAP-C3 | 模板表达式层弱于 QD jinja | render.js 新增函数式表达式求值（白名单 md5/sha1/sha256/multiply/divide/add/sub/int/float/str/timestamp('float')/urlencode/quote_chinese/b64encode/b64decode/upper/lower + `+` 拼接 + 字面量，无 eval）；过滤器新增 `default()`/`int`/`float`/`striptags`；管道切分尊重引号 | ✅ + 单测 |
 | GAP-C4 | URL 为纯变量的模板导入被拒 | 导入器放行含 `{{var}}` 的 URL（运行时渲染），画布命名 `POST {{变量URL}}` | ✅ + 单测 |
 | GAP-C5 | QD `data` 字段请求体丢失 | 导入器读 `req.data`（QD tpl 格式）与 `postData.text`（HAR 格式） | ✅ 随 C2 落地 |

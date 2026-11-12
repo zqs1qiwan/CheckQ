@@ -4,18 +4,17 @@ import ThemeToggle from './ThemeToggle.jsx';
 import LogStream from './LogStream.jsx';
 import Modal from './Modal.jsx';
 import Dropdown from './Dropdown.jsx';
-import FlowInfoModal from './FlowInfoModal.jsx';
+import TaskDetailModal from './TaskDetailModal.jsx';
 import { IconBell, IconBook, IconKey, IconUsers, IconShield, IconSparkle, IconGear, IconGlobe } from './Icons.jsx';
 import { confirmDialog } from '../confirm.jsx';
 import AccountPanel from './AccountPanel.jsx';
 import UsersPanel from './UsersPanel.jsx';
 import ApiKeysPanel from './ApiKeysPanel.jsx';
 import { toast as globalToast, setToastLevel, getToastLevel } from '../toast.js';
+import { fmtDateTime, ROLE_LABELS } from '../util.js';
 
 function fmtTime(ts) {
-  const d = new Date(ts);
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return fmtDateTime(ts);
 }
 
 /** 统一走全局提示总线（受「设置 → 提示级别」控制） */
@@ -114,8 +113,10 @@ function WizardModal({ onClose, onCreated }) {
         {aiDraft && (
           <div className="ai-preview">
             <div style={{ fontWeight: 600, fontSize: 13 }}>{aiDraft.name}</div>
-            <div style={{ color: 'var(--muted)', fontSize: 12, margin: '4px 0' }}>
-              {aiDraft.nodes?.length || 0} 个节点 · cron {aiDraft.cron || '—'} · {aiDraft.nodes?.map((n) => n.type)?.join(' → ')}
+            <div className="meta" style={{ color: 'var(--muted)', fontSize: 12, margin: '4px 0' }}>
+              <span><b>{aiDraft.nodes?.length || 0}</b> 个节点</span>
+              <span>cron <b>{aiDraft.cron || '—'}</b></span>
+              <span>{aiDraft.nodes?.map((n) => n.type)?.join(' → ')}</span>
             </div>
             <span className="btn-row">
               <button className="small primary" disabled={aiBusy} onClick={createFromDraft}>用 AI 结果创建</button>
@@ -305,11 +306,11 @@ export default function FlowList({ onOpen, onLogout }) {
     if (!f.lastRun) return <span className="badge muted">未运行</span>;
     const ok = f.lastRun.status === 'success';
     return (
-      <span className={`badge ${ok ? 'ok' : 'fail'}`} style={{ cursor: 'pointer' }}
+      <button className={`badge ${ok ? 'ok' : 'fail'} badge-btn`}
         title="点击查看运行日志"
         onClick={() => setModal({ type: 'logstream', flowId: f.id, flowName: f.name, refresh: Date.now() })}>
-        {ok ? '成功' : '失败'} · {fmtTime(f.lastRun.startedAt)}
-      </span>
+        {ok ? '成功' : '失败'} <span className="badge-time">{fmtTime(f.lastRun.startedAt)}</span>
+      </button>
     );
   };
 
@@ -328,12 +329,18 @@ export default function FlowList({ onOpen, onLogout }) {
           <div className="menu-sep" />
           <button onClick={onLogout}>退出登录</button>
         </Dropdown>
-        {me && (
-          <span className="who-chip" title={`登录身份：${me.username}（${me.role === 'admin' ? '管理员' : me.role === 'operator' ? '操作员' : '只读'}）${me.totpEnabled ? ' · 两步验证已启用' : ''}`}>
-            {me.displayName || me.username}
-            <em>{me.role === 'admin' ? '管理员' : me.role === 'operator' ? '操作员' : '只读'}</em>
-          </span>
-        )}
+        {me && (() => {
+          const roleLabel = ROLE_LABELS[me.role] || me.role;
+          const name = me.displayName || me.username;
+          // 显示名与角色同名时不要重复「管理员 管理员」
+          const showRole = name !== roleLabel;
+          return (
+            <span className="who-chip" title={`登录身份：${me.username}（${roleLabel}）${me.totpEnabled ? ' · 两步验证已启用' : ''}`}>
+              {name}
+              {showRole ? <em>{roleLabel}</em> : null}
+            </span>
+          );
+        })()}
         <ThemeToggle />
         <button className="iconbtn bell-btn" onClick={() => setNotifOpen(true)} title="站内通知" aria-label="站内通知">
           <IconBell size={16} />{unread > 0 && <span className="bell-dot">{unread > 99 ? '99+' : unread}</span>}
@@ -348,16 +355,26 @@ export default function FlowList({ onOpen, onLogout }) {
 
       <div className="page">
         {stats && (
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, fontSize: 12, color: 'var(--muted)' }}>
-            <span className="badge muted">任务 {stats.flows} · 调度中 {stats.enabledScheduled} · 模板 {stats.templates}</span>
-            <span className="badge muted">今日 {stats.todayRuns} 次 · 成功 {stats.todaySuccess} · 失败 {stats.todayFailed}{stats.successRate !== null ? ` · 成功率 ${stats.successRate}%` : ''}</span>
+          <div className="status-rail">
+            <span className="meta">
+              <span>任务 <b>{stats.flows}</b></span>
+              <span>调度中 <b>{stats.enabledScheduled}</b></span>
+              <span>模板 <b>{stats.templates}</b></span>
+            </span>
+            <span className="meta">
+              <span>今日 <b>{stats.todayRuns}</b> 次</span>
+              <span>成功 <b>{stats.todaySuccess}</b></span>
+              <span className={stats.todayFailed ? 'fail-n' : ''}>失败 <b className={stats.todayFailed ? 'fail-n' : ''}>{stats.todayFailed}</b></span>
+              {stats.successRate !== null ? <span>成功率 <b>{stats.successRate}%</b></span> : null}
+            </span>
             {stats.queuedFlows?.length ? <span className="badge warn">排队中 {stats.queuedFlows.length}</span> : null}
             {stats.dailySummary?.enabled ? <span className="badge ok">每日汇总 {stats.dailySummary.time}</span> : null}
             {stats.nextRunAt ? (
-              <span className="badge ok" title={`下一次自动运行：${stats.nextFlowName || '未知任务'}（所有已启用任务中最近的一次）`}>
-                下次调度 {fmtTime(stats.nextRunAt)}{stats.nextFlowName ? ` · ${stats.nextFlowName}` : ''}
+              <span className="next-run" title={`下一次自动运行：${stats.nextFlowName || '未知任务'}（所有已启用任务中最近的一次）`}>
+                下次调度 <b>{fmtTime(stats.nextRunAt)}</b>
+                {stats.nextFlowName ? <span className="muted">{stats.nextFlowName}</span> : null}
               </span>
-            ) : <span className="badge muted">暂无调度</span>}
+            ) : <span className="next-run muted">暂无调度</span>}
           </div>
         )}
         <div className="big-tabs">
@@ -374,7 +391,11 @@ export default function FlowList({ onOpen, onLogout }) {
                 <div className="tpl-name">{t.name}</div>
                 <div className="tpl-desc">{t.desc || '—'}</div>
                 <div className="tpl-meta">
-                  {t.nodesCount} 步 · {t.varNames.length} 个变量 · 已建 {t.taskCount} 个任务
+                  <span className="meta">
+                    <span><b>{t.nodesCount}</b> 步</span>
+                    <span><b>{t.varNames.length}</b> 个变量</span>
+                    <span>已建 <b>{t.taskCount}</b> 个任务</span>
+                  </span>
                 </div>
                 <div className="tpl-actions">
                   <button className="small primary" onClick={() => setModal({ type: 'instantiate', tpl: t })}>+ 创建任务</button>
@@ -432,7 +453,6 @@ export default function FlowList({ onOpen, onLogout }) {
         {viewTab === 'flows' && (
         <>
         <div className="page-head" style={{ marginTop: 8 }}>
-          <span className="spacer" />
           {selected.size > 0 && (
             <span className="btn-row">
               <span style={{ fontSize: 12, color: 'var(--accent)', whiteSpace: 'nowrap' }}>已选 {selected.size}</span>
@@ -443,10 +463,25 @@ export default function FlowList({ onOpen, onLogout }) {
               <button className="small" onClick={() => setSelected(new Set())}>取消</button>
             </span>
           )}
-          <span className="spacer" />
           <button className={`small ${batchMode ? 'primary' : ''}`} title={batchMode ? '退出批量模式' : '进入批量模式：可勾选多个任务一起操作'} onClick={() => { setBatchMode((v) => !v); setSelected(new Set()); }}>
             {batchMode ? '退出批量' : '批量管理'}
           </button>
+          <input
+            className="toolbar-search"
+            placeholder="搜索名称或备注"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select
+            className="toolbar-select"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          >
+            <option value="all">全部</option>
+            <option value="scheduled">已启用调度</option>
+            <option value="recent-failed">最近失败</option>
+          </select>
+          <span className="spacer" />
           <button className="small" title="下载脱敏备份（cookie/token 等凭据已清空，适合分享与存档）" onClick={async () => {
             try {
               const data = await api.backup();
@@ -461,21 +496,6 @@ export default function FlowList({ onOpen, onLogout }) {
           }}>备份</button>
           <button className="small" title="完整备份（含明文凭据，需输入当前密码）" onClick={() => setModal('backup-full')}>完整备份</button>
           <button className="small" onClick={() => setModal('restore')}>恢复</button>
-          <input
-            style={{ width: 180, minWidth: 120, flex: '0 1 180px', fontSize: 13, padding: '4px 8px' }}
-            placeholder="搜索名称/备注…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <select
-            style={{ width: 110, flex: '0 0 auto', fontSize: 13, padding: '4px 6px' }}
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-          >
-            <option value="all">全部</option>
-            <option value="scheduled">已启用调度</option>
-            <option value="recent-failed">最近失败</option>
-          </select>
         </div>
 
         {visibleFlows.length === 0 ? (
@@ -496,8 +516,8 @@ export default function FlowList({ onOpen, onLogout }) {
                   <tr key={f.id}>
                     {batchMode && <td><input type="checkbox" checked={selected.has(f.id)} onChange={() => toggleSelect(f.id)} /></td>}
                     <td>
-                      <a className="flow-name" href="#" onClick={(e) => { e.preventDefault(); onOpen(f.id); }}>{f.name}</a>
-                      {f.note ? <div style={{ color: 'var(--muted)', fontSize: 12 }}>{f.note}</div> : null}
+                      <button className="flow-name" onClick={() => setModal({ type: 'detail', flow: f })} title="查看任务详情（备注、调度、变量）">{f.name}</button>
+                      {f.note ? <div className="flow-note">{f.note}</div> : null}
                       {f.template && (
                         <div className="tpl-tag" title={`来自模板「${f.template.name}」：流程始终跟随模板，模板一改这里立刻跟着变`}>
                           <span className="chip chip-mute">模板</span>
@@ -521,8 +541,7 @@ export default function FlowList({ onOpen, onLogout }) {
                           onClick={() => runNow(f)}>{running === f.id ? '运行中' : '运行'}</button>
                         <button className="small" title="查看运行日志（每天的签到记录都在这里）" onClick={() => openLog(f)}>日志</button>
                         <Dropdown trigger="···" triggerClass="dd-row" align="right" width={170} ariaLabel="任务更多操作">
-                          <button onClick={() => onOpen(f.id)}>编辑</button>
-                          <button onClick={() => setModal({ type: 'info', flow: f })}>任务信息…</button>
+                          <button onClick={() => onOpen(f.id)}>编辑流程</button>
                           <button onClick={async () => {
                             try {
                               await api.cloneFlow(f.id);
@@ -597,13 +616,13 @@ export default function FlowList({ onOpen, onLogout }) {
         <TemplateEditorModal tpl={modal.tpl} onDone={() => { setModal(null); load(); }} />
       )}
 
-      {modal?.type === 'info' && (
-        <FlowInfoModal
-          flow={modal.flow}
-          template={modal.flow.template}
+      {modal?.type === 'detail' && (
+        <TaskDetailModal
+          summary={modal.flow}
           onClose={() => setModal(null)}
           onSaved={() => load()}
           onToast={(text, kind) => setToast({ kind, text })}
+          onEdit={(id) => { setModal(null); onOpen(id); }}
         />
       )}
 
@@ -840,7 +859,7 @@ function NotificationsModal({ onClose }) {
   const fmt = (ts) => new Date(ts).toLocaleString('zh-CN');
   return (
     <Modal
-      title={`站内通知${data ? `（${data.total} 条 · 未读 ${data.unread}）` : ''}`}
+      title={`站内通知${data ? `（${data.total} 条，未读 ${data.unread}）` : ''}`}
       onClose={onClose}
       className="notif-modal"
       footer={
@@ -950,7 +969,7 @@ function AiSettings() {
   return (
     <>
       <div className="field">
-        <label title="快速组装用的 LLM，OpenAI 兼容接口">AI 助手{configured ? ' · 已配置' : ' · 未配置'}</label>
+        <label title="快速组装用的 LLM，OpenAI 兼容接口">AI 助手（{configured ? '已配置' : '未配置'}）</label>
         <input placeholder="Base URL，例：https://api.deepseek.com/v1" value={cfg.baseUrl} onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value })} />
       </div>
       <div className="field-inline">
@@ -1128,7 +1147,7 @@ function TemplateEditorModal({ tpl, onDone }) {
   return (
     <Modal
       title={`管理模板：${tpl.name}`}
-      subtitle={detail ? `${detail.nodes.length} 个节点 · ${vars.length} 个默认变量（实例化时预填）` : ''}
+      subtitle={detail ? `${detail.nodes.length} 个节点，${vars.length} 个默认变量` : ''}
       onClose={onDone}
       footer={
         <>

@@ -306,6 +306,38 @@ async function checkModal(page, where, openExpr, opts = {}) {
     await checkDropdown(page, '首页/1440', `return 1;`, '底部行');
     await page.eval(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); await new Promise(r=>setTimeout(r,150));`);
 
+    /* 2b) 交互契约：点任务名 = 任务详情；「更多」里才是「编辑流程」，且没有单独的基础信息入口 */
+    const contract = await page.eval(WAIT + `
+      const rows=[...document.querySelectorAll('.flow-table tbody tr')];
+      const row=rows[0];
+      const nameBtn=row.querySelector('button.flow-name');
+      if (!nameBtn) return { ok:false, why:'任务名不是按钮（应可点开任务详情）' };
+      nameBtn.click();
+      await new Promise(r=>setTimeout(r,700));
+      const m=document.querySelector('.modal');
+      const title=m?(m.querySelector('.modal-title')||{}).textContent:'';
+      const cells=m?[...m.querySelectorAll('.detail-k')].map(e=>e.textContent):[];
+      const hasNote=m?!!m.querySelector('textarea'):false;
+      document.querySelector('.modal-close,[aria-label="关闭"]')?.click();
+      await new Promise(r=>setTimeout(r,300));
+      row.scrollIntoView({block:'center'}); await new Promise(r=>setTimeout(r,250));
+      row.querySelector('.dd-trigger').click(); await new Promise(r=>setTimeout(r,320));
+      const items=[...document.querySelectorAll('.dd-pop button')].map(b=>b.textContent.trim());
+      document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+      await new Promise(r=>setTimeout(r,200));
+      return { ok:true, title, cells, hasNote, items };
+    `);
+    if (!contract.ok) fail('交互契约', contract.why);
+    else {
+      if (contract.title !== '任务详情') fail('交互契约', `点任务名打开的不是「任务详情」而是「${contract.title}」`);
+      else ok('交互契约', '点任务名打开任务详情（含备注、调度、变量等信息）');
+      if (!contract.hasNote) fail('交互契约', '任务详情里没有备注输入框');
+      if (!contract.items.some((x) => x.startsWith('编辑'))) fail('交互契约', `「更多」菜单里没有编辑流程入口：${contract.items.join('/')}`);
+      if (contract.items.some((x) => x.includes('任务信息'))) fail('交互契约', '「更多」菜单里仍有重复的基础信息入口');
+      if (contract.cells.length < 6) fail('交互契约', `任务详情信息项太少：${contract.cells.join('/')}`);
+      else ok('交互契约', `更多菜单 = ${contract.items.join(' / ')}（无重复入口）`);
+    }
+
     /* 3) 顶栏「更多」菜单 */
     await checkDropdown(page, '首页/1440', `document.querySelector('.topbar .dd-trigger').click(); await new Promise(r=>setTimeout(r,260));`, '顶栏更多');
     await page.eval(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); await new Promise(r=>setTimeout(r,150));`);
@@ -398,11 +430,11 @@ async function checkModal(page, where, openExpr, opts = {}) {
 
     /* 8) 编辑器 */
     const openEditor = await page.eval(WAIT + `
-      const btn = [...document.querySelectorAll('.flow-table tbody tr td button')].find(b => b.textContent.trim() === '编辑');
+      const btn = [...document.querySelectorAll('.flow-table tbody tr td button')].find(b => b.textContent.trim().startsWith('编辑'));
       if (btn) { btn.click(); return true; }
       const row = await waitFor('.flow-table tbody tr');
       if (row) { const m = row.querySelector('.dd-trigger'); m.click(); await new Promise(r=>setTimeout(r,250));
-        const e = [...document.querySelectorAll('.dd-pop button')].find(b=>b.textContent.trim()==='编辑'); if (e) { e.click(); return true; } }
+        const e = [...document.querySelectorAll('.dd-pop button')].find(b=>b.textContent.trim().startsWith('编辑')); if (e) { e.click(); return true; } }
       return false;
     `);
     if (openEditor) {

@@ -157,7 +157,12 @@ export default function LogStream({ flowId, flowName, onClose, live = false }) {
                       <span className="logstream-node">{l.name}</span>
                       <span className="logstream-msg">
                         {l.message}
-                        {l.detail?.response && ` · HTTP ${l.detail.response.status} ${l.detail.response.ms}ms`}
+                        {l.detail?.response && (
+                          <span className="meta" style={{ marginLeft: 8 }}>
+                            <span className="mono">HTTP {l.detail.response.status}</span>
+                            <span className="mono">{l.detail.response.ms}ms</span>
+                          </span>
+                        )}
                       </span>
                       {l.detail?.response?.body && (
                         <pre className="logstream-body-pre">{String(l.detail.response.body).slice(0, 4000)}</pre>

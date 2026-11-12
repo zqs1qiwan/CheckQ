@@ -12,16 +12,15 @@ import RunDrawer from './RunDrawer.jsx';
 import GuideModal from './GuideModal.jsx';
 import Modal from './Modal.jsx';
 import Dropdown from './Dropdown.jsx';
-import FlowInfoModal from './FlowInfoModal.jsx';
+import TaskDetailModal from './TaskDetailModal.jsx';
 import { IconHelp, IconBug, IconPlay } from './Icons.jsx';
 import { toast as globalToast } from '../toast.js';
+import { fmtClock, isSensitiveName } from '../util.js';
 
 const COLOR = Object.fromEntries(Object.entries(STEP_TYPES).map(([k, v]) => [k, v.color]));
 
 function fmtTime(ts) {
-  const d = new Date(ts);
-  const p = (n) => String(n).padStart(2, '0');
-  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  return fmtClock(ts);
 }
 
 function StepNode({ id, data, selected }) {
@@ -75,7 +74,7 @@ function FlowEditorInner({ flowId, onBack }) {
   const [debugView, setDebugView] = useState(false); // 当前运行结果是否展开每步细节
   const [cookieOpen, setCookieOpen] = useState(false);
   const [tplOpen, setTplOpen] = useState(false);
-  const [infoOpen, setInfoOpen] = useState(false); // 任务信息（名称 / 备注 / 模板归属）
+  const [detailOpen, setDetailOpen] = useState(false); // 任务详情弹窗
   const [tplName, setTplName] = useState('');
   const [tplErr, setTplErr] = useState('');
   const saveTimer = useRef(null);
@@ -508,7 +507,7 @@ function FlowEditorInner({ flowId, onBack }) {
           <div className="menu-sep" />
           <button onClick={runDebug} title="记录每一步的请求/响应并展开运行过程窗口"><IconBug size={14} /> 调试运行</button>
           <div className="menu-sep" />
-          <button onClick={() => setInfoOpen(true)}>任务信息…</button>
+          <button onClick={() => setDetailOpen(true)}>任务详情…</button>
           <button onClick={() => setNotifyOpen(true)}>通知渠道</button>
           <button onClick={testNotify}>测试通知</button>
           <button onClick={() => setCookieOpen(true)}>填入 Cookie</button>
@@ -619,12 +618,14 @@ function FlowEditorInner({ flowId, onBack }) {
         />
       )}
 
-      {infoOpen && (
-        <FlowInfoModal
-          flow={flow}
-          template={flow.template}
-          onClose={() => setInfoOpen(false)}
-          onSaved={(nf) => { setFlow(nf); }}
+      {detailOpen && (
+        <TaskDetailModal
+          summary={{
+            id: flow.id, name: flow.name, note: flow.note, enabled: flow.enabled,
+            nodesCount: (flow.nodes || []).length, template: flow.template,
+          }}
+          onClose={() => setDetailOpen(false)}
+          onSaved={(nf) => setFlow(nf)}
           onToast={(text, kind) => showToast(text, kind)}
         />
       )}
@@ -654,7 +655,7 @@ function FlowEditorInner({ flowId, onBack }) {
         >
           <div className="field">
             <label>模板名称</label>
-            <input value={tplName} onChange={(e) => setTplName(e.target.value)} placeholder="如：恩山签到模板" />
+            <input value={tplName} onChange={(e) => setTplName(e.target.value)} placeholder="如：每日签到模板" />
           </div>
           {tplErr && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{tplErr}</p>}
         </Modal>
@@ -991,7 +992,7 @@ function VarsEditor({ flow, onVars }) {
     }).catch(() => setMissing([]));
   }, [flow.id]);
 
-  const isSensitive = (k) => /cookie|token|password|secret|key/i.test(k);
+  const isSensitive = isSensitiveName;
 
   return (
     <div>

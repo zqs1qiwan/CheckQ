@@ -60,8 +60,9 @@ for (const file of files) {
       findings.push({ file: rel, line: n, rule: '分区说明段常驻', text: desc[1].trim().slice(0, 60) });
     }
     // 5) label 里的括号解释（应改为 title 悬停标注）
-    const labelParen = line.match(/<label[^>]*>([^<]*[（(][^<]{6,}[）)])/);
-    if (labelParen) {
+    //    例外：括号里是动态状态（如「AI 助手（已配置）」）或很短的补充，不算说明性文字
+    const labelParen = line.match(/<label[^>]*>([^<]*[（(]([^<]{6,})[）)])/);
+    if (labelParen && !/[{]/.test(labelParen[2])) {
       findings.push({ file: rel, line: n, rule: 'label 括号说明（改 title 悬停）', text: labelParen[1].trim().slice(0, 60) });
     }
     // 6) 独立的 <p> 说明段（≥22 个中文字符视为说明）

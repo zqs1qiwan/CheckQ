@@ -119,7 +119,7 @@ curl -H "x-api-key: cq_xxxx" http://checkq.local:18888/api/flows
 ```
 
 示例（让 Agent 做的事，自然语言即可）：
-> “用 checkq MCP 找到 GLaDOS 签到任务，把它的 cookie 换成 `xxx`，跑一次，把最后一条日志贴给我。”
+> “用 checkq MCP 找到某个签到任务，把它的 cookie 换成 `xxx`，跑一次，把最后一条日志贴给我。”
 
 ---
 

@@ -278,22 +278,22 @@ await check('用户名被占用被拒', async () => {
 await check('改显示名不需要密码即可（仅会话）', async () => {
   const r = await app.inject({
     method: 'PUT', url: '/api/system/account', headers: { cookie: neu.cookie },
-    payload: { displayName: '老白' },
+    payload: { displayName: '测试用户' },
   });
   const me = await app.inject({ method: 'GET', url: '/api/me', headers: { cookie: neu.cookie } });
-  return r.statusCode === 200 && me.json().user.displayName === '老白';
+  return r.statusCode === 200 && me.json().user.displayName === '测试用户';
 });
 
 await check('修改用户名成功并强制重新登录', async () => {
   const r = await app.inject({
     method: 'PUT', url: '/api/system/account', headers: { cookie: neu.cookie },
-    payload: { username: 'laobai', currentPassword: 'NewStrong#2026' },
+    payload: { username: 'testuser', currentPassword: 'NewStrong#2026' },
   });
   const j = r.json();
   // 旧用户名不能再登录
   const oldLogin = await login({ username: 'admin', password: 'NewStrong#2026' });
   // 新用户名可以登录
-  const newLogin = await login({ username: 'laobai', password: 'NewStrong#2026' });
+  const newLogin = await login({ username: 'testuser', password: 'NewStrong#2026' });
   // 旧会话已失效
   const after = await app.inject({ method: 'GET', url: '/api/flows', headers: { cookie: neu.cookie } });
   return r.statusCode === 200 && j.reauth === true && oldLogin.status === 401 && newLogin.status === 200 && after.statusCode === 401;

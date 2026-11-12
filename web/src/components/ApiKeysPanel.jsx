@@ -165,7 +165,7 @@ export default function ApiKeysPanel({ onToast }) {
 
       {editing && (
         <Modal
-          title={`允许 IP · ${editing.key.name}`}
+          title={`允许 IP（${editing.key.name}）`}
           onClose={() => setEditing(null)}
           width={480}
           footer={

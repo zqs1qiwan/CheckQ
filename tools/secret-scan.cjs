@@ -16,7 +16,7 @@ const RULES = [
   { name: 'Telegram Bot Token', re: /\b\d{8,12}:[A-Za-z0-9_-]{33,45}\b/g },
   { name: 'GitHub Token', re: /\bgh[pousr]_[A-Za-z0-9]{30,}\b/g },
   { name: 'OpenAI-style API Key', re: /\bsk-[A-Za-z0-9]{20,}\b/g },
-  { name: 'GLaDOS 会话 Cookie', re: /gld:sess=[A-Za-z0-9]{30,}/g },
+  { name: '会话 Cookie', re: /\b(?:gld|glados|sess|session):[A-Za-z0-9]{20,}/gi },
   { name: '私有 Key 块', re: /-----BEGIN (RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----/g },
 ];
 
@@ -40,17 +40,52 @@ const ALLOW = [
 const PRIVATE_PATTERNS = [
   /(^|\/)AGENTS\.md$/i,
   /(^|\/)docs\/agent-notes\//i,
-  /glados/i,
-  /workbuddy/i,
   /(^|\/)tools\/wb-/i,
+  /(^|\/)tools\/private-terms\.local\.txt$/i,   // 私有词表本身也必须留在本地
+];
+
+// 私有词表（站点名 / 模板名 / 个人名…）：放在本地 tools/private-terms.local.txt（已 gitignore），
+// 不进仓库；CI 上没有这个文件时只跑通用规则。
+const LOCAL_TERMS_FILE = path.join(ROOT, 'tools', 'private-terms.local.txt');
+function localTerms() {
+  if (!fs.existsSync(LOCAL_TERMS_FILE)) return [];
+  return fs.readFileSync(LOCAL_TERMS_FILE, 'utf8')
+    .split(/\r?\n/).map((s) => s.trim()).filter((s) => s && !s.startsWith('#'));
+}
+
+// 私有词出现在跟踪文件的内容里（具体站点/模板/个人名）
+// 例外：竞品调研文档允许出现**公开的竞品项目名**（那些仓库本来就是公开的）
+const POLICY_ALLOW = [
+  /^docs\/COMPETITIVE-ANALYSIS\.md$/i,   // 公开竞品调研（只允许竞品的公开项目名）
 ];
 
 function policyCheck() {
   let out = '';
   try { out = execSync('git ls-files', { cwd: ROOT, encoding: 'utf8' }); } catch { return; }
-  const bad = out.split('\n').map((s) => s.trim()).filter(Boolean)
-    .filter((f) => PRIVATE_PATTERNS.some((re) => re.test(f)));
-  for (const f of bad) findings.push({ where: f, rule: '私有资产不应进仓库', sample: '（文件路径）' });
+  const tracked = out.split('\n').map((s) => s.trim()).filter(Boolean);
+  // 1) 私有文件路径
+  for (const f of tracked) {
+    if (PRIVATE_PATTERNS.some((re) => re.test(f))) {
+      findings.push({ where: f, rule: '私有资产不应进仓库', sample: '（文件路径）' });
+    }
+  }
+  // 2) 私有词出现在跟踪文件的内容里（具体站点/模板/个人名）
+  const terms = localTerms();
+  if (!terms.length) return;
+  for (const f of tracked) {
+    if (!fs.existsSync(f)) continue;
+    if (!/\.(js|jsx|cjs|mjs|ts|tsx|md|json|yml|yaml|html|txt|css)$/.test(f)) continue;
+    if (/^wiki\//.test(f)) continue;              // wiki/ 由 docs/ 生成，docs 本身已检查
+    if (ALLOW.some((rx) => rx.test(f))) continue;
+    if (POLICY_ALLOW.some((rx) => rx.test(f))) continue;
+    let text = '';
+    try { text = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    const hit = terms.find((t) => new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(text));
+    if (hit) {
+      const line = text.split(/\r?\n/).findIndex((l) => new RegExp(hit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(l)) + 1;
+      findings.push({ where: f, rule: '内容含私有标识', sample: `第 ${line} 行命中「${hit}」` });
+    }
+  }
 }
 
 function walk(dir, out = []) {

@@ -220,9 +220,11 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepP
             ) : (
               <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{Object.entries(shown.vars).map(([k, v]) => `${k} = ${String(v).slice(0, 200)}`).join('\n')}</pre>
             )}
-            <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 8 }}>
-              触发方式：{shown.trigger || 'manual'} · 开始：{shown.startedAt ? fmtTime(shown.startedAt) : '—'} · 耗时：{shown.durationMs ?? 0}ms
-              {shown.summary && <> · 摘要：{shown.summary}</>}
+            <div className="meta" style={{ color: 'var(--muted)', fontSize: 11, marginTop: 8 }}>
+              <span>触发方式：<b>{shown.trigger || 'manual'}</b></span>
+              <span>开始：<b>{shown.startedAt ? fmtTime(shown.startedAt) : '—'}</b></span>
+              <span>耗时：<b>{shown.durationMs ?? 0}ms</b></span>
+              {shown.summary ? <span>摘要：<b>{shown.summary}</b></span> : null}
             </div>
           </div>
         )}

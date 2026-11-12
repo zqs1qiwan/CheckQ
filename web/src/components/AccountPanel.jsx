@@ -248,7 +248,11 @@ export default function AccountPanel({ onToast }) {
         {sessions.length === 0 && <div className="hint">暂无其它会话</div>}
         {sessions.map((s) => (
           <div key={s.id} className="acc-row">
-            <span>{s.current ? '当前设备' : '其它设备'} · {s.ip} · {fmt(s.lastSeenAt)}</span>
+            <span className="meta">
+              <span>{s.current ? '当前设备' : '其它设备'}</span>
+              <span className="mono">{s.ip}</span>
+              <span>{fmt(s.lastSeenAt)}</span>
+            </span>
             <span className="acc-row-actions">
               {s.current ? <b>当前</b> : <button className="small danger" onClick={() => revoke(s.id)}>吊销</button>}
             </span>

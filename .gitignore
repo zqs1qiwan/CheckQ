@@ -31,4 +31,5 @@ docs/GLaDOS.md
 docs/WORKBUDDY.md
 glados-*.md
 tools/wb-*.cjs
+tools/private-terms.local.txt
 *.local.json

@@ -179,6 +179,31 @@ export class Store {
   }
 
   // ---- flows ----
+  /**
+   * 下次运行时间：同一个 cron + 时区的所有任务，下次运行时刻相同。
+   * 缓存结果（到期自动重算），避免每次列任务都为每个任务新建一个 Cron 对象。
+   */
+  #nextRunCache = new Map();
+
+  nextRunAt(flow) {
+    if (!flow.enabled || !flow.cron) return null;
+    const key = `${flow.cron}|${flow.timezone || 'Asia/Shanghai'}`;
+    const hit = this.#nextRunCache.get(key);
+    const now = Date.now();
+    if (hit && hit.at > now) return hit.at;
+    try {
+      const job = new Cron(flow.cron, { timezone: flow.timezone || 'Asia/Shanghai' });
+      const next = job.nextRun();
+      const at = next ? next.getTime() : null;
+      job.stop();
+      this.#nextRunCache.set(key, { at: at || 0 });
+      return at;
+    } catch {
+      this.#nextRunCache.set(key, { at: 0 });
+      return null;   // 无效 cron 不显示
+    }
+  }
+
   listFlows() {
     return this.flows.map((f) => {
       const last = this.runs.find((r) => r.flowId === f.id) || null;
@@ -186,15 +211,7 @@ export class Store {
         id: last.id, status: last.status, startedAt: last.startedAt, finalMessage: last.finalMessage,
       } : null;
       // 下次运行时间（croner nextRun，仅启用调度的任务）
-      let nextRunAt = null;
-      if (f.enabled && f.cron) {
-        try {
-          const job = new Cron(f.cron, { timezone: f.timezone || 'Asia/Shanghai' });
-          const next = job.nextRun();
-          nextRunAt = next ? next.getTime() : null;
-          job.stop();
-        } catch { /* 无效 cron 不显示 */ }
-      }
+      const nextRunAt = this.nextRunAt(f);
       const resolved = this.resolveFlow(f);   // 派生任务显示的是模板当前版本
       return {
         id: f.id, name: f.name, note: f.note, cron: f.cron, timezone: f.timezone,

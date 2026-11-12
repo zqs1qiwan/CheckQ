@@ -1,8 +1,8 @@
 import React from 'react';
 
 /**
- * 统一图标（v0.4.2 品牌化）：全部线性 SVG，尺寸/描边/视窗一致，避免 emoji 的大小不一。
- * 用法：<Icon name="bell" size={16} />
+ * 统一图标：全部线性 SVG，尺寸/描边/视窗一致，避免 emoji 的大小不一。
+ * 用法：import { IconBell } from './Icons.jsx'; <IconBell size={16} />
  */
 
 const S = ({ size = 16, children, fill = 'none', ...rest }) => (
@@ -200,30 +200,3 @@ export function IconCopy({ size = 16, ...rest }) {
   );
 }
 
-export const ICONS = {
-  bell: IconBell,
-  help: IconHelp,
-  sun: IconSun,
-  moon: IconMoon,
-  auto: IconAuto,
-  close: IconClose,
-  play: IconPlay,
-  bug: IconBug,
-  download: IconDownload,
-  trash: IconTrash,
-  more: IconMore,
-  book: IconBook,
-  key: IconKey,
-  users: IconUsers,
-  shield: IconShield,
-  sparkle: IconSparkle,
-  gear: IconGear,
-  globe: IconGlobe,
-  copy: IconCopy,
-};
-
-export default function Icon({ name, size = 16, ...rest }) {
-  const C = ICONS[name];
-  if (!C) return null;
-  return <C size={size} {...rest} />;
-}

@@ -86,7 +86,7 @@ X-API-Key: <key>
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | /api/flows | 列表（摘要：id/name/note/cron/timezone/enabled/jitterMinutes/varsCount/nodesCount/tplId/template/lastRun/nextRunAt）。`template` = `{ id, name }` —— 来源模板；派生任务的流程图始终是模板当前版本 |
-| POST | /api/flows | 创建（body = Flow 对象；空 nodes 允许，仅草稿） |
+| POST | /api/flows | 创建（body = Flow 对象；空 nodes 允许，仅草稿；显式 `enabled:true` 且给了 cron 时按请求启用） |
 | GET | /api/flows/:id | 详情（含 nodes/edges/vars/log/notify/template；派生任务返回的是模板当前流程） |
 | PUT | /api/flows/:id | 更新（部分字段合并）。派生任务改了脚本内容 → 自动转为独立任务，返回体 `detached` = 模板名 |
 | DELETE | /api/flows/:id | 删除 |

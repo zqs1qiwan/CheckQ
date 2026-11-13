@@ -124,6 +124,7 @@ export function buildOpenApi() {
         }),
       },
       '/api/runs/{id}': { get: op('某次运行详情（日志 + 变量快照，变量已脱敏）', { tags: ['runs'], parameters: [idParam()], schema: { $ref: '#/components/schemas/Run' } }) },
+      '/api/runs/{id}/har': { get: op('导出单次运行的 HAR（默认脱敏；响应体沿用日志截断）', { tags: ['runs'], parameters: [idParam()], schema: { type: 'object' } }) },
       '/api/templates': { get: op('模板列表（含变量名）', { tags: ['templates'], schema: { type: 'array', items: { type: 'object' } } }) },
       '/api/templates/{id}': { get: op('模板详情（变量名 + 默认值，敏感项已脱敏）', { tags: ['templates'], parameters: [idParam()], schema: { type: 'object' } }) },
       '/api/templates/{id}/instantiate': {

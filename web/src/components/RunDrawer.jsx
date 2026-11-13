@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import PickPanel from './PickPanel.jsx';
+import { toast } from '../toast.js';
 
 function fmtTime(ts) {
   const d = new Date(ts);
@@ -8,7 +9,7 @@ function fmtTime(ts) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepPick, debug: debugProp, onDebugChange }) {
+export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepPick, debug: debugProp, onDebugChange, focusStepId, onFocusStep }) {
   const [tab, setTab] = useState('logs');
   const [hist, setHist] = useState(null);
   const [expanded, setExpanded] = useState(null); // log index
@@ -20,6 +21,8 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepP
     return v >= 25 && v <= 92 ? v : 55;
   });
   const dragRef = useRef(null);
+  const bodyRef = useRef(null);
+  const [harBusy, setHarBusy] = useState(false);
 
   // 拖拽调整日志坞高度（25% ~ 92%）
   const onDragStart = (e) => {
@@ -72,6 +75,38 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepP
     }
   }, [tab, flowId]);
 
+  // 画布点节点 → 切到步骤日志并滚动到对应步骤
+  useEffect(() => {
+    if (focusStepId) setTab('logs');
+  }, [focusStepId]);
+
+  useEffect(() => {
+    if (!focusStepId || !bodyRef.current) return undefined;
+    const el = bodyRef.current.querySelector(`[data-step-id="${String(focusStepId).replace(/["\\]/g, '\\$&')}"]`);
+    if (!el) return undefined;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.classList.add('focus-flash');
+    const t = setTimeout(() => el.classList.remove('focus-flash'), 1400);
+    return () => clearTimeout(t);
+  }, [focusStepId, tab, debug]);
+
+  const exportHar = async () => {
+    const id = shown.id;
+    if (!id || id === 'pending') return;
+    setHarBusy(true);
+    try {
+      const blob = await api.downloadRunHar(id);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `checkq-run-${id}.har`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast('已导出 HAR（默认脱敏）', 'ok');
+    } catch (e) {
+      toast(e.message, 'fail');
+    } finally { setHarBusy(false); }
+  };
+
   if (!run && !override) return null;
   const shown = override || run;
 
@@ -79,8 +114,12 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepP
   const failLog = shown.logs?.find((l) => !l.ok);
   const [errFilter, setErrFilter] = useState('all'); // all | network | assert | engine
   // 日常只看「人话」：log 节点输出 + 失败步骤 + 重试分隔；调试模式才展开全部步骤
-  const cleanLogs = (shown.logs || []).filter((l) => l.type === 'log' || l.type === 'system' || !l.ok);
-  const visibleLogs = (debug ? (shown.logs || []) : cleanLogs).filter((l) => errFilter === 'all' || l.errorType === errFilter || (errFilter === 'network' && l.errorType === 'network'));
+  // 流程里没有 log 节点时退回全部步骤，避免「成功但日志空白」
+  const allLogs = shown.logs || [];
+  const cleanLogs = allLogs.filter((l) => l.type === 'log' || l.type === 'system' || !l.ok);
+  const hasLogNode = allLogs.some((l) => l.type === 'log');
+  const baseLogs = (debug || !hasLogNode) ? allLogs : cleanLogs;
+  const visibleLogs = baseLogs.filter((l) => errFilter === 'all' || l.errorType === errFilter || (errFilter === 'network' && l.errorType === 'network'));
 
   return (
     <div className="run-drawer" style={{ height: `${height}vh` }}>
@@ -112,6 +151,7 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepP
           <button className={tab === 'logs' ? 'active' : ''} onClick={() => setTab('logs')}>步骤日志</button>
           <button className={tab === 'vars' ? 'active' : ''} onClick={() => setTab('vars')}>变量快照</button>
           <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>历史记录</button>
+          <button className="small" disabled={harBusy || !shown.id || shown.id === 'pending'} onClick={exportHar} title="导出本次运行的 HAR（默认脱敏）">导出 HAR</button>
           {tab === 'logs' && (
             <>
               <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, whiteSpace: 'nowrap' }} title="调试模式：显示每一步的请求/响应细节">
@@ -130,15 +170,15 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepP
         <button className="modal-close drawer-close" onClick={onClose} title="关闭（Esc）" aria-label="关闭">✕</button>
       </div>
 
-      <div className="drawer-body" style={{ fontFamily: 'inherit' }}>
+      <div className="drawer-body" ref={bodyRef} style={{ fontFamily: 'inherit' }}>
         {tab === 'logs' && (
           <>
             {!visibleLogs?.length ? (
               <div className="empty" style={{ padding: 30 }}>暂无日志（默认只显示 log 节点输出与失败步骤；勾选「调试」查看每步细节）</div>
             ) : (
               visibleLogs.map((log, i) => (
-                <div key={i} className="step-row">
-                  <div className="step-head" onClick={() => setExpanded(expanded === i ? null : i)}>
+                <div key={i} className={`step-row${log.stepId && focusStepId === log.stepId ? ' focus-flash' : ''}`} data-step-id={log.stepId || ''}>
+                  <div className="step-head" onClick={() => { setExpanded(expanded === i ? null : i); if (log.stepId && onFocusStep) onFocusStep(log.stepId); }}>
                     <span className="idx">{log.index}</span>
                     <span className="dot" style={{ background: log.ok ? 'var(--ok)' : 'var(--fail)', width: 8, height: 8, borderRadius: '50%', flex: 'none' }} />
                     <span className="msg" title={log.message}>{log.name} — {log.message}{log.errorType ? ` [${log.errorType}]` : ''}</span>

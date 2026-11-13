@@ -703,17 +703,20 @@ dialog.modal:focus { outline: none; }
 }
 @media (max-width: 640px) {
   /* 窄屏顶栏：只保留「品牌 / 新建 / 更多 / 设置」四个等高控件，单行不换行；
-     主题、通知、文档、身份信息收进「更多」菜单（见 .mobile-only）。 */
-  .topbar { padding: 9px 10px; gap: 8px; row-gap: 6px; flex-wrap: nowrap; }
-  .topbar .logo { font-size: 15px; }
-  .topbar .spacer { min-width: 4px; }
-  .topbar-actions, .who-chip { display: none; }
-  .new-task-btn { width: var(--ctl-h-lg); min-width: var(--ctl-h-lg); padding: 0; font-size: 18px; }
-  .new-task-btn .btn-label { display: none; }
-  .new-task-btn::before { content: '+'; font-weight: 500; }
-  .dd-menu .dd-trigger { width: var(--ctl-h-lg); min-width: var(--ctl-h-lg); padding: 0; }
-  .dd-menu .dd-label, .dd-menu .dd-caret { display: none; }
-  .dd-menu .dd-trigger::before { content: '⋯'; font-size: 17px; line-height: 1; }
+     主题、通知、文档、身份信息收进「更多」菜单（见 .mobile-only）。
+     注意：只作用于首页顶栏，编辑器顶栏需要自己的换行策略。 */
+  .topbar:not(.editor-topbar) { padding: 9px 10px; gap: 8px; row-gap: 6px; flex-wrap: nowrap; }
+  .topbar:not(.editor-topbar) .logo { font-size: 15px; }
+  .topbar:not(.editor-topbar) .spacer { min-width: 4px; }
+  .topbar:not(.editor-topbar) .topbar-actions,
+  .topbar:not(.editor-topbar) .who-chip { display: none; }
+  .topbar:not(.editor-topbar) .new-task-btn { width: var(--ctl-h-lg); min-width: var(--ctl-h-lg); padding: 0; font-size: 18px; }
+  .topbar:not(.editor-topbar) .new-task-btn .btn-label { display: none; }
+  .topbar:not(.editor-topbar) .new-task-btn::before { content: '+'; font-weight: 500; }
+  .topbar:not(.editor-topbar) .dd-menu .dd-trigger { width: var(--ctl-h-lg); min-width: var(--ctl-h-lg); padding: 0; }
+  .topbar:not(.editor-topbar) .dd-menu .dd-label,
+  .topbar:not(.editor-topbar) .dd-menu .dd-caret { display: none; }
+  .topbar:not(.editor-topbar) .dd-menu .dd-trigger::before { content: '⋯'; font-size: 17px; line-height: 1; }
   .menu-pop .mobile-only { display: flex; }
   .menu-pop .menu-sep.mobile-only { display: block; }
   .menu-pop .menu-user.mobile-only { display: block; }
@@ -1094,6 +1097,8 @@ button.icon-text svg { flex: none; }
 }
 .attempt-pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
 .attempt-pill.fail { color: var(--fail); border-color: color-mix(in srgb, var(--fail) 35%, transparent); }
+/* 画布 ↔ 日志联动：被定位到的步骤短暂高亮 */
+.step-row.focus-flash { outline: 1px solid var(--accent); outline-offset: -1px; background: var(--hover-tint); border-radius: var(--r-sm); transition: background .2s; }
 
 /* =====================================================================
    可访问性 / 性能 / 动效偏好

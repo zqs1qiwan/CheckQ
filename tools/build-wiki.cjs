@@ -226,6 +226,15 @@ CheckQ 是一个**可视化 HTTP 自动化流程引擎**（框架 / 平台）：
 - 从模板创建任务时逐个覆盖变量；敏感默认值在模板导出时自动脱敏。
 - 模板市场：「模板」页可从 JSON 索引地址批量导入。
 
+## 编辑器效率
+
+- **撤销 / 重做**：Ctrl+Z / Ctrl+Shift+Z（或 Ctrl+Y），保留 50 步；「更多」菜单也有按钮。
+- **复制 / 粘贴节点**：Ctrl+C / Ctrl+V；复制选中节点与两端都在选区内的连线，粘贴自动偏移 24px。
+- **整理布局**：按连线层级从左到右自动排列（「整理」按钮或「更多 → 整理布局」），完成后自动 fitView。
+- **MiniMap**：右下角缩略图，可拖拽定位。
+- **画布 ↔ 日志联动**：点击日志步骤 → 画布选中并居中；点击画布节点 → 日志抽屉滚到对应步骤并短暂高亮。
+- **导出 HAR**：运行抽屉「导出 HAR」，只含本次运行的 HTTP 步骤，敏感值替换为 \`***\`，响应体沿用日志截断长度。
+
 ## 点选生成逻辑
 
 在编辑器里运行一次 → 日志里展开响应 → 点任意 JSON 值或划选文字 → 选择用途（存为变量 / 断言成功 / 记录到日志 / 加进通知）→ 自动生成标准节点并接到链尾。
@@ -255,6 +264,7 @@ CheckQ 是一个**可视化 HTTP 自动化流程引擎**（框架 / 平台）：
 | 表格 | 语义 \`<table>/<caption>/<th scope>\` + sticky 表头 + 容器查询；可聚焦横滚区 |
 | 表单 | \`autocomplete\` / \`:user-invalid\` / \`aria-label\` / \`role="alert"\` |
 | 动效 | \`prefers-reduced-motion\` 降级；长日志 \`content-visibility: auto\` |
+| 编辑器 | 撤销/重做、复制/粘贴、按层级整理布局、MiniMap、日志↔画布双向定位、单次运行导出 HAR（脱敏） |
 
 依据 [Modern Web Guidance 1.0](https://developer.chrome.com/docs/modern-web-guidance)；机械扫描 \`npx modern-web-guidance@latest legacy-scan web/src --json\` 当前为 0 命中。
 

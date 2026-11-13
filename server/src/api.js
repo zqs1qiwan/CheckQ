@@ -26,6 +26,7 @@ import { importHar } from './har-import.js';
 import { parseCurl } from './curl-import.js';
 import { Scheduler } from './scheduler.js';
 import { runWithRetry, normalizeRetry, attemptLabel } from './retry.js';
+import { runToHar } from './har-export.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1638,6 +1639,17 @@ export function buildServer({ dataDir, port }) {
     const r = store.getRun(req.params.id);
     if (!r) return reply.code(404).send({ error: 'not found' });
     return r;
+  });
+
+  // 单次运行导出 HAR（默认脱敏；响应体沿用日志截断）
+  app.get('/api/runs/:id/har', async (req, reply) => {
+    const r = store.getRun(req.params.id);
+    if (!r) return reply.code(404).send({ error: 'not found' });
+    const flow = store.getFlow(r.flowId);
+    const har = runToHar(r, flow);
+    reply.header('content-type', 'application/json; charset=utf-8');
+    reply.header('content-disposition', `attachment; filename="checkq-run-${String(r.id).replace(/[^\w-]/g, '')}.har"`);
+    return har;
   });
 
   /**

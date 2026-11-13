@@ -61,6 +61,19 @@ export const api = {
   updateFlow: (id, patch) => req('PUT', `/api/flows/${id}`, patch),
   deleteFlow: (id) => req('DELETE', `/api/flows/${id}`),
   runFlow: (id, debugStopId, debug) => req('POST', `/api/flows/${id}/run`, { ...(debugStopId ? { debugStopId } : {}), ...(debug ? { debug: true } : {}) }),
+  // 单次运行导出 HAR（服务端已脱敏）；返回 Blob 供前端下载
+  downloadRunHar: async (id) => {
+    const r = await fetch(`/api/runs/${id}/har`, { credentials: 'include' });
+    if (r.status === 401) {
+      if (on401) on401();
+      throw new Error('未登录');
+    }
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      throw new Error(d.error || `HTTP ${r.status}`);
+    }
+    return r.blob();
+  },
   // SSE 流式运行（PRD §4.7.3）：onStart/onLog 实时回调，返回完整 run 对象
   runFlowStream: async (id, { debugStopId, debug, onStart, onLog } = {}) => {
     const res = await fetch(`/api/flows/${id}/run`, {

@@ -27,11 +27,9 @@ server/public
 # ---- 本地私有内容（项目金标准：仓库只放 CheckQ 本身）----
 AGENTS.md
 docs/agent-notes/
-docs/glados-*
-docs/workbuddy-*
-docs/GLaDOS.md
-docs/WORKBUDDY.md
-glados-*.md
-tools/wb-*.cjs
+# 具体业务模板 / 实例笔记：按类型忽略；具体名单只写本地 .git/info/exclude
+docs/*.flow.json
+docs/*.template.json
+docs/*.local.md
 tools/private-terms.local.txt
 *.local.json

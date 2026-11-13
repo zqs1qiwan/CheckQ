@@ -102,6 +102,7 @@ X-API-Key: <key>
 |---|---|---|
 | GET | /api/runs?flowId=&limit= | 列表（默认 limit 30，上限 200） |
 | GET | /api/runs/:id | 单条详情（完整 logs） |
+| GET | /api/runs/:id/har | 导出单次运行的 HAR（默认脱敏；响应体沿用日志截断） |
 
 ### 模板
 | 方法 | 路径 | 说明 |

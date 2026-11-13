@@ -127,10 +127,10 @@ Run = { id, flowId, trigger: manual|cron|debug|api, status, logs[], vars, finalM
 3. 无 GBK/charset 处理（中文 PT 站乱码）✅ v0.2 已实现（charset 字段，TextDecoder/iconv）
 4. 无法从响应捕获 Set-Cookie（签到场景高频需求）✅ v0.2 已实现（getSetCookie/头文件解析）
 5. 无循环/遍历节点（翻页、批量元素）⬜ v0.3 P1
-6. 编辑器无 undo/redo、无运行状态回显到画布、无复制节点 ⬜ P1/P2
+6. 编辑器 undo/redo、运行状态回显到画布、复制节点 ✅ v0.4.4 已补齐
 7. 模板默认变量不可编辑、无导出 JSON、无 CSV 批量建任务 ✅ v0.2 已实现（导出脱敏 + CSV 批量；默认变量编辑 ✅ v0.3.4）
-8. 无 cURL 命令导入、无"复制为 curl" ✅ v0.2 已实现（cURL 导入；"复制为 curl" ⬜ P1）
-9. 登录无防爆破 ✅ v0.3.4（5 次/10 分钟锁定）；无备份/恢复；无运行统计 ⬜ P1/P2
+8. 无 cURL 命令导入、无"复制为 curl" ✅ v0.2 已实现（cURL 导入 + 复制为 curl）
+9. 登录无防爆破 ✅ v0.3.4（5 次/10 分钟锁定）；无备份/恢复 ✅ v0.3.5；无运行统计 ✅ v0.3.5
 10. 列表无搜索/筛选/分组、无下次运行时间显示 ✅ v0.2 已实现（搜索 + 筛选 + nextRunAt）
 11. 无 run 级 cookie 罐（登录→签到链断裂）✅ v0.3 已实现（GAP-C1，cookiejar.js，显式头同名优先，节点可 `cookieJar:false` 退出）
 12. 模板表达式层弱于 QD jinja（md5 拼接签名/default/striptags 不可用）✅ v0.3 已实现（GAP-C3，白名单函数式求值，无 eval）
@@ -392,17 +392,17 @@ Template = {
 | 拖拽建节点 | 调色板拖入画布 ✅；双击调色板项=放置到视口中心 | 🔶 |
 | 连线 | 按出口 handle 拖线 ✅；**failed/true/false 出口未连线时节点上显示橙色小圆点提醒** | ⬜ P0 |
 | 删节点/删线 | 选中 Del/Backspace；ConfigPanel 删除按钮 ✅ | 🔶 |
-| 复制粘贴 | Ctrl/Cmd+C/V 复制选中节点（含连线），粘贴偏移 20px | ⬜ P0 |
-| Undo/Redo | Ctrl+Z / Ctrl+Shift+Z，历史 50 步（nodes+edges 快照） | ⬜ P0 |
+| 复制粘贴 | Ctrl/Cmd+C/V 复制选中节点（含两端都在选区内的连线），粘贴偏移 24px；「更多」菜单也有入口 | ✅ 2026-11-13 |
+| Undo/Redo | Ctrl+Z / Ctrl+Shift+Z（或 Ctrl+Y），历史 50 步（nodes+edges 快照）；「更多」菜单有按钮 | ✅ |
 | 保存 | Ctrl/Cmd+S；顶栏"未保存"橙点提示（现有） | ✅ |
-| 画布 | 缩放/平移/fitView ✅；小地图 minimap（P2）；对齐吸附（P1）；"整理布局"按钮（自左向右分层 auto-layout）| 🔶 |
-| 运行回显 | 运行中：当前节点蓝色呼吸框；完成：成功绿框/失败红框 + 步骤序号角标；点击画布节点→日志面板滚动到对应步骤 | ⬜ P0 |
-| 日志面板 | 编辑器底部抽屉（现右侧 drawer ✅），步骤点击 ↔ 画布节点双向联动 | 🔶 |
+| 画布 | 缩放/平移/fitView ✅；**MiniMap ✅**；**「整理」按连线层级左→右自动布局 ✅**；对齐吸附（P1） | ✅ |
+| 运行回显 | 运行中：当前节点蓝色呼吸框；完成：成功绿框/失败红框 + 角标；**点击画布节点 → 日志抽屉滚到对应步骤；点击日志步骤 → 画布选中并居中** | ✅ 2026-11-13 |
+| 日志面板 | 编辑器底部抽屉，步骤 ↔ 画布双向联动；支持「导出 HAR」（默认脱敏） | ✅ 2026-11-13 |
 | 试运行节点 | ConfigPanel"▶ 单测此节点"：用当前 vars 执行该节点一次（不落 run 历史，结果就地显示） | ⬜ P1 |
 | 调试到此 | ✅ 已有（trigger=debug，不计入调度统计但计入 run 历史） | ✅ |
-| 变量面板 | 编辑器"变量"按钮 → 抽屉列出全部 vars（值打码可显隐）+ "运行日志中出现的未定义变量"汇总（missing 提示，引擎已收集） | ⬜ P0 |
+| 变量面板 | 左侧「流程变量」面板：值打码可显隐、未定义变量提示（missing，引擎已收集） | ✅ |
 | 快捷键帮助 | `?` 键弹快捷键速查 | ⬜ P2 |
-| 空状态引导 | 空画布中央："从左侧拖入第一个节点，或从模板导入" | ⬜ P1 |
+| 空状态引导 | 空画布中央："从左侧拖入第一个节点，或从模板导入" | ✅ |
 
 ConfigPanel 改进:
 - 表达式输入旁"可用上下文"速查折叠块（vars 列表实时生成、last.* 字段说明、常用 transform 一览）
@@ -440,11 +440,11 @@ ConfigPanel 改进:
 
 | 功能 | 设计 | 状态 |
 |---|---|---|
-| 画布 ↔ 时间轴双向 | 时间轴点击步骤 → 画布高亮对应节点并居中；画布点击节点 → 时间轴滚动到该步 | ⬜ P0 |
-| 失败重修 | 失败步骤详情「⟳ 重新点选」→ 载入真实响应进 Pick Panel → 原位替换该节点 config（§4.0.5） | ⬜ P0（日志侧 Pick 入口已具备：运行日志每步可"点选生成逻辑"并接入链尾；"原位替换"模式 ⬜） |
-| 复制为 curl | 请求 Tab 一键复制完整 curl（敏感值完整还原，仅本机调试用） | ⬜ P0 |
+| 画布 ↔ 时间轴双向 | 时间轴点击步骤 → 画布选中并居中；画布点击节点 → 日志抽屉滚到该步并短暂高亮 | ✅ 2026-11-13 |
+| 失败重修 | 失败步骤详情「⟳ 用真实响应重选修复」→ Pick Panel → 原位替换该节点 config | ✅ |
+| 复制为 curl | 请求 Tab 一键复制完整 curl（敏感值完整还原，仅本机调试用） | ✅ |
 | 重跑 | 运行详情「重跑」按钮（同 vars 再执行） | ⬜ P1 |
-| 导出 | 单次运行导出 HAR（默认脱敏） | ⬜ P2 |
+| 导出 | 单次运行导出 HAR（默认脱敏，响应体沿用日志截断） | ✅ 2026-11-13 |
 
 #### 4.7.3 数据与安全
 
@@ -822,6 +822,7 @@ GET    /api/templates/:id/export        脱敏导出（samplesIncluded:false）
 # 运行记录
 GET    /api/runs?flowId=&limit=         历史
 GET    /api/runs/:id                    单次完整记录（含 attempts[]）
+GET    /api/runs/:id/har                导出单次运行 HAR（默认脱敏，响应体沿用日志截断）
 
 # 系统 / 账号 / 安全
 GET    /api/health  /api/me  /api/system/stats  /api/openapi.json
@@ -897,7 +898,7 @@ GET    /api/notifications | POST /api/notifications/read | DELETE /api/notificat
 - 文档与 wiki 同步（PRD / API / 交互规范页 / 上手页），全程脱敏。
 
 **v0.5 — 生态（P2）**
-模板市场索引规范 + 从 URL 导入；运行导出 HAR；每日汇总静默时段；minimap / 自动布局；错峰预设；补跑提示；MCP 扩展工具（flow_create/update/delete/import_curl）。
+模板市场索引规范 + 从 URL 导入；每日汇总静默时段；错峰预设；补跑提示；MCP 扩展工具已全部落地（flow_create/update/delete/template_instantiate/import_curl）。
 
 **v1.0 — 收敛**
 文档完备（节点手册/表达式手册）；镜像发布；性能与压力验证；安全复查。
@@ -921,6 +922,8 @@ GET    /api/notifications | POST /api/notifications/read | DELETE /api/notificat
 13. **重试验收**: 失败任务按退避策略跑满 N 次才最终失败；`attempts[]`、日志分隔行、通知结论、运行抽屉四处都能看到第几次尝试；调试运行不重试；调度不会在重试期间重复触发。
 14. **UI 验收**: `node tools/ui-smoke.cjs` 在 7 视口 × 明暗主题 0 问题；弹窗居中、顶栏单行等高、菜单不被裁、控制台无报错；`npx modern-web-guidance@latest legacy-scan web/src` 0 命中。
 15. **文档一致性验收**: `node tools/project-audit.cjs` 通过——组件引用、文档链接、wiki 来源、API 端点、MCP 工具、CSS 契约一致，且无陈旧交互说法。
+16. **编辑器效率验收**: 撤销/重做 50 步；复制粘贴保留内部连线并偏移；「整理」按层级排列后无重叠；MiniMap 可见；点击日志步骤能定位画布节点，点击节点能定位日志行。
+17. **HAR 验收**: `GET /api/runs/:id/har` 返回 HAR 1.2；只含 http 步骤；cookie/token/密码替换为 `***`；运行抽屉「导出 HAR」能下载 `checkq-run-<id>.har`。
 
 ---
 
@@ -945,5 +948,5 @@ GET    /api/notifications | POST /api/notifications/read | DELETE /api/notificat
 12. 生成节点的变量命名策略：建议中英文小词表映射 + 冲突加后缀，用户随时可改。
 13. 通知渠道是否继续扩展：按需求追加，保持内核轻量。
 14. 多租户隔离：当前单实例多用户 + 角色已足够，租户级隔离留到 v1.0 后评估。
-15. 编辑器能力缺口：Undo/Redo、节点复制粘贴、画布↔时间轴双向联动、单次运行 HAR 导出、minimap / 自动布局。
-16. 维护文档：`docs/GAP-ANALYSIS*.md` 是否保留、`FlowList.jsx` / `FlowEditor.jsx` 是否拆分。
+15. ~~编辑器能力缺口~~：本轮已补齐 Undo/Redo（Ctrl+Z / Ctrl+Y）、节点复制粘贴（Ctrl+C / Ctrl+V，含内部连线）、画布↔日志双向联动、单次运行 HAR 导出（默认脱敏）、MiniMap、按层级自动整理布局。
+16. 维护文档：`docs/GAP-ANALYSIS*.md` 已删除（内容与 PRD/ROADMAP/COMPETITIVE-ANALYSIS 重复且部分过时）；`FlowList.jsx` 已拆到 `flow-list/`（562 行）、`FlowEditor.jsx` 已拆到 `editor/`（646 行），后续可按同样方式继续下沉 hooks。

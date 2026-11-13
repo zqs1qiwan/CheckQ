@@ -145,7 +145,8 @@ for (const f of [...mdFiles, ...tracked.filter((x) => x === 'README.md')]) {
 }
 
 /* ---------- 7) 内容政策：私有资产与本地测试样例 ---------- */
-const PRIVATE_PATH = [/(^|\/)AGENTS\.md$/i, /(^|\/)docs\/agent-notes\//i, /(^|\/)docs\/(glados|workbuddy)[-./]/i,
+const PRIVATE_PATH = [/(^|\/)AGENTS\.md$/i, /(^|\/)docs\/agent-notes\//i,
+  /(^|\/)docs\/.+\.(flow|template)\.json$/i,
   /(^|\/)tools\/wb-/i, /(^|\/)tools\/private-terms\.local\.txt$/i, /(^|\/)data\//i, /(^|\/)server\/public\//i];
 for (const f of tracked) if (PRIVATE_PATH.some((re) => re.test(f))) bad(f, '私有资产不应进仓库');
 const SAMPLE_SECRET = [/(?:koa|gld|sess|session):\s*[A-Za-z0-9_-]{8,}/i, /Bearer\s+[A-Za-z0-9._-]{12,}/];
@@ -160,7 +161,7 @@ const css = read(path.join(ROOT, 'web/src/styles.css'));
 const CSS_RULES = [
   [/dialog\.modal\[open\][\s\S]{0,240}position:\s*fixed;?\s*inset:\s*0;?\s*margin:\s*auto/, '弹窗显式居中（fixed + inset:0 + margin:auto）'],
   [/dialog\.modal:not\(\[open\]\)\s*\{\s*display:\s*none/, '关闭态 dialog 不显示'],
-  [/\.topbar\s*\{[^}]*flex-wrap:\s*nowrap/, '窄屏顶栏单行'],
+  [/\.topbar:not\(\.editor-topbar\)\s*\{[^}]*flex-wrap:\s*nowrap/, '窄屏顶栏单行'],
   [/\.mobile-only/, '移动端动作收进菜单'],
   [/\.attempt-pill/, '重试尝试条样式'],
 ];

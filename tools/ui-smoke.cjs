@@ -224,6 +224,11 @@ async function checkDropdown(page, where, openExpr, label = '') {
   return res;
 }
 
+/** 若列表被分组收起，先点「展开全部」，保证后续断言能看到任务行 */
+async function expandGroups(page) {
+  await page.eval(`[...document.querySelectorAll('.page button')].find(b=>b.textContent.trim()==='展开全部')?.click(); await new Promise(r=>setTimeout(r,350)); return 1;`);
+}
+
 /** 弹窗通用检查 */
 async function checkModal(page, where, openExpr, opts = {}) {
   const { expectClose = true, label = '' } = opts;
@@ -289,6 +294,8 @@ async function checkModal(page, where, openExpr, opts = {}) {
     `);
     if (login !== 200) throw new Error('登录失败：' + login);
     await page.reload();
+    const preGroups = await page.eval(`return JSON.stringify({groups:document.querySelectorAll('.group-row').length, collapsed:document.querySelectorAll('.group-row[data-collapsed="1"]').length});`);
+    await expandGroups(page);
 
     const home = await page.eval(ASSERT + `
       // 图标按钮必须有按钮框（边框 + 尺寸）；幽灵样式平时透明是刻意的
@@ -299,16 +306,41 @@ async function checkModal(page, where, openExpr, opts = {}) {
         if (r.width < 24 || r.height < 24) bad('图标按钮太小: ' + Math.round(r.width) + 'x' + Math.round(r.height));
       }
       if (!document.querySelector('.topbar a.iconbtn[href*="github.io"]')) bad('顶栏缺少「文档中心」外链');
-      return { rows: document.querySelectorAll('.flow-table tbody tr').length, A };
+      return { rows: document.querySelectorAll('.flow-table tbody tr:not(.group-row)').length, A };
     `);
     home.A.issues.forEach((i) => fail('首页/1440', i));
     home.A.notes.forEach((n) => ok('首页/1440', n));
     if (!home.rows) fail('首页/1440', '任务列表为空，无法验证行内菜单');
     if (SHOTS) await page.shot(path.join(SHOTS, 'home-1440.png'));
 
+    /* 1b) 分组：折叠头显示汇总读数，收起后任务行减少，再展开恢复 */
+    const grp = await page.eval(`
+      const rows=[...document.querySelectorAll('.group-row')];
+      if (!rows.length) return JSON.stringify({groups:0});
+      const stats=(rows[0].querySelector('.group-head')?.innerText||'').replace(/\\s+/g,' ').trim();
+      const before=document.querySelectorAll('.flow-table tbody tr:not(.group-row)').length;
+      rows[0].querySelector('.group-toggle')?.click();
+      await new Promise(r=>setTimeout(r,300));
+      const afterCollapse=document.querySelectorAll('.flow-table tbody tr:not(.group-row)').length;
+      const collapsed=rows[0].getAttribute('data-collapsed')==='1';
+      if (afterCollapse < before) { rows[0].querySelector('.group-toggle')?.click(); await new Promise(r=>setTimeout(r,250)); }
+      return JSON.stringify({groups:rows.length,stats,before,afterCollapse,collapsed});
+    `);
+    const g = JSON.parse(grp);
+    if (!g.groups) fail('分组/1440', '任务列表没有分组头（分组系统未生效）');
+    else ok('分组/1440', `分组头 ${g.groups} 组，含汇总读数`);
+    if (g.stats && !/任务\s*\d/.test(g.stats)) fail('分组/1440', `分组头缺少任务数量统计：${g.stats}`);
+    else if (g.stats) ok('分组/1440', '分组头显示任务数');
+    if (g.stats && !/今日/.test(g.stats)) fail('分组/1440', `分组头缺少今日统计：${g.stats}`);
+    else if (g.stats) ok('分组/1440', '分组头显示今日成功/失败/成功率');
+    if (g.before > 0 && g.afterCollapse >= g.before) fail('分组/1440', `收起分组后任务行没有减少（${g.before} → ${g.afterCollapse}）`);
+    else if (g.before > 0) ok('分组/1440', `收起后任务行减少（${g.before} → ${g.afterCollapse}）`);
+    const pg = JSON.parse(preGroups || '{}');
+    if (pg.groups) ok('分组/1440', `默认分组头 ${pg.groups} / 默认收起 ${pg.collapsed}（≥8 个任务的分组自动收起）`);
+
     /* 2) 底部行内菜单（最容易出界的一处） */
     await page.eval(WAIT + `
-      const rows = [...document.querySelectorAll('.flow-table tbody tr')];
+      const rows = [...document.querySelectorAll('.flow-table tbody tr:not(.group-row)')];
       const last = rows[rows.length - 1];
       last.scrollIntoView({ block: 'end' });
       await new Promise(r => setTimeout(r, 200));
@@ -321,7 +353,7 @@ async function checkModal(page, where, openExpr, opts = {}) {
 
     /* 2b) 交互契约：点任务名 = 任务详情；「更多」里才是「编辑流程」，且没有单独的基础信息入口 */
     const contract = await page.eval(WAIT + `
-      const rows=[...document.querySelectorAll('.flow-table tbody tr')];
+      const rows=[...document.querySelectorAll('.flow-table tbody tr:not(.group-row)')];
       const row=rows[0];
       const nameBtn=row.querySelector('button.flow-name');
       if (!nameBtn) return { ok:false, why:'任务名不是按钮（应可点开任务详情）' };
@@ -443,9 +475,9 @@ async function checkModal(page, where, openExpr, opts = {}) {
 
     /* 8) 编辑器 */
     const openEditor = await page.eval(WAIT + `
-      const btn = [...document.querySelectorAll('.flow-table tbody tr td button')].find(b => b.textContent.trim().startsWith('编辑'));
+      const btn = [...document.querySelectorAll('.flow-table tbody tr:not(.group-row) td button')].find(b => b.textContent.trim().startsWith('编辑'));
       if (btn) { btn.click(); return true; }
-      const row = await waitFor('.flow-table tbody tr');
+      const row = await waitFor('.flow-table tbody tr:not(.group-row)');
       if (row) { const m = row.querySelector('.dd-trigger'); m.click(); await new Promise(r=>setTimeout(r,250));
         const e = [...document.querySelectorAll('.dd-pop:popover-open button')].find(b=>b.textContent.trim().startsWith('编辑')); if (e) { e.click(); return true; } }
       return false;
@@ -526,6 +558,7 @@ async function checkModal(page, where, openExpr, opts = {}) {
     /* 9) 移动端视口 */
     await page.viewport(390, 844, true);
     await page.reload();
+    await expandGroups(page);
     const mob = await page.eval(ASSERT + `
       const wide = [...document.querySelectorAll('.topbar *, .page *')].filter(e => {
         const r = rect(e);
@@ -538,7 +571,7 @@ async function checkModal(page, where, openExpr, opts = {}) {
     mob.A.notes.forEach((n) => ok('移动端/390', n));
     if (SHOTS) await page.shot(path.join(SHOTS, 'home-390.png'));
     await page.eval(WAIT + `
-      const rows=[...document.querySelectorAll('.flow-table tbody tr')];
+      const rows=[...document.querySelectorAll('.flow-table tbody tr:not(.group-row)')];
       if(rows.length){
         const last=rows[rows.length-1];
         last.scrollIntoView({block:'end'});
@@ -554,8 +587,9 @@ async function checkModal(page, where, openExpr, opts = {}) {
     /* 9b) 二次确认弹窗生命周期：取消 / 确认 / Esc / ✕ 都必须真正关闭，且不能卡住后续操作 */
     await page.viewport(1440, 900);
     await page.reload();
+    await expandGroups(page);
     const openConfirm = `
-      const row=document.querySelector('.flow-table tbody tr');
+      const row=document.querySelector('.flow-table tbody tr:not(.group-row)');
       row.querySelector('.dd-trigger').click();
       await new Promise(r=>setTimeout(r,300));
       const b=[...document.querySelectorAll('.dd-pop:popover-open button')].find(x=>x.textContent.trim()==='删除');
@@ -584,11 +618,11 @@ async function checkModal(page, where, openExpr, opts = {}) {
     if (!closed3) fail('确认弹窗/1440', '点 ✕ 后确认框没有消失');
     else ok('确认弹窗/1440', '✕ 关闭确认框');
     // 4) 确认删除：弹窗消失 + 任务真的少一行（仅删本地预置的「冒烟临时任务」，生产实例跳过以保持只读）
-    const tempRow = await page.eval(`return [...document.querySelectorAll('.flow-table tbody tr')].some(r=>r.innerText.includes('冒烟临时任务'));`);
+    const tempRow = await page.eval(`return [...document.querySelectorAll('.flow-table tbody tr:not(.group-row)')].some(r=>r.innerText.includes('冒烟临时任务'));`);
     if (tempRow) {
-      const before = await page.eval(`return document.querySelectorAll('.flow-table tbody tr').length;`);
+      const before = await page.eval(`return document.querySelectorAll('.flow-table tbody tr:not(.group-row)').length;`);
       await page.eval(`
-        const row=[...document.querySelectorAll('.flow-table tbody tr')].find(r=>r.innerText.includes('冒烟临时任务'));
+        const row=[...document.querySelectorAll('.flow-table tbody tr:not(.group-row)')].find(r=>r.innerText.includes('冒烟临时任务'));
         row.querySelector('.dd-trigger').click(); await new Promise(r=>setTimeout(r,300));
         [...document.querySelectorAll('.dd-pop:popover-open button')].find(x=>x.textContent.trim()==='删除')?.click();
         await new Promise(r=>setTimeout(r,400)); return 1;
@@ -597,10 +631,10 @@ async function checkModal(page, where, openExpr, opts = {}) {
       const after = await page.eval(`
         const t0=Date.now();
         while (Date.now()-t0 < 4000) {
-          if (!document.querySelector('dialog.modal[open]') && document.querySelectorAll('.flow-table tbody tr').length < ${before}) break;
+          if (!document.querySelector('dialog.modal[open]') && document.querySelectorAll('.flow-table tbody tr:not(.group-row)').length < ${before}) break;
           await new Promise(r=>setTimeout(r,150));
         }
-        return JSON.stringify({ closed: !document.querySelector('dialog.modal[open]'), rows: document.querySelectorAll('.flow-table tbody tr').length });
+        return JSON.stringify({ closed: !document.querySelector('dialog.modal[open]'), rows: document.querySelectorAll('.flow-table tbody tr:not(.group-row)').length });
       `);
       const a = JSON.parse(after);
       if (!a.closed) fail('确认弹窗/1440', '点「删除」后确认框仍卡在屏幕上（已删除但未关闭）');
@@ -614,7 +648,7 @@ async function checkModal(page, where, openExpr, opts = {}) {
     // 4b) 提交型弹窗：保存成功后必须关闭（本地实例才做，避免写生产数据）
     if (tempRow) {
       await page.eval(`
-        const row=document.querySelector('.flow-table tbody tr');
+        const row=document.querySelector('.flow-table tbody tr:not(.group-row)');
         row.querySelector('.dd-trigger').click(); await new Promise(r=>setTimeout(r,250));
         [...document.querySelectorAll('.dd-pop:popover-open button')].find(b=>b.textContent.includes('编辑流程')).click();
         await new Promise(r=>setTimeout(r,1300));
@@ -650,6 +684,7 @@ async function checkModal(page, where, openExpr, opts = {}) {
     for (const [w, h] of sizes) {
       await page.viewport(w, h, w < 700);
       await page.reload();
+      await expandGroups(page);
       for (const mode of ['dark', 'light']) {
         await page.eval(`
           document.documentElement.dataset.mode = ${JSON.stringify(mode)};

@@ -59,6 +59,7 @@ export function buildOpenApi() {
           type: 'object',
           properties: {
             id: { type: 'string' }, name: { type: 'string' }, note: { type: 'string' },
+            group: { type: 'string', description: '分组名；空串 = 未分组' },
             cron: { type: 'string' }, timezone: { type: 'string' }, enabled: { type: 'boolean' },
             vars: { type: 'object', additionalProperties: { type: 'string' }, description: '流程变量（cookie/token 等；落盘加密，返回明文以便编辑）' },
             nodes: { type: 'array', items: { type: 'object' } },

@@ -359,6 +359,18 @@ button.iconbtn:focus-visible, a.iconbtn:focus-visible {
 }
 .flow-table tbody tr:last-child td { border-bottom: none; }
 .flow-table tbody tr:hover td { background: var(--panel2); }
+/* 分组头：整行可点，收起时只显示汇总读数 */
+.flow-table tbody tr.group-row td { padding: 0; background: var(--panel2); border-bottom: 1px solid var(--border); }
+.flow-table tbody tr.group-row:hover td { background: var(--panel2); }
+.group-head { display: flex; align-items: center; gap: 10px; padding: 8px 14px; min-height: 40px; }
+.group-toggle { display: inline-flex; align-items: center; gap: 7px; padding: 2px 6px; margin-left: -6px; border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; color: var(--text); font-size: 13px; font-weight: 600; height: auto; min-height: 28px; }
+.group-toggle:hover { background: var(--panel); border-color: var(--border); }
+.group-chevron { display: inline-block; width: 10px; color: var(--muted); font-size: 10px; line-height: 1; transition: transform .12s; }
+.group-toggle[aria-expanded="true"] .group-chevron { transform: rotate(90deg); }
+.group-meta { margin-left: 4px; }
+.group-meta b { font-weight: 600; }
+.group-collapse { margin-left: auto; }
+.group-head .spacer { flex: 1 1 auto; min-width: 4px; }
 .flow-name { font-weight: 600; cursor: pointer; color: var(--text); text-decoration: none; }
 /* 任务名现在是一个「按钮」：点它打开任务详情 */
 button.flow-name {
@@ -746,6 +758,9 @@ dialog.modal:focus { outline: none; }
     background: var(--panel);
     box-shadow: -8px 0 12px -8px rgba(0, 0, 0, .35);
   }
+  /* 分组头是整行，不能被「操作列固定」规则钉住 */
+  .flow-table tbody tr.group-row td:last-child { position: static; box-shadow: none; }
+  .group-head { flex-wrap: wrap; row-gap: 6px; }
   .flow-table th:last-child { background: var(--panel2); }
   .flow-table tbody tr:hover td:last-child { background: var(--panel2); }
   .flow-table th, .flow-table td { padding: 10px 10px; }

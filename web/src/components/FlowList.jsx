@@ -12,7 +12,7 @@ import { getTheme, setTheme } from '../theme.js';
 import { fmtTime, setToast } from './flow-list/helpers.js';
 import WizardModal, { buildWizardFlow, parseNatural } from './flow-list/wizard.jsx';
 import SettingsModal from './flow-list/settings.jsx';
-import { InstantiateModal, CurlImportModal, CsvImportModal, NotificationsModal, RestoreModal, TemplateEditorModal, BackupFullModal } from './flow-list/modals.jsx';
+import { InstantiateModal, CurlImportModal, CsvImportModal, NotificationsModal, RestoreModal, TemplateEditorModal, BackupFullModal, GroupAssignModal } from './flow-list/modals.jsx';
 
 export { buildWizardFlow, parseNatural };
 
@@ -34,8 +34,24 @@ export default function FlowList({ onOpen, onLogout }) {
   const [selected, setSelected] = useState(new Set());
   const [batchBusy, setBatchBusy] = useState(false);
   const [batchMode, setBatchMode] = useState(false); // 批量管理开关：勾选列默认隐藏，不干扰日常阅读
+  const [collapsedGroups, setCollapsedGroups] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('checkq-group-collapsed') || '[]')); } catch { return new Set(); }
+  });
   const fileRef = useRef();
   const editTemplateRef = useRef(); // 模板编辑页回调刷新
+
+  // 首次按「大分组默认收起」初始化：≥8 个任务的分组（含未分组）先收起，用户操作后以 localStorage 为准
+  useEffect(() => {
+    if (!flows) return;
+    try {
+      if (localStorage.getItem('checkq-group-collapsed') !== null) return;
+      const count = new Map();
+      for (const f of flows) { const g = f.group || '未分组'; count.set(g, (count.get(g) || 0) + 1); }
+      const big = [...count.entries()].filter(([, n]) => n >= 8).map(([g]) => g);
+      setCollapsedGroups(new Set(big));
+      localStorage.setItem('checkq-group-collapsed', JSON.stringify(big));
+    } catch { /* 隐私模式忽略 */ }
+  }, [flows]);
 
   const load = () => {
     api.flows().then(setFlows).catch((e) => setToast({ kind: 'fail', text: e.message }));
@@ -60,16 +76,52 @@ export default function FlowList({ onOpen, onLogout }) {
     return () => { alive = false; clearInterval(timer); };
   }, []);
 
-  // 搜索 + 筛选（PRD 4.4）
+  // 搜索 + 筛选（PRD 4.4）+ 分组名参与搜索
   const visibleFlows = (flows || []).filter((f) => {
     if (search) {
       const q = search.toLowerCase();
-      if (!f.name.toLowerCase().includes(q) && !(f.note || '').toLowerCase().includes(q)) return false;
+      if (!f.name.toLowerCase().includes(q) && !(f.note || '').toLowerCase().includes(q) && !(f.group || '').toLowerCase().includes(q)) return false;
     }
     if (filter === 'scheduled' && !f.enabled) return false;
     if (filter === 'recent-failed' && f.lastRun?.status !== 'failed') return false;
     return true;
   });
+
+  // 分组：按组名聚合；「未分组」永远排在最后；组内保持列表原顺序
+  const groupMap = new Map();
+  for (const f of visibleFlows) {
+    const g = f.group || '未分组';
+    if (!groupMap.has(g)) groupMap.set(g, []);
+    groupMap.get(g).push(f);
+  }
+  const groups = [...groupMap.entries()]
+    .sort((a, b) => (a[0] === '未分组' ? 1 : b[0] === '未分组' ? -1 : a[0].localeCompare(b[0], 'zh')));
+  const groupOptions = [...new Set((flows || []).map((f) => f.group).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'zh'));
+  // 搜索/筛选时强制展开，否则用户搜到的任务藏在收起的分组里
+  const effectiveCollapsed = (search || filter !== 'all') ? new Set() : collapsedGroups;
+  const allCollapsed = groups.length > 0 && groups.every(([name]) => effectiveCollapsed.has(name));
+  const anyCollapsed = groups.some(([name]) => effectiveCollapsed.has(name));
+
+  const persistCollapsed = (set) => {
+    setCollapsedGroups(set);
+    try { localStorage.setItem('checkq-group-collapsed', JSON.stringify([...set])); } catch { /* ignore */ }
+  };
+  const toggleGroup = (name) => persistCollapsed(
+    effectiveCollapsed.has(name) ? new Set([...effectiveCollapsed].filter((x) => x !== name)) : new Set([...effectiveCollapsed, name]),
+  );
+  const toggleAllGroups = () => persistCollapsed(anyCollapsed ? new Set() : new Set(groups.map(([name]) => name)));
+
+  const groupStats = (items) => {
+    let enabled = 0, runs = 0, success = 0, failed = 0, next = null;
+    for (const f of items) {
+      if (f.enabled) enabled++;
+      runs += f.today?.runs || 0;
+      success += f.today?.success || 0;
+      failed += f.today?.failed || 0;
+      if (f.enabled && f.nextRunAt && (!next || f.nextRunAt < next)) next = f.nextRunAt;
+    }
+    return { enabled, runs, success, failed, rate: runs ? Math.round((success / runs) * 100) : null, next };
+  };
 
   const createEmpty = async () => {
     try {
@@ -360,6 +412,7 @@ export default function FlowList({ onOpen, onLogout }) {
               <button className="small" disabled={batchBusy} onClick={() => doBatch('enable')}>启用</button>
               <button className="small" disabled={batchBusy} onClick={() => doBatch('disable')}>停用</button>
               <button className="small danger" disabled={batchBusy} onClick={() => doBatch('delete')}>删除</button>
+              <button className="small" disabled={batchBusy} onClick={() => setModal({ type: 'group', ids: [...selected] })} title="把选中的任务放进同一个分组">分组…</button>
               <button className="small" onClick={() => setSelected(new Set())}>取消</button>
             </span>
           )}
@@ -368,8 +421,8 @@ export default function FlowList({ onOpen, onLogout }) {
           </button>
           <input
             className="toolbar-search"
-            placeholder="搜索名称或备注"
-            aria-label="搜索任务名称或备注"
+            placeholder="搜索名称、备注或分组"
+            aria-label="搜索任务名称、备注或分组"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -383,6 +436,14 @@ export default function FlowList({ onOpen, onLogout }) {
             <option value="scheduled">已启用调度</option>
             <option value="recent-failed">最近失败</option>
           </select>
+          {groups.length > 0 && (
+            <button
+              className="small"
+              onClick={toggleAllGroups}
+              title={anyCollapsed ? '展开所有分组' : '折叠所有分组'}
+              aria-label={anyCollapsed ? '展开所有分组' : '折叠所有分组'}
+            >{anyCollapsed ? '展开全部' : '折叠全部'}</button>
+          )}
           </div>
           <span className="spacer" />
           <div className="toolbar-right">
@@ -418,52 +479,79 @@ export default function FlowList({ onOpen, onLogout }) {
                 </tr>
               </thead>
               <tbody>
-                {visibleFlows.map((f) => (
-                  <tr key={f.id}>
-                    {batchMode && <td><input type="checkbox" checked={selected.has(f.id)} onChange={() => toggleSelect(f.id)} /></td>}
-                    <td>
-                      <button className="flow-name" onClick={() => setModal({ type: 'detail', flow: f })} title="查看任务详情（备注、调度、变量）">{f.name}</button>
-                      {f.note ? <div className="flow-note">{f.note}</div> : null}
-                      {f.template && (
-                        <div className="tpl-tag" title={`来自模板「${f.template.name}」：流程始终跟随模板，模板一改这里立刻跟着变`}>
-                          <span className="chip chip-mute">模板</span>
-                          <span className="tpl-tag-name">{f.template.name}</span>
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      {f.cron ? <span className="cron-code">{f.cron}</span> : <span style={{ color: 'var(--muted)' }}>手动</span>}
-                    </td>
-                    <td className="col-next">
-                      {f.nextRunAt ? <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{fmtTime(f.nextRunAt)}</span> : <span style={{ color: 'var(--muted)', fontSize: 12 }}>—</span>}
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap', fontSize: 12, color: f.enabled ? 'var(--ok)' : 'var(--muted)' }}>
-                      <span className={`status-dot${f.enabled ? ' on' : ''}`} />{f.enabled ? '已启用' : '已停用'}
-                    </td>
-                    <td className="col-last">{lastStatus(f)}</td>
-                    <td>
-                      <div className="cell-actions">
-                        <button className="small row-run" disabled={running === f.id} title={running === f.id ? '正在运行…' : '立即运行一次'}
-                          onClick={() => runNow(f)}>{running === f.id ? '运行中' : '运行'}</button>
-                        <button className="small" title="查看运行日志（每天的签到记录都在这里）" onClick={() => openLog(f)}>日志</button>
-                        <Dropdown trigger="···" triggerClass="dd-row" align="right" width={170} ariaLabel="任务更多操作">
-                          <button onClick={() => onOpen(f.id)}>编辑流程</button>
-                          <button onClick={async () => {
-                            try {
-                              await api.cloneFlow(f.id);
-                              setToast({ kind: 'ok', text: '已克隆为副本（调度暂停）' });
-                              load();
-                            } catch (e) {
-                              setToast({ kind: 'fail', text: e.message });
-                            }
-                          }}>复制副本</button>
-                          <button onClick={() => toggle(f)}>{f.enabled ? '停用调度' : '启用调度'}</button>
-                          <button className="danger-text" onClick={() => del(f)}>删除</button>
-                        </Dropdown>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {groups.map(([gname, items]) => {
+                  const st = groupStats(items);
+                  const isCollapsed = effectiveCollapsed.has(gname);
+                  return (
+                    <React.Fragment key={gname}>
+                      <tr className="group-row" data-group={gname} data-collapsed={isCollapsed ? '1' : '0'}>
+                        <td colSpan={batchMode ? 7 : 6}>
+                          <div className="group-head">
+                            <button className="group-toggle" onClick={() => toggleGroup(gname)} aria-expanded={!isCollapsed}>
+                              <span className="group-chevron" aria-hidden="true">{isCollapsed ? '▸' : '▾'}</span>
+                              <span className="group-name">{gname}</span>
+                            </button>
+                            <span className="meta group-meta">
+                              <span>任务 <b>{items.length}</b></span>
+                              <span>启用 <b>{st.enabled}</b></span>
+                              <span>今日 成功 <b>{st.success}</b> / 失败 <b className={st.failed ? 'fail-n' : ''}>{st.failed}</b></span>
+                              {st.rate !== null ? <span>成功率 <b>{st.rate}%</b></span> : <span className="muted">今日未运行</span>}
+                              {st.next ? <span className="next-run">下次 <b>{fmtTime(st.next)}</b></span> : null}
+                            </span>
+                            <span className="spacer" />
+                            <button className="small group-collapse" onClick={(e) => { e.stopPropagation(); toggleGroup(gname); }}>{isCollapsed ? '展开' : '折叠'}</button>
+                          </div>
+                        </td>
+                      </tr>
+                      {!isCollapsed && items.map((f) => (
+                        <tr key={f.id}>
+                          {batchMode && <td><input type="checkbox" checked={selected.has(f.id)} onChange={() => toggleSelect(f.id)} /></td>}
+                          <td>
+                            <button className="flow-name" onClick={() => setModal({ type: 'detail', flow: f })} title="查看任务详情（备注、调度、变量）">{f.name}</button>
+                            {f.note ? <div className="flow-note">{f.note}</div> : null}
+                            {f.template && (
+                              <div className="tpl-tag" title={`来自模板「${f.template.name}」：流程始终跟随模板，模板一改这里立刻跟着变`}>
+                                <span className="chip chip-mute">模板</span>
+                                <span className="tpl-tag-name">{f.template.name}</span>
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            {f.cron ? <span className="cron-code">{f.cron}</span> : <span style={{ color: 'var(--muted)' }}>手动</span>}
+                          </td>
+                          <td className="col-next">
+                            {f.nextRunAt ? <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{fmtTime(f.nextRunAt)}</span> : <span style={{ color: 'var(--muted)', fontSize: 12 }}>—</span>}
+                          </td>
+                          <td style={{ whiteSpace: 'nowrap', fontSize: 12, color: f.enabled ? 'var(--ok)' : 'var(--muted)' }}>
+                            <span className={`status-dot${f.enabled ? ' on' : ''}`} />{f.enabled ? '已启用' : '已停用'}
+                          </td>
+                          <td className="col-last">{lastStatus(f)}</td>
+                          <td>
+                            <div className="cell-actions">
+                              <button className="small row-run" disabled={running === f.id} title={running === f.id ? '正在运行…' : '立即运行一次'}
+                                onClick={() => runNow(f)}>{running === f.id ? '运行中' : '运行'}</button>
+                              <button className="small" title="查看运行日志（每天的签到记录都在这里）" onClick={() => openLog(f)}>日志</button>
+                              <Dropdown trigger="···" triggerClass="dd-row" align="right" width={170} ariaLabel="任务更多操作">
+                                <button onClick={() => onOpen(f.id)}>编辑流程</button>
+                                <button onClick={async () => {
+                                  try {
+                                    await api.cloneFlow(f.id);
+                                    setToast({ kind: 'ok', text: '已克隆为副本（调度暂停）' });
+                                    load();
+                                  } catch (e) {
+                                    setToast({ kind: 'fail', text: e.message });
+                                  }
+                                }}>复制副本</button>
+                                <button onClick={() => toggle(f)}>{f.enabled ? '停用调度' : '启用调度'}</button>
+                                <button className="danger-text" onClick={() => del(f)}>删除</button>
+                              </Dropdown>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -529,6 +617,7 @@ export default function FlowList({ onOpen, onLogout }) {
           onSaved={() => load()}
           onToast={(text, kind) => setToast({ kind, text })}
           onEdit={(id) => { setModal(null); onOpen(id); }}
+          groupOptions={groupOptions}
         />
       )}
 
@@ -536,6 +625,15 @@ export default function FlowList({ onOpen, onLogout }) {
 
       {modal === 'restore' && (
         <RestoreModal onClose={() => setModal(null)} onDone={() => { setModal(null); load(); }} />
+      )}
+
+      {modal?.type === 'group' && (
+        <GroupAssignModal
+          ids={modal.ids || []}
+          groups={groupOptions}
+          onClose={() => setModal(null)}
+          onDone={() => { setModal(null); setSelected(new Set()); load(); }}
+        />
       )}
 
       {modal === 'settings' && (

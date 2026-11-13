@@ -2,7 +2,8 @@
  * 流程数据模型
  *
  * Flow = {
- *   id, name, note, cron: '30 8 * * *', timezone, enabled,
+ *   id, name, note, group: '签到',
+ *   cron: '30 8 * * *', timezone, enabled,
  *   vars: { cookie: '...', email: '...' },          // 用户变量（单流程作用域）
  *   nodes: [ Node ], edges: [ Edge ],
  *   notify: { webhook?: url, telegram?: {token,chat}, bark?: url, onSuccess, onFailure }

@@ -21,6 +21,17 @@ function stable(v) {
   return `{${keys.map((k) => `${JSON.stringify(k)}:${stable(v[k])}`).join(',')}}`;
 }
 
+/** 分组名：去空白、压缩连续空格、限长；空串 = 未分组 */
+function normalizeGroup(v) {
+  return String(v ?? '').trim().replace(/\s+/g, ' ').slice(0, 40);
+}
+
+/** 是否同一天（服务器本地日期；用于「今日成功/失败」统计） */
+function sameDay(ts, ref = Date.now()) {
+  const a = new Date(ts), b = new Date(ref);
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
 /**
  * 比较两份流程图的「脚本内容」是否相同（忽略节点坐标 x/y）：
  * 派生任务只挪了节点位置 → 仍算没改脚本（继续跟随模板）；
@@ -209,21 +220,38 @@ export class Store {
   }
 
   listFlows() {
+    // 预聚合「今日」运行统计（按服务器本地日期），避免每个任务都扫一遍 runs
+    const todayByFlow = new Map();
+    for (const r of this.runs) {
+      if (!sameDay(r.startedAt)) continue;
+      const rec = todayByFlow.get(r.flowId) || { runs: 0, success: 0, failed: 0 };
+      rec.runs++;
+      if (r.status === 'success') rec.success++;
+      else if (r.status === 'failed') rec.failed++;
+      todayByFlow.set(r.flowId, rec);
+    }
     return this.flows.map((f) => {
       const last = this.runs.find((r) => r.flowId === f.id) || null;
       const lastRun = last ? {
         id: last.id, status: last.status, startedAt: last.startedAt, finalMessage: last.finalMessage,
       } : null;
+      const t = todayByFlow.get(f.id) || { runs: 0, success: 0, failed: 0 };
+      const today = {
+        runs: t.runs, success: t.success, failed: t.failed,
+        rate: t.runs ? Math.round((t.success / t.runs) * 100) : null,
+      };
       // 下次运行时间（croner nextRun，仅启用调度的任务）
       const nextRunAt = this.nextRunAt(f);
       const resolved = this.resolveFlow(f);   // 派生任务显示的是模板当前版本
       return {
         id: f.id, name: f.name, note: f.note, cron: f.cron, timezone: f.timezone,
         enabled: f.enabled, jitterMinutes: f.jitterMinutes || 0, varsCount: Object.keys(f.vars || {}).length,
+        group: f.group || '',                  // 分组名（空 = 未分组）
         retry: normalizeRetry(f.retry),       // 失败重试策略（列表/详情展示用）
         nodesCount: (resolved.nodes || []).length, tplId: f.tplId || null,
         template: this.templateInfo(f),        // { id, name } —— 来源模板标注
         lastRun,
+        today,
         nextRunAt,
       };
     });
@@ -270,6 +298,7 @@ export class Store {
       // （没有 cron 就没有调度意义，强制关闭）
       enabled: data.enabled === true && !!cron,
       jitterMinutes,
+      group: normalizeGroup(data.group),
       vars: data.vars || {},
       nodes: data.nodes || [],
       edges: data.edges || [],
@@ -289,7 +318,7 @@ export class Store {
   updateFlow(id, patch) {
     const f = this.getFlowRaw(id);
     if (!f) return null;
-    const allowed = ['name', 'note', 'cron', 'timezone', 'enabled', 'vars', 'nodes', 'edges', 'notify', 'log', 'jitterMinutes', 'retry', 'tplId'];
+    const allowed = ['name', 'note', 'cron', 'timezone', 'enabled', 'vars', 'nodes', 'edges', 'notify', 'log', 'jitterMinutes', 'retry', 'group', 'tplId'];
     // 派生任务改了「脚本内容」→ 自动转成独立任务（否则模板下次更新会把用户的改动覆盖掉）
     let detached = null;
     if (f.tplId && (patch.nodes !== undefined || patch.edges !== undefined)) {
@@ -302,6 +331,8 @@ export class Store {
     for (const k of allowed) {
       if (patch[k] !== undefined) f[k] = patch[k];
     }
+    // 分组名始终收敛成合法值（去空白 / 限长）
+    if (patch.group !== undefined) f.group = normalizeGroup(patch.group);
     // 重试配置始终收敛成合法值（手写 API / 旧前端都不会把引擎搞崩）
     if (patch.retry !== undefined) f.retry = normalizeRetry(patch.retry);
     f.updatedAt = Date.now();

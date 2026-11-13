@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="color-scheme" content="dark light" />
 <title>任务与流程 · CheckQ 文档</title>
-<meta name="description" content="节点、变量、调度、重试、模板" />
+<meta name="description" content="节点、变量、分组、调度、重试" />
 <link rel="stylesheet" href="./assets/style.css" />
 
 </head>
@@ -17,21 +17,19 @@
     <input id="search" type="search" placeholder="搜索文档…" autocomplete="off" />
     <div id="results"></div>
     <nav>
-<a class="" href="index.html">概览<em>CheckQ 是什么、能做什么</em></a>
+<a class="" href="index.html">概览<em>CheckQ 能做什么</em></a>
 <a class="" href="quickstart.html">快速开始<em>3 步跑通第一个任务</em></a>
-<a class="on" href="tasks.html">任务与流程<em>节点、变量、调度、重试、模板</em></a>
-<a class="" href="uiux.html">交互与视觉规范<em>入口契约、原生组件、双主题、响应式</em></a>
-<a class="" href="logs.html">日志与通知<em>干净日志、连续日志流、通知渠道</em></a>
-<a class="" href="security.html">账号与安全<em>多用户、2FA、凭据加密、访问控制</em></a>
-<a class="" href="api.html">API 与 MCP<em>开放 API、API Key、外部 Agent 接入</em></a>
+<a class="on" href="tasks.html">任务与流程<em>节点、变量、分组、调度、重试</em></a>
+<a class="" href="logs.html">日志与通知<em>运行记录、连续日志、通知渠道</em></a>
+<a class="" href="security.html">账号与安全<em>多用户、两步验证、凭据保护</em></a>
+<a class="" href="api.html">API 与 MCP<em>给外部程序/Agent 用的接口</em></a>
 <a class="" href="deploy.html">部署与备份<em>Docker、数据目录、备份恢复</em></a>
 <a class="" href="faq.html">常见问题<em>排障速查</em></a>
-<a class="" href="changelog.html">更新日志<em>版本变更（自动生成）</em></a>
+<a class="" href="changelog.html">更新日志<em>新功能与修复</em></a>
 <a class="" href="reference-api.html">API 参考<em>全部端点</em></a>
 <a class="" href="reference-mcp.html">MCP 工具<em>工具清单与接入</em></a>
 <a class="" href="reference-security.html">安全说明<em>威胁与防护全表</em></a>
 <a class="" href="reference-agent.html">Agent 接入指南<em>给外部 Agent 什么</em></a>
-<a class="" href="reference-roadmap.html">路线图<em>版本计划</em></a>
     </nav>
     <div class="brand-sub" style="margin-top:18px"><a href="https://github.com/zqs1qiwan/checkq">GitHub 仓库 →</a></div>
   </aside>
@@ -41,6 +39,8 @@
 <div class="table-wrap"><table><thead><tr><th>类型</th><th>用途</th></tr></thead><tbody><tr><td>HTTP 请求</td><td>方法 / URL / 头 / 体 / 断言 / 超时 / 后端(fetch·curl) / 编码 / 代理 / 重试</td></tr><tr><td>条件判断</td><td>jexl 表达式分流（真→true 出口，假→false 出口）</td></tr><tr><td>赋值</td><td>变量或表达式求值</td></tr><tr><td>提取</td><td>正则 / JSON 路径 / 响应头 / Set-Cookie</td></tr><tr><td>延迟 / 随机延迟</td><td>固定或区间等待（避开整点风控）</td></tr><tr><td>日志</td><td>输出人话日志（默认唯一可见的日志）</td></tr><tr><td>通知</td><td>流程内自定义推送</td></tr><tr><td>脚本</td><td>JS 沙箱（vars/last/steps 只读，1s 超时）</td></tr><tr><td>遍历</td><td>数组逐项循环（上限 50 轮）</td></tr></tbody></table></div>
 <h2 id="变量与表达式">变量与表达式</h2>
 <ul><li>流程变量在编辑器「流程变量」面板维护；敏感值（cookie / token / 密码）<strong>落盘加密</strong>，API 返回明文以便编辑。</li><li>模板语法：<code>{{var}}</code>、<code>{{x|urlencode}}</code>、<code>{{x|num}}</code>、<code>{{x|sha256}}</code>、<code>{{now:%Y-%m-%d}}</code></li><li>表达式：<code>=last.json.code == 0</code>（<code>vars.xxx</code> 取变量，<code>last</code> 是上一个响应）</li></ul>
+<h2 id="任务分组-折叠">任务分组 / 折叠</h2>
+<ul><li>每个任务可设置 <code>分组</code>（≤40 字符；留空=未分组）；批量勾选后「分组…」可一次归入。</li><li>列表按组折叠：组头显示任务数、启用数、今日成功 / 失败 / 成功率、下次调度；点击组头或「展开/折叠」切换。</li><li>≥8 个任务的分组默认收起；折叠状态保存在浏览器本地；搜索/筛选时自动展开，避免搜到的任务藏在收起组里。</li><li>只影响列表展示，不改变调度与执行；今日统计按服务器本地日期实时计算。</li></ul>
 <h2 id="调度与失败重试">调度与失败重试</h2>
 <ul><li>每个任务独立 cron + 时区 + 抖动（0-N 分钟）；空 cron = 只手动运行。</li><li>调度弹窗里可随时启用 / 停用；首页健康条显示「下一次调度」及是哪个任务。</li><li><strong>任务级失败重试</strong>（默认开启）：最多 3 次尝试、指数退避 5 秒起、随机抖动、单次等待上限 5 分钟；只有最后一次仍失败才判定任务失败。可选线性 / 固定间隔，也可关闭。</li><li>调试运行不重试；上一次运行或退避尚未结束时，调度会跳过这一拍，避免堆积。</li><li>节点级重试（http 节点配置）是同一次执行内立刻重发，与任务级重试互补。</li></ul>
 <h2 id="模板">模板</h2>

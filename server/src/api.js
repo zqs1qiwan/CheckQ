@@ -1443,6 +1443,7 @@ export function buildServer({ dataDir, port }) {
     const clone = store.createFlow({
       name: `${f.name} · 副本${seq > 1 ? ' ' + seq : ''}`,
       note: f.note,
+      group: f.group,
       cron: f.cron,
       timezone: f.timezone,
       enabled: false, // 克隆任务默认暂停，避免立即重复执行
@@ -1547,7 +1548,8 @@ export function buildServer({ dataDir, port }) {
   app.post('/api/flows/batch', async (req, reply) => {
     const { ids, action } = req.body || {};
     if (!Array.isArray(ids) || !ids.length) return reply.code(400).send({ error: '缺少 ids' });
-    if (!['run', 'enable', 'disable', 'delete'].includes(action)) return reply.code(400).send({ error: '不支持的 action' });
+    if (!['run', 'enable', 'disable', 'delete', 'set-group'].includes(action)) return reply.code(400).send({ error: '不支持的 action' });
+    const group = String((req.body || {}).group || '').trim().replace(/\s+/g, ' ').slice(0, 40);
     if (ids.length > 200) return reply.code(400).send({ error: '单次最多 200 个' });
     const results = [];
     let changed = false;
@@ -1558,6 +1560,7 @@ export function buildServer({ dataDir, port }) {
         if (action === 'enable') { store.updateFlow(id, { enabled: true }); changed = true; results.push({ id, ok: true }); }
         else if (action === 'disable') { store.updateFlow(id, { enabled: false }); changed = true; results.push({ id, ok: true }); }
         else if (action === 'delete') { store.deleteFlow(id); changed = true; results.push({ id, ok: true }); }
+        else if (action === 'set-group') { store.updateFlow(id, { group }); changed = true; results.push({ id, ok: true }); }
         else if (action === 'run') {
           const run = await runner.runFlow(f, 'manual');
           results.push({ id, ok: run.status === 'success', runId: run.id, status: run.status });

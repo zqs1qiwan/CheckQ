@@ -380,5 +380,50 @@ function BackupFullModal({ onClose }) {
   );
 }
 
-export { InstantiateModal, CurlImportModal, CsvImportModal, NotificationsModal, RestoreModal, TemplateEditorModal, BackupFullModal };
+/** 批量设置分组（列表「分组…」按钮） */
+function GroupAssignModal({ ids, groups = [], onClose, onDone }) {
+  const [group, setGroup] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const submit = async () => {
+    setBusy(true); setErr('');
+    try {
+      const r = await api.batch(ids, 'set-group', { group: group.trim() });
+      setToast(`已设置 ${r.ok || 0}/${r.total || ids.length} 个任务的分组`, 'ok');
+      onDone?.(group.trim());
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <Modal
+      title={`分组：已选 ${ids.length} 个任务`}
+      onClose={onClose}
+      width={440}
+      footer={
+        <>
+          <button onClick={onClose}>取消</button>
+          <button className="primary" disabled={busy} onClick={submit}>{busy ? '设置中…' : '设置分组'}</button>
+        </>
+      }
+    >
+      <div className="field">
+        <label title="留空=移出分组；填已有分组名=并入该组">分组名</label>
+        <input
+          list="checkq-group-options-batch"
+          value={group}
+          aria-label="分组名"
+          autoFocus
+          onChange={(e) => setGroup(e.target.value)}
+          placeholder="例如：签到 / 监控 / 实验（留空=未分组）"
+        />
+        <datalist id="checkq-group-options-batch">
+          {groups.map((g) => <option key={g} value={g} />)}
+        </datalist>
+      </div>
+      <p className="hint" style={{ margin: 0 }}>分组只影响列表的折叠与统计展示，不改变任务的调度与执行。</p>
+      {err && <p style={{ color: 'var(--fail)', fontSize: 12, margin: '8px 0 0' }}>{err}</p>}
+    </Modal>
+  );
+}
+
+export { InstantiateModal, CurlImportModal, CsvImportModal, NotificationsModal, RestoreModal, TemplateEditorModal, BackupFullModal, GroupAssignModal };
 

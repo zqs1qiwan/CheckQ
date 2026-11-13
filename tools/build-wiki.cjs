@@ -8,7 +8,6 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 const OUT = path.join(ROOT, 'wiki');
@@ -100,22 +99,20 @@ const plainText = (md) => md
 
 // ---------- 页面清单（只讲框架功能，不含具体脚本） ----------
 const PAGES = [
-  { file: 'index.md', title: '概览', desc: 'CheckQ 是什么、能做什么' },
+  { file: 'index.md', title: '概览', desc: 'CheckQ 能做什么' },
   { file: 'quickstart.md', title: '快速开始', desc: '3 步跑通第一个任务' },
-  { file: 'tasks.md', title: '任务与流程', desc: '节点、变量、调度、重试、模板' },
-  { file: 'uiux.md', title: '交互与视觉规范', desc: '入口契约、原生组件、双主题、响应式' },
-  { file: 'logs.md', title: '日志与通知', desc: '干净日志、连续日志流、通知渠道' },
-  { file: 'security.md', title: '账号与安全', desc: '多用户、2FA、凭据加密、访问控制' },
-  { file: 'api.md', title: 'API 与 MCP', desc: '开放 API、API Key、外部 Agent 接入' },
+  { file: 'tasks.md', title: '任务与流程', desc: '节点、变量、分组、调度、重试' },
+  { file: 'logs.md', title: '日志与通知', desc: '运行记录、连续日志、通知渠道' },
+  { file: 'security.md', title: '账号与安全', desc: '多用户、两步验证、凭据保护' },
+  { file: 'api.md', title: 'API 与 MCP', desc: '给外部程序/Agent 用的接口' },
   { file: 'deploy.md', title: '部署与备份', desc: 'Docker、数据目录、备份恢复' },
   { file: 'faq.md', title: '常见问题', desc: '排障速查' },
-  { file: 'changelog.md', title: '更新日志', desc: '版本变更（自动生成）', auto: 'changelog' },
-  // —— 以下页面由仓库 docs/ 自动同步 ——
+  { file: 'changelog.md', title: '更新日志', desc: '新功能与修复', auto: 'changelog' },
+  // —— 以下页面由仓库 docs/ 自动同步（对用户有用的参考内容）——
   { file: 'reference-api.md', title: 'API 参考', desc: '全部端点', src: 'API.md' },
   { file: 'reference-mcp.md', title: 'MCP 工具', desc: '工具清单与接入', src: 'MCP.md' },
   { file: 'reference-security.md', title: '安全说明', desc: '威胁与防护全表', src: 'SECURITY.md' },
   { file: 'reference-agent.md', title: 'Agent 接入指南', desc: '给外部 Agent 什么', src: 'AGENT-ACCESS.md' },
-  { file: 'reference-roadmap.md', title: '路线图', desc: '版本计划', src: 'ROADMAP.md' },
 ];
 
 const SOURCES = {
@@ -136,23 +133,14 @@ CheckQ 是一个**可视化 HTTP 自动化流程引擎**（框架 / 平台）：
 | 模板 | 调试好的流程存为模板，一份模板派生多份任务；**模板一改，派生任务立刻跟随，零同步操作** |
 | 账号安全 | 多用户 + 角色、TOTP 两步验证、会话吊销、凭据静态加密、API Key 作用域与 IP 名单 |
 | 开放接口 | REST（OpenAPI 3.1）+ MCP（20 个工具），外部 Agent 可直接操作 |
-| 现代 Web | 原生 \`<dialog>\` / Popover API / \`color-scheme\` / 容器查询 / 内容可见性；遵循 Modern Web Guidance 1.0 |
-
-## 设计原则
-
-- **不分享具体脚本**：CheckQ 是平台；具体的签到脚本属于**模板市场**（后续能力），文档只讲框架能力。
-- **干净日志**：默认只有你写的日志节点出现，技术细节按需展开。
-- **凭据不落明文**：cookie / token / 密码加密存储，备份默认脱敏。
-- **终端用户优先**：面板里不写"给你讲道理"的说明文字，说明走悬停标注或按需出现。
-- **原生能力优先**：弹窗/菜单/主题交给浏览器（\`<dialog>\` / Popover / \`color-scheme\`），减少自造轮子。
-- **窄屏单行**：小屏顶栏只留「品牌 / 新建 / 更多 / 设置」，其余动作收进菜单，按钮不被挤到换行。
+| 任务分组 | 任务可归属分组，列表按组折叠；组头显示任务数、启用数、今日成功/失败/成功率、下次调度 |
 
 ## 接下来去哪
 
 | 我想… | 去哪 |
 |---|---|
 | 跑通第一个任务 | [快速开始](/quickstart.html) |
-| 了解节点与变量 | [任务与流程](/tasks.html) |
+| 了解节点、变量、分组 | [任务与流程](/tasks.html) |
 | 配置日志与通知 | [日志与通知](/logs.html) |
 | 给外部程序开接口 | [API 与 MCP](/api.html) |
 | 部署 / 备份 / 迁移 | [部署与备份](/deploy.html) |
@@ -209,6 +197,13 @@ CheckQ 是一个**可视化 HTTP 自动化流程引擎**（框架 / 平台）：
 - 模板语法：\`{{var}}\`、\`{{x|urlencode}}\`、\`{{x|num}}\`、\`{{x|sha256}}\`、\`{{now:%Y-%m-%d}}\`
 - 表达式：\`=last.json.code == 0\`（\`vars.xxx\` 取变量，\`last\` 是上一个响应）
 
+## 任务分组 / 折叠
+
+- 每个任务可设置 \`分组\`（≤40 字符；留空=未分组）；批量勾选后「分组…」可一次归入。
+- 列表按组折叠：组头显示任务数、启用数、今日成功 / 失败 / 成功率、下次调度；点击组头或「展开/折叠」切换。
+- ≥8 个任务的分组默认收起；折叠状态保存在浏览器本地；搜索/筛选时自动展开，避免搜到的任务藏在收起组里。
+- 只影响列表展示，不改变调度与执行；今日统计按服务器本地日期实时计算。
+
 ## 调度与失败重试
 
 - 每个任务独立 cron + 时区 + 抖动（0-N 分钟）；空 cron = 只手动运行。
@@ -238,61 +233,6 @@ CheckQ 是一个**可视化 HTTP 自动化流程引擎**（框架 / 平台）：
 ## 点选生成逻辑
 
 在编辑器里运行一次 → 日志里展开响应 → 点任意 JSON 值或划选文字 → 选择用途（存为变量 / 断言成功 / 记录到日志 / 加进通知）→ 自动生成标准节点并接到链尾。
-`,
-  'uiux.md': `# 交互与视觉规范
-
-> 本节描述框架的交互契约与视觉令牌，供二次开发与验收对照。所有实现均为浏览器原生能力优先，不含任何业务脚本。
-
-## 入口契约（定版）
-
-| 动作 | 结果 |
-|---|---|
-| 点任务名 | 「任务详情」弹窗：任务名 / 备注可改 + 只读概览（调度、时区、状态、重试策略、下次/上次运行、流程规模、变量（敏感项遮蔽）、通知渠道、来源模板、创建/修改时间） |
-| 任务行 ··· | 编辑流程 / 复制副本 / 启用或停用调度 / 删除（**没有**单独的基础信息入口） |
-| 编辑器「更多」 | 任务详情 / 通知渠道 / 填入 Cookie / 日志配置 / 存为模板 / 调试运行 等 |
-| 任务行「日志」或状态徽章 | 连续日志流（同一入口，避免两份视图） |
-
-## 原生 Web 能力
-
-| 能力 | 做法 |
-|---|---|
-| 弹窗 | 原生 \`<dialog>\` + \`showModal()\` + \`closedby="any"\`；浏览器负责焦点、Esc、背景 inert、顶层渲染与关闭后焦点归还 |
-| 定位 | \`position: fixed; inset: 0; margin: auto; height: fit-content\`，跨浏览器居中，不依赖 UA 差异 |
-| 滚动 | \`dialog:modal\` 与 \`dialog::backdrop\` 的 \`overscroll-behavior: contain\`，不给 \`<html>/<body>\` 上锁 |
-| 菜单 | Popover API 顶层渲染；位于弹窗内时挂到该 \`<dialog>\` 内部，否则会被 inert 拦住 |
-| 主题 | \`<meta name="color-scheme">\` + \`:root\` 的 \`color-scheme\`；日 / 夜 / 自动三段切换 |
-| 表格 | 语义 \`<table>/<caption>/<th scope>\` + sticky 表头 + 容器查询；可聚焦横滚区 |
-| 表单 | \`autocomplete\` / \`:user-invalid\` / \`aria-label\` / \`role="alert"\` |
-| 动效 | \`prefers-reduced-motion\` 降级；长日志 \`content-visibility: auto\` |
-| 编辑器 | 撤销/重做、复制/粘贴、按层级整理布局、MiniMap、日志↔画布双向定位、单次运行导出 HAR（脱敏） |
-
-依据 [Modern Web Guidance 1.0](https://developer.chrome.com/docs/modern-web-guidance)；机械扫描 \`npx modern-web-guidance@latest legacy-scan web/src --json\` 当前为 0 命中。
-
-## 视觉令牌
-
-| 项 | 夜 | 日 |
-|---|---|---|
-| 背景 / 面板 | \`#0b0e11\` / \`#11151a\` | \`#f3f5f6\` / \`#ffffff\` |
-| 边框 | \`#232a32\` | \`#d9dfe3\` |
-| 强调色 | \`#3fa7ad\` | \`#14707a\` |
-| 圆角 | xs 2 / sm 4 / md 6 / lg 8 / xl 12 px（层级化，不再处处同圆角） | 同左 |
-| 控件高度 | 标准 32 / 小 26 / 移动端 38 px | 同左 |
-
-- 冷中性石墨 + 低饱和汽油蓝绿；状态用「小圆点 + 文字」，不用彩色药丸；数字等宽 \`tabular-nums\`。
-- 节点配色为低饱和语义色，图标统一线性 SVG（设置用滑块式图标），禁止 emoji 充当图标。
-- 元信息用细竖线分隔的 \`.meta\`，不堆中点串。
-
-## 响应式与对齐
-
-- 桌面顶栏：品牌 / 新建 / 更多 / 身份文字 / 动作组 / 设置，全部等高、单行、垂直居中。
-- 窄屏（≤640px）：只保留「品牌 / + / ⋯ / 设置」四个 38px 控件，单行不换行；主题、站内通知、文档中心、登录身份收进「更多」。
-- 工具条拆左右两组，组内不拆散、组间才折行；搜索框可伸缩，控件同高。
-- 弹窗 \`height: fit-content\`（\`height: auto\` 会被 \`inset:0\` 拉满再截断，留下大片空白）。
-
-## 验收护栏
-
-\`node tools/ui-smoke.cjs <baseUrl>\`（7 视口 × 明暗主题，检查溢出 / 重叠 / 顶栏换行 / 弹窗居中 / 菜单裁剪 / 控制台报错）、
-\`node tools/copy-audit.cjs\`、\`node tools/secret-scan.cjs\`、\`node tools/project-audit.cjs\`，命中即 \`exit 1\`。
 `,
   'logs.md': `# 日志与通知
 
@@ -566,27 +506,16 @@ ${body}
 
 // 更新日志（从 git log 生成）
 function changelogHtml() {
-  let lines = [];
-  try {
-    const out = execSync('git log --date=short --pretty=format:"%ad|%h|%s" -n 150', { cwd: ROOT, encoding: 'utf8' });
-    lines = out.split('\n').filter(Boolean);
-  } catch { /* 没有 git 历史时忽略 */ }
-  const items = lines.map((l) => {
-    const [date, hash, subject] = l.split('|');
-    return `<li><span class="hash">${hash}</span> ${inline(subject || '')} <span class="date">${date}</span></li>`;
-  }).join('');
-  const grouped = {};
-  for (const l of lines) {
-    const [date, hash, subject] = l.split('|');
-    (grouped[date] = grouped[date] || []).push(`<li><code>${hash}</code> ${inline(subject || '')}</li>`);
-  }
-  const sections = Object.entries(grouped).map(([d, items]) => `<h3>${d}</h3><ul>${items.join('')}</ul>`).join('');
-  return `# 更新日志
+  // 只收录面向用户的更新说明（docs/CHANGELOG.md），不展示内部提交记录
+  let md = '';
+  try { md = fs.readFileSync(path.join(DOCS, 'CHANGELOG.md'), 'utf8'); } catch { /* 没有文件时给占位 */ }
+  if (!md.trim()) {
+    return `# 更新日志
 
-按提交时间倒序（来自 git 历史）。
-
-${sections || '<p>暂无记录</p>'}
+暂无记录。
 `;
+  }
+  return md;
 }
 
 fs.rmSync(OUT, { recursive: true, force: true });

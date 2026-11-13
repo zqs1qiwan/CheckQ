@@ -365,7 +365,8 @@ Template = {
 | 批量操作 | 「批量管理」勾选 → 批量运行 / 启用 / 停用 / 删除（`POST /api/flows/batch`） | ✅ |
 | 立即运行 | 行内「运行」；运行中显示「运行中…」 | ✅ |
 | 运行排队 | 同任务串行队列，第二次请求进入排队；统计里显示排队中任务数 | ✅ |
-| 任务详情 | 点任务名打开：改名 / 改备注 + 只读概览（调度、时区、状态、重试策略、下次/上次运行、流程规模、变量（敏感项遮蔽）、通知渠道、来源模板、创建/修改时间） | ✅ 定版 |
+| 任务详情 | 点任务名打开：改名 / 改备注 / 改分组 + 只读概览（调度、时区、状态、重试策略、下次/上次运行、流程规模、变量（敏感项遮蔽）、通知渠道、来源模板、创建/修改时间） | ✅ 定版 |
+| 分组 / 折叠 | 任务 `group`（≤40 字符，空=未分组）；列表按组折叠，组头显示任务数 / 启用数 / 今日成功 / 失败 / 成功率 / 下次调度；批量「分组…」一次归入；搜索支持分组名；≥8 个任务的分组默认收起，折叠状态存 localStorage；搜索/筛选时自动展开 | ✅ 2026-11-13 |
 | 克隆任务 | 行内"复制"→ 复制为新任务（名字 + ` · 副本`，保留 tplId/jitter/log） | ✅ v0.2 + v0.3.4 修复 |
 | 删除确认 | ✅ confirm 弹窗（保持） | ✅ |
 
@@ -806,7 +807,7 @@ POST   /api/flows/:id/run               { stream?, debugStopId?, debug? }；失�
 POST   /api/flows/:id/clone             复制副本
 POST   /api/flows/:id/curl              生成等价 curl
 POST   /api/flows/:id/notify-test       测试通知渠道
-POST   /api/flows/batch                  batch: run | enable | disable | delete
+POST   /api/flows/batch                  batch: run | enable | disable | delete | set-group（后者带 group）
 GET    /api/flows/:id/logs              连续日志流
 POST   /api/import/curl / har           cURL / HAR 解析为节点草稿
 
@@ -986,6 +987,7 @@ GET    /api/notifications | POST /api/notifications/read | DELETE /api/notificat
 | 运行历史 / 连续日志流 | `api.js` + `LogStream.jsx` | `logging.test.js`、UI 冒烟 | ✅ |
 | 运行抽屉（重试尝试条 / 变量快照 / 历史） | `RunDrawer.jsx` | 交互巡检 + E2E | ✅ |
 | 派生任务来源标注 | `store.templateInfo` | `template-link.test.js` | ✅ |
+| 任务分组 / 折叠 / 组统计 | `store.listFlows`（group + today）、`FlowList.jsx` | `group.test.js`、`api-surface.test.js`、`ui-smoke` 分组 5 项 | ✅ |
 
 ### 11.3 日志 / 通知
 
@@ -1073,6 +1075,7 @@ GET    /api/notifications | POST /api/notifications/read | DELETE /api/notificat
 - 覆盖面：§11 矩阵中全部 ✅ 能力；未实现项（§10 待定）不纳入验收。
 - 本轮新增：`server/test/api-surface.test.js`（41 项断言，每个公开端点至少命中一次，含 HAR 路径）、`tools/ui-interaction-audit.cjs`（仓库护栏，固化 9 视口交互巡检）、`tools/verify-round.cjs`（一轮全量验收执行器）。
 - **回归复验（用户报「删除确认弹窗不消失」后）**：修复 `confirm.jsx` / `toast.js` / `NotifyModal` 三类弹窗生命周期问题，并补 UI 冒烟 8 项（68 项 / 0 问题）；重新连续 3 轮 `verify-round` 全绿，生产实例只读复验全绿（66 项 / 0 问题）。
+- **分组功能后复验（2026-11-13）**：新增任务分组 / 折叠 / 组统计（`group.test.js` 10 项 + `api-surface` 批量分组 + UI 冒烟分组 5 项，总 444 断言 / 73 项）；连续 3 轮 `verify-round` 全绿。wiki 改版为**纯用户视角文档**（使用 / 排障 / 更新日志），并新增「wiki 不得包含内部内容」机械检查。
 - 结论：**当前 PRD 描述的能力集在 3 轮连续验收中均无错误**；后续变更必须按本节基线回归。
 
 ---

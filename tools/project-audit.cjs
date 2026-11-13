@@ -89,6 +89,21 @@ for (const m of pageDefs) {
 }
 good(`wiki 页面清单检查：${pageDefs.length} 页 / SOURCES ${sourceKeys.size} 篇`);
 
+// wiki 是终端用户文档：不得包含任何内部开发内容 / 内部文档引用
+const wikiBody = wiki.slice(wiki.indexOf('const SOURCES = {'), wiki.indexOf('// ---------- 静态资源'));
+const INTERNAL_TERMS = ['Modern Web Guidance', '设计令牌', 'UI/UX 规范', '设计原则', 'PRD', 'ROADMAP', 'GAP-ANALYSIS', '项目开发标准'];
+for (const term of INTERNAL_TERMS) {
+  if (wikiBody.includes(term)) bad('wiki', `用户文档包含内部内容「${term}」`);
+}
+for (const f of tracked.filter((x) => /^wiki\/.*\.html$/.test(x))) {
+  let text = '';
+  try { text = fs.readFileSync(path.join(ROOT, f), 'utf8'); } catch { continue; }
+  for (const term of INTERNAL_TERMS) {
+    if (text.includes(term)) bad(f, `生成的 wiki 页面包含内部内容「${term}」`);
+  }
+}
+good('wiki 内容检查：仅用户视角内容（使用 / 排障 / 更新日志）');
+
 /* ---------- 4) API 端点 ---------- */
 const apiDoc = read(path.join(ROOT, 'docs/API.md'));
 const apiSrc = read(path.join(ROOT, 'server/src/api.js')) + read(path.join(ROOT, 'server/src/openapi.js'));

@@ -57,7 +57,7 @@ X-API-Key: <key>
 
 ## 2. 通用字段
 
-- **Flow**：`{ id, name, note, cron, timezone, enabled, jitterMinutes, retry, vars, nodes, edges, notify, log, tplId, createdAt, updatedAt, lastRun, nextRunAt }`
+- **Flow**：`{ id, name, note, group, cron, timezone, enabled, jitterMinutes, retry, vars, nodes, edges, notify, log, tplId, createdAt, updatedAt, lastRun, nextRunAt }`（列表摘要额外带 `today: { runs, success, failed, rate }`）
 - **Node**：`{ id, type, name, x, y, config }`
 - **Retry（任务级失败重试）**：`{ enabled, maxAttempts, backoff: "exponential"|"linear"|"fixed", baseDelayMs, maxDelayMs, jitter }`。一次运行最多尝试 `maxAttempts` 次，**只有最后一次仍失败才判定任务失败**；默认 `{ enabled:true, maxAttempts:3, backoff:"exponential", baseDelayMs:5000, maxDelayMs:300000, jitter:true }`。调试运行（`debugStopId`）不重试。
 - **Log config**：`{ level: "all"|"failure"|"summary", record: "all"|"log"|"log-final", include: {reqHeaders,reqBody,resBody,varsSnapshot}, resBodyLimit, keywords: [{name,regex,from,into,stepId,negate}] }`
@@ -86,7 +86,7 @@ X-API-Key: <key>
 ### 任务 (Flows)
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/flows | 列表（摘要：id/name/note/cron/timezone/enabled/jitterMinutes/retry/varsCount/nodesCount/tplId/template/lastRun/nextRunAt）。`template` = `{ id, name }` —— 来源模板；派生任务的流程图始终是模板当前版本 |
+| GET | /api/flows | 列表（摘要：id/name/note/group/cron/timezone/enabled/jitterMinutes/retry/varsCount/nodesCount/tplId/template/lastRun/today/nextRunAt）。`template` = `{ id, name }` —— 来源模板；派生任务的流程图始终是模板当前版本；`today` = `{ runs, success, failed, rate }` |
 | POST | /api/flows | 创建（body = Flow 对象；空 nodes 允许，仅草稿；显式 `enabled:true` 且给了 cron 时按请求启用） |
 | GET | /api/flows/:id | 详情（含 nodes/edges/vars/log/notify/template；派生任务返回的是模板当前流程） |
 | PUT | /api/flows/:id | 更新（部分字段合并）。派生任务改了脚本内容 → 自动转为独立任务，返回体 `detached` = 模板名 |
@@ -94,7 +94,7 @@ X-API-Key: <key>
 | POST | /api/flows/:id/run | `{ stream?: bool, debugStopId?, debug? }` 运行；stream=true → SSE（start/log/done）。失败按 `flow.retry` 自动退避重试，跑满次数才最终失败；调度触发时若上一次运行/重试尚未结束则跳过这一拍 |
 | POST | /api/flows/:id/clone | 克隆为「·副本 N」，enabled:false |
 | POST | /api/flows/:id/curl | 生成等价 curl 命令（变量代入） |
-| POST | /api/flows/batch | `{ action: run\|enable\|disable\|delete, ids: [] }` |
+| POST | /api/flows/batch | `{ action: run\|enable\|disable\|delete\|set-group, ids: [], group? }`（set-group 需带 group，空串=移出分组） |
 | POST | /api/flows/:id/notify-test | 测试通知渠道 |
 
 ### 运行记录

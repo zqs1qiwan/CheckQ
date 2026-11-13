@@ -24,16 +24,21 @@ const VIEWPORTS = [
   const page = await newPage(cdp);
   const findings = [];
   const add = (where, msg) => { findings.push({ where, msg }); };
+  const expandGroups = async () => {
+    await page.eval(`[...document.querySelectorAll('.page button')].find(b=>b.textContent.trim()==='展开全部')?.click(); await new Promise(r=>setTimeout(r,350)); return 1;`);
+  };
 
   await page.setViewport(1440, 900);
   await page.goto(BASE + '/');
   await page.eval("await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:'admin',password:'test1234'})}); return 1;");
   await page.reload();
+  await expandGroups();
   await sleep(900);
 
   for (const [w, h, kind] of VIEWPORTS) {
     await page.setViewport(w, h, kind === 'mobile');
     await page.reload();
+  await expandGroups();
     await sleep(700);
     for (const mode of ['dark', 'light']) {
       await page.eval(`document.documentElement.dataset.mode='${mode}'; document.documentElement.dataset.theme='${mode}'; await new Promise(r=>setTimeout(r,150)); return 1;`);
@@ -132,7 +137,8 @@ const VIEWPORTS = [
 
   // D. 桌面：逐个弹窗居中 + 按钮组不换行 + 底部行下拉
   await page.setViewport(1440, 900);
-  await page.reload(); await sleep(800);
+  await page.reload();
+  await expandGroups(); await sleep(800);
   const modals = [
     ['新建空白任务', `document.querySelector('.topbar .new-task-btn')?.click()`],
     ['恢复', `[...document.querySelectorAll('.page button')].find(b=>b.textContent.trim()==='恢复')?.click()`],
@@ -171,7 +177,8 @@ const VIEWPORTS = [
 
   // E. 窄屏：动作收进「更多」，设置仍可达且弹窗居中
   await page.setViewport(390, 844, true);
-  await page.reload(); await sleep(800);
+  await page.reload();
+  await expandGroups(); await sleep(800);
   const mobile = await page.eval(`
     const hidden=getComputedStyle(document.querySelector('.topbar-actions')).display==='none';
     const settingsVisible=!!document.querySelector('.topbar .settings-btn') && getComputedStyle(document.querySelector('.topbar .settings-btn')).display!=='none';
@@ -208,7 +215,8 @@ const VIEWPORTS = [
 
   // F. 模板页：卡片、卡片菜单、无横向溢出
   await page.setViewport(1440, 900);
-  await page.reload(); await sleep(800);
+  await page.reload();
+  await expandGroups(); await sleep(800);
   await page.eval(`[...document.querySelectorAll('.big-tabs button')].find(b=>b.textContent.includes('模板'))?.click(); await new Promise(r=>setTimeout(r,400)); return 1;`);
   const tpl = await page.eval(`
     const cards=[...document.querySelectorAll('.tpl-card')];
@@ -224,7 +232,7 @@ const VIEWPORTS = [
 
   // G. 编辑器：画布/积木/参数/MiniMap/工具栏/更多菜单（只读，不保存）
   await page.eval(`
-    const row=document.querySelector('.flow-table tbody tr');
+    const row=document.querySelector('.flow-table tbody tr:not(.group-row)');
     row.querySelector('.dd-trigger').click(); await new Promise(r=>setTimeout(r,250));
     [...document.querySelectorAll('.dd-pop:popover-open button')].find(b=>b.textContent.includes('编辑流程')).click();
     await new Promise(r=>setTimeout(r,1400)); return 1;
@@ -258,7 +266,8 @@ const VIEWPORTS = [
   await page.shot(`${OUT}/editor-1440-final.png`);
 
   // H. 嵌套确认弹窗：设置 → API 密钥 → 立即回收 → 取消，确认框关闭但设置框仍在
-  await page.reload(); await sleep(800);
+  await page.reload();
+  await expandGroups(); await sleep(800);
   const stacked = await page.eval(`
     document.querySelector('.topbar .iconbtn[aria-label="设置"]')?.click();
     await new Promise(r=>setTimeout(r,400));

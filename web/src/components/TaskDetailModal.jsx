@@ -11,10 +11,11 @@ import { fmtDateTime, fmtAgo, isSensitiveName, CHANNEL_LABELS, describeRetryPoli
  *   - 只读：调度、状态、变量、通知渠道、来源模板、流程规模、时间
  * 进画布是另一件事（更多 → 编辑），这里不抢它的入口。
  */
-export default function TaskDetailModal({ summary, onClose, onSaved, onToast, onEdit }) {
+export default function TaskDetailModal({ summary, onClose, onSaved, onToast, onEdit, groupOptions = [] }) {
   const [flow, setFlow] = useState(null);
   const [name, setName] = useState(summary.name || '');
   const [note, setNote] = useState(summary.note || '');
+  const [group, setGroup] = useState(summary.group || '');
   const [busy, setBusy] = useState(false);
   const [revealed, setRevealed] = useState({});
 
@@ -25,6 +26,7 @@ export default function TaskDetailModal({ summary, onClose, onSaved, onToast, on
       setFlow(f);
       setName(f.name || '');
       setNote(f.note || '');
+      setGroup(f.group || '');
     }).catch((e) => onToast?.(e.message, 'fail'));
     return () => { alive = false; };
   }, [summary.id]);
@@ -33,7 +35,7 @@ export default function TaskDetailModal({ summary, onClose, onSaved, onToast, on
     if (!name.trim()) return;
     setBusy(true);
     try {
-      const nf = await api.updateFlow(summary.id, { name: name.trim(), note });
+      const nf = await api.updateFlow(summary.id, { name: name.trim(), note, group: group.trim() });
       onSaved?.(nf);
       onToast?.(`已保存「${name.trim()}」`, 'ok');
       onClose();
@@ -69,6 +71,20 @@ export default function TaskDetailModal({ summary, onClose, onSaved, onToast, on
       <div className="field">
         <label title="备注会显示在任务列表里，也能被搜索">备注</label>
         <textarea rows={2} value={note} aria-label="任务备注" onChange={(e) => setNote(e.target.value)} placeholder="例如：账号 A，每天一次" />
+      </div>
+
+      <div className="field">
+        <label title="分组用于列表折叠；留空=未分组">分组</label>
+        <input
+          list="checkq-group-options"
+          value={group}
+          aria-label="任务分组"
+          onChange={(e) => setGroup(e.target.value)}
+          placeholder="例如：签到 / 监控 / 实验（留空=未分组）"
+        />
+        <datalist id="checkq-group-options">
+          {groupOptions.map((g) => <option key={g} value={g} />)}
+        </datalist>
       </div>
 
       <div className="detail-panel">

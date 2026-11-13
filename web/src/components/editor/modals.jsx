@@ -119,18 +119,19 @@ function NotifyModal({ flow, onClose, onSaved, onToast }) {
   };
 
   const patch = (i, k, v) => setChannels(channels.map((c, j) => (j === i ? { ...c, [k]: v } : c)));
-  const save = async () => {
+  const save = async (opts = {}) => {
     setErr(''); setTestResult(null);
     try {
       const nf = await api.updateFlow(flow.id, { notify: { onSuccess, onFailure, template, channels } });
       onSaved(nf);
       if (onToast) onToast('通知渠道已保存', 'ok');
+      if (opts.close !== false) onClose(); // 保存成功后必须关闭弹窗；「测试发送」不关
     } catch (e) { setErr(e.message); }
   };
   const test = async () => {
     setErr(''); setTestResult(null);
     try {
-      await save();
+      await save({ close: false });
       const r = await api.notifyTest(flow.id);
       setTestResult({ ok: true, results: r.results, text: r.text });
     } catch (e) { setTestResult({ ok: false, error: e.message }); }

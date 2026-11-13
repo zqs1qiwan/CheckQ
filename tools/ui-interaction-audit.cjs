@@ -257,6 +257,34 @@ const VIEWPORTS = [
   console.log('编辑器:', ed, 'edMenu=', edMenu);
   await page.shot(`${OUT}/editor-1440-final.png`);
 
+  // H. 嵌套确认弹窗：设置 → API 密钥 → 立即回收 → 取消，确认框关闭但设置框仍在
+  await page.reload(); await sleep(800);
+  const stacked = await page.eval(`
+    document.querySelector('.topbar .iconbtn[aria-label="设置"]')?.click();
+    await new Promise(r=>setTimeout(r,400));
+    const tab=[...document.querySelectorAll('.settings-tab')].find(t=>t.textContent.includes('API'));
+    if (tab) { tab.click(); await new Promise(r=>setTimeout(r,350)); }
+    const trig=document.querySelector('.key-ops .dd-trigger');
+    if (!trig) return JSON.stringify({skipped:'no api key'});
+    trig.click(); await new Promise(r=>setTimeout(r,300));
+    const revoke=[...document.querySelectorAll('.dd-pop:popover-open button')].find(b=>b.textContent.includes('立即回收'));
+    if (!revoke) return JSON.stringify({skipped:'no revoke'});
+    revoke.click(); await new Promise(r=>setTimeout(r,400));
+    const before=document.querySelectorAll('dialog.modal[open]').length;
+    const cancel=[...document.querySelectorAll('dialog.modal[open] .modal-foot button')].find(b=>b.textContent.trim()==='取消');
+    if (cancel) cancel.click();
+    await new Promise(r=>setTimeout(r,400));
+    const after=document.querySelectorAll('dialog.modal[open]').length;
+    return JSON.stringify({before, after, settingsStillOpen:!!document.querySelector('dialog.modal.settings-modal[open]')});
+  `);
+  const st = JSON.parse(stacked);
+  if (!st.skipped) {
+    if (st.before < 2) add('嵌套确认/1440', `确认框没有叠加出现（dialogs=${st.before}）`);
+    if (st.after !== 1 || !st.settingsStillOpen) add('嵌套确认/1440', `取消后确认框未关闭或设置框被误关（dialogs=${st.after}）`);
+  }
+  await page.eval(`document.querySelector('dialog.modal[open] .modal-close')?.click(); await new Promise(r=>setTimeout(r,250)); return 1;`);
+  console.log('嵌套确认:', stacked);
+
   console.log('=== FINDINGS (' + findings.length + ') ===');
   for (const f of findings) console.log(`[${f.where}] ${f.msg}`);
   console.log('console errors:', JSON.stringify(page.consoleErrors.slice(0, 10)));

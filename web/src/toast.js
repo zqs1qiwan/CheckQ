@@ -48,7 +48,11 @@ export function toast(text, kind = 'info') {
   const item = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, text: String(text), kind };
   queue.push(item);
   notify();
-  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('checkq-toast', { detail: item }));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('checkq-toast', { detail: item }));
+    // 自动消失：否则提示条会一直挂在页面上，只能手动点掉
+    window.setTimeout(() => dismissToast(item.id), 5000);
+  }
 }
 
 export function toastQueue() {
@@ -60,3 +64,6 @@ export function dismissToast(id) {
   if (i >= 0) queue.splice(i, 1);
   notify();
 }
+
+// 供 UI 冒烟测试触发一条提示（不改变服务端设置、不产生任何数据）
+if (typeof window !== 'undefined') window.__checkqToast = toast;

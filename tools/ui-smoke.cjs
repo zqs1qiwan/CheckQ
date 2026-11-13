@@ -551,6 +551,96 @@ async function checkModal(page, where, openExpr, opts = {}) {
     await checkDropdown(page, '移动端/390', `return 1;`, '底部行');
     await page.eval(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); await new Promise(r=>setTimeout(r,150));`);
 
+    /* 9b) 二次确认弹窗生命周期：取消 / 确认 / Esc / ✕ 都必须真正关闭，且不能卡住后续操作 */
+    await page.viewport(1440, 900);
+    await page.reload();
+    const openConfirm = `
+      const row=document.querySelector('.flow-table tbody tr');
+      row.querySelector('.dd-trigger').click();
+      await new Promise(r=>setTimeout(r,300));
+      const b=[...document.querySelectorAll('.dd-pop:popover-open button')].find(x=>x.textContent.trim()==='删除');
+      if (b) b.click();
+      await new Promise(r=>setTimeout(r,400));
+      return !!document.querySelector('dialog.modal[open]');
+    `;
+    // 1) 取消
+    const c1 = await page.eval(openConfirm);
+    if (!c1) fail('确认弹窗/1440', '删除任务没有弹出确认框');
+    await page.eval(`[...document.querySelectorAll('dialog.modal[open] .modal-foot button')].find(b=>b.textContent.trim()==='取消')?.click(); await new Promise(r=>setTimeout(r,400)); return 1;`);
+    const closed1 = await page.eval(`return !document.querySelector('dialog.modal[open]');`);
+    if (!closed1) fail('确认弹窗/1440', '点「取消」后确认框没有消失');
+    else ok('确认弹窗/1440', '点「取消」后确认框关闭');
+    // 2) Esc
+    await page.eval(openConfirm);
+    await page.key('Escape', 'Escape', 27);
+    await sleep(350);
+    const closed2 = await page.eval(`return !document.querySelector('dialog.modal[open]');`);
+    if (!closed2) fail('确认弹窗/1440', 'Esc 后确认框没有消失');
+    else ok('确认弹窗/1440', 'Esc 关闭确认框');
+    // 3) 右上角 ✕
+    await page.eval(openConfirm);
+    await page.eval(`document.querySelector('dialog.modal[open] .modal-close')?.click(); await new Promise(r=>setTimeout(r,350)); return 1;`);
+    const closed3 = await page.eval(`return !document.querySelector('dialog.modal[open]');`);
+    if (!closed3) fail('确认弹窗/1440', '点 ✕ 后确认框没有消失');
+    else ok('确认弹窗/1440', '✕ 关闭确认框');
+    // 4) 确认删除：弹窗消失 + 任务真的少一行（仅删本地预置的「冒烟临时任务」，生产实例跳过以保持只读）
+    const tempRow = await page.eval(`return [...document.querySelectorAll('.flow-table tbody tr')].some(r=>r.innerText.includes('冒烟临时任务'));`);
+    if (tempRow) {
+      const before = await page.eval(`return document.querySelectorAll('.flow-table tbody tr').length;`);
+      await page.eval(`
+        const row=[...document.querySelectorAll('.flow-table tbody tr')].find(r=>r.innerText.includes('冒烟临时任务'));
+        row.querySelector('.dd-trigger').click(); await new Promise(r=>setTimeout(r,300));
+        [...document.querySelectorAll('.dd-pop:popover-open button')].find(x=>x.textContent.trim()==='删除')?.click();
+        await new Promise(r=>setTimeout(r,400)); return 1;
+      `);
+      await page.eval(`[...document.querySelectorAll('dialog.modal[open] .modal-foot button')].find(b=>b.textContent.includes('删除'))?.click(); return 1;`);
+      const after = await page.eval(`
+        const t0=Date.now();
+        while (Date.now()-t0 < 4000) {
+          if (!document.querySelector('dialog.modal[open]') && document.querySelectorAll('.flow-table tbody tr').length < ${before}) break;
+          await new Promise(r=>setTimeout(r,150));
+        }
+        return JSON.stringify({ closed: !document.querySelector('dialog.modal[open]'), rows: document.querySelectorAll('.flow-table tbody tr').length });
+      `);
+      const a = JSON.parse(after);
+      if (!a.closed) fail('确认弹窗/1440', '点「删除」后确认框仍卡在屏幕上（已删除但未关闭）');
+      else ok('确认弹窗/1440', '点「删除」后确认框关闭');
+      if (a.rows >= before) fail('确认弹窗/1440', `确认后临时任务没有被删除（${before} → ${a.rows}）`);
+      else ok('确认弹窗/1440', `确认后临时任务已删除（${before} → ${a.rows}）`);
+    } else {
+      ok('确认弹窗/1440', '生产/无临时任务：跳过破坏性确认分支（取消/Esc/✕ 已覆盖 resolver 关闭路径）');
+    }
+
+    // 4b) 提交型弹窗：保存成功后必须关闭（本地实例才做，避免写生产数据）
+    if (tempRow) {
+      await page.eval(`
+        const row=document.querySelector('.flow-table tbody tr');
+        row.querySelector('.dd-trigger').click(); await new Promise(r=>setTimeout(r,250));
+        [...document.querySelectorAll('.dd-pop:popover-open button')].find(b=>b.textContent.includes('编辑流程')).click();
+        await new Promise(r=>setTimeout(r,1300));
+        document.querySelector('.editor-topbar .dd-trigger').click(); await new Promise(r=>setTimeout(r,250));
+        [...document.querySelectorAll('.dd-pop:popover-open button')].find(b=>b.textContent.includes('通知渠道')).click();
+        await new Promise(r=>setTimeout(r,500)); return 1;
+      `);
+      const opened = await page.eval(`return !!document.querySelector('dialog.modal[open]');`);
+      if (!opened) fail('提交型弹窗/1440', '通知渠道弹窗没有打开');
+      await page.eval(`[...document.querySelectorAll('dialog.modal[open] .modal-foot button')].find(b=>b.textContent.trim()==='保存')?.click(); await new Promise(r=>setTimeout(r,900)); return 1;`);
+      const closed = await page.eval(`return !document.querySelector('dialog.modal[open]');`);
+      if (!closed) fail('提交型弹窗/1440', '点「保存」后通知渠道弹窗没有消失');
+      else ok('提交型弹窗/1440', '点「保存」后通知渠道弹窗关闭');
+      await page.eval(`[...document.querySelectorAll('.editor-topbar button')].find(b=>b.textContent.trim()==='返回')?.click(); await new Promise(r=>setTimeout(r,800)); return 1;`);
+    }
+
+    // 5) 全局提示条自动消失（不能一直挂着）
+    await page.eval(`window.__checkqToast?.('UI 冒烟测试提示', 'fail'); await new Promise(r=>setTimeout(r,700)); return 1;`);
+    const toastShown = await page.eval(`return !!document.querySelector('.toast-stack .toast');`);
+    if (!toastShown) fail('全局提示', '备份成功提示没有出现');
+    else ok('全局提示', '备份成功提示出现');
+    await sleep(5200);
+    const toastGone = await page.eval(`return !document.querySelector('.toast-stack .toast');`);
+    if (!toastGone) fail('全局提示', '提示条 5 秒后仍未自动消失（只能手动点掉）');
+    else ok('全局提示', '提示条 5 秒后自动消失');
+
     /* 10) 控制台错误 */
     if (page.errors.length) page.errors.forEach((e) => fail('控制台', e));
     else ok('控制台', '无报错、无未捕获异常');

@@ -78,8 +78,8 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepP
   const statusLabel = shown.status === 'success' ? '执行成功' : shown.status === 'failed' ? '执行失败' : '执行中';
   const failLog = shown.logs?.find((l) => !l.ok);
   const [errFilter, setErrFilter] = useState('all'); // all | network | assert | engine
-  // 日常只看「人话」：log 节点输出 + 失败步骤；调试模式才展开全部步骤
-  const cleanLogs = (shown.logs || []).filter((l) => l.type === 'log' || !l.ok);
+  // 日常只看「人话」：log 节点输出 + 失败步骤 + 重试分隔；调试模式才展开全部步骤
+  const cleanLogs = (shown.logs || []).filter((l) => l.type === 'log' || l.type === 'system' || !l.ok);
   const visibleLogs = (debug ? (shown.logs || []) : cleanLogs).filter((l) => errFilter === 'all' || l.errorType === errFilter || (errFilter === 'network' && l.errorType === 'network'));
 
   return (
@@ -94,6 +94,17 @@ export default function RunDrawer({ run, flowId, onClose, onPickResponse, onRepP
           {shown.summary && (
             <div style={{ fontSize: 12, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={shown.summary}>
               摘要：<span style={{ color: 'var(--ok)' }}>{shown.summary}</span>
+            </div>
+          )}
+          {shown.attempts?.length > 1 && (
+            <div className="attempt-line">
+              <span>共 {shown.attempts.length} 次尝试</span>
+              {shown.attempts.map((a) => (
+                <span key={a.attempt} className={`attempt-pill ${a.ok ? 'ok' : 'fail'}`}
+                  title={a.message || ''}>
+                  #{a.attempt} {a.ok ? '成功' : '失败'}{a.nextDelayMs ? ` · ${Math.round(a.nextDelayMs / 1000)}s 后重试` : ''}
+                </span>
+              ))}
             </div>
           )}
         </div>

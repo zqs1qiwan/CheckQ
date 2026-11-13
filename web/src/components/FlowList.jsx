@@ -11,7 +11,7 @@ import AccountPanel from './AccountPanel.jsx';
 import UsersPanel from './UsersPanel.jsx';
 import ApiKeysPanel from './ApiKeysPanel.jsx';
 import { toast as globalToast, setToastLevel, getToastLevel } from '../toast.js';
-import { fmtDateTime, ROLE_LABELS } from '../util.js';
+import { fmtDateTime, ROLE_LABELS, CHANNEL_LABELS } from '../util.js';
 
 function fmtTime(ts) {
   return fmtDateTime(ts);
@@ -318,8 +318,16 @@ export default function FlowList({ onOpen, onLogout }) {
 
   return (
     <>
-      <div className="topbar">
-        <span className="logo">Check<em>Q</em></span>
+      <a className="skip-link" href="#main">跳到主要内容</a>
+      <header className="topbar">
+        <span className="logo" aria-label="CheckQ">
+          <span className="logo-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 12.5l5 5L20 6.5" />
+            </svg>
+          </span>
+          {'Check'}<em>Q</em>
+        </span>
         <span className="spacer" />
         <button className="primary" onClick={() => setModal('new')}>+ 新建任务</button>
         <Dropdown trigger="更多" caret triggerClass="dd-menu" width={190} ariaLabel="更多操作">
@@ -351,9 +359,9 @@ export default function FlowList({ onOpen, onLogout }) {
           ref={fileRef} type="file" accept=".har,.json" style={{ display: 'none' }}
           onChange={(e) => { const f = e.target.files[0]; if (f) doImport(f); e.target.value = ''; }}
         />
-      </div>
+      </header>
 
-      <div className="page">
+      <main className="page" id="main">
         {stats && (
           <div className="status-rail">
             <span className="meta">
@@ -469,11 +477,13 @@ export default function FlowList({ onOpen, onLogout }) {
           <input
             className="toolbar-search"
             placeholder="搜索名称或备注"
+            aria-label="搜索任务名称或备注"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           <select
             className="toolbar-select"
+            aria-label="按状态筛选任务"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           >
@@ -503,12 +513,13 @@ export default function FlowList({ onOpen, onLogout }) {
             <p>{(search || filter !== 'all') ? '没有匹配的任务。' : '还没有任务。从上方模板创建，或「+ 新建任务」从零开始搭建。'}</p>
           </div>
         ) : (
-          <div className="table-scroll">
+          <div className="table-scroll" role="region" aria-label="任务列表" tabIndex={0}>
             <table className="flow-table">
+              <caption className="sr-only">任务列表：名称、调度、下次运行、状态、上次运行与操作</caption>
               <thead>
                 <tr>
-                  {batchMode && <th style={{ width: 36 }}><input type="checkbox" checked={selectedAll} onChange={toggleSelectAll} title="全选" /></th>}
-                  <th>名称</th><th>调度</th><th className="col-next">下次运行</th><th>状态</th><th className="col-last">上次运行</th><th style={{ minWidth: 150 }}>操作</th>
+                  {batchMode && <th scope="col" style={{ width: 36 }}><input type="checkbox" checked={selectedAll} onChange={toggleSelectAll} title="全选" aria-label="全选任务" /></th>}
+                  <th scope="col">名称</th><th scope="col">调度</th><th scope="col" className="col-next">下次运行</th><th scope="col">状态</th><th scope="col" className="col-last">上次运行</th><th scope="col" style={{ minWidth: 150 }}>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -537,7 +548,7 @@ export default function FlowList({ onOpen, onLogout }) {
                     <td className="col-last">{lastStatus(f)}</td>
                     <td>
                       <div className="cell-actions">
-                        <button className="small primary" disabled={running === f.id} title={running === f.id ? '正在运行…' : '立即运行一次'}
+                        <button className="small row-run" disabled={running === f.id} title={running === f.id ? '正在运行…' : '立即运行一次'}
                           onClick={() => runNow(f)}>{running === f.id ? '运行中' : '运行'}</button>
                         <button className="small" title="查看运行日志（每天的签到记录都在这里）" onClick={() => openLog(f)}>日志</button>
                         <Dropdown trigger="···" triggerClass="dd-row" align="right" width={170} ariaLabel="任务更多操作">
@@ -564,7 +575,7 @@ export default function FlowList({ onOpen, onLogout }) {
         )}
         </>
         )}
-      </div>
+      </main>
 
       {modal === 'wizard' && (
         <WizardModal onClose={() => setModal(null)} onCreated={(f) => { setModal(null); onOpen(f.id); setToast({ kind: 'ok', text: '流程已生成，去运行试试，再点「点选生成逻辑」补变量' }); }} />
@@ -1038,7 +1049,7 @@ function SettingsFlow({ onToast }) {
         </label>
       </div>
       <div className="field">
-        <label title="默认关闭；开启后每天指定时间把今日汇总推送到勾选的任务">每日总推送</label>
+        <label title="默认关闭；开启后每天指定时间把今日汇总推送到勾选的任务">每日汇总推送</label>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input type="checkbox" style={{ width: 'auto' }} checked={!!cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} />
           每天 {cfg.time} 把今日汇总推送到下面勾选的任务
@@ -1055,7 +1066,7 @@ function SettingsFlow({ onToast }) {
               />
               <span className="push-unit-name">{f.name}</span>
               {/* 服务端返回的 channels 是类型名字符串数组（历史接口形态），兼容对象形态 */}
-              <span className="push-unit-ch">{(f.channels || []).map((c) => (typeof c === 'string' ? c : c.type)).filter(Boolean).join(' / ')}</span>
+              <span className="push-unit-ch">{(f.channels || []).map((c) => { const t = typeof c === 'string' ? c : c.type; return CHANNEL_LABELS[t] || t; }).filter(Boolean).join(' / ')}</span>
             </label>
           ))}
         </div>

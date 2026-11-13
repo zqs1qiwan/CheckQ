@@ -34,7 +34,9 @@ Docker 一行部署，导入浏览器 HAR 自动生成流程，条件分支 / �
 - **通知** — 12 种渠道原生集成（站内 / Webhook / Bark / Telegram / Server酱 / PushPlus / 钉钉 / 企业微信 / 飞书 / Gotify / ntfy / 邮件SMTP），钉钉/飞书支持加签；首页 🔔 站内通知中心
 - **模板导出与批量创建** — 模板导出为 JSON（敏感变量脱敏）；CSV 批量导入一键创建多份任务
 - **日/夜/自动 主题** — 顶栏三段切换，「自动」跟随系统即时刻切换；批量操作默认收起（列表页「批量管理」按需开启），按钮/标题不再折行压缩
-- **基础信息可改** — 点任务名打开任务详情（备注、调度、变量、通知渠道…），名字与备注当场就能改；进画布是「更多 → 编辑流程」这样的显式动作
+- **失败自动重试** — 任务级退避重试：默认最多 3 次、指数退避 5 秒起、随机抖动、单次等待上限 5 分钟；**跑满次数仍失败才判定真正失败**，每次尝试与等待时长都写进运行记录、日志与通知。调试运行不重试，调度不会在重试期间重复触发
+- **现代 Web 原生能力** — 弹窗用原生 `<dialog>`（焦点管理 / Esc / 背景 inert / 顶层渲染），菜单用 Popover API，明暗主题声明 `color-scheme`，表格 sticky 表头 + 容器查询，长日志 `content-visibility`；UI 决策依据 [Modern Web Guidance 1.0](https://developer.chrome.com/docs/modern-web-guidance)
+- **基础信息可改** — 点任务名打开任务详情（备注、调度、重试策略、变量、通知渠道…），名字与备注当场就能改；进画布是「更多 → 编辑流程」这样的显式动作
 - **下拉不丢** — 所有菜单以浮层渲染并自动避让边界，表格底部那几行的「···」也点得到
 - **单容器部署** — 无原生编译依赖，`docker compose up -d` 即用
 - **框架即框架** — 不内置任何业务模板；模板来自用户创建 / JSON 导入（产品路线图见 docs/PRD.md）
@@ -109,6 +111,8 @@ cd web && npm install && npm run dev   # http://localhost:5173，/api 代理到 
 cd server && node test/engine.test.js && node test/engine-v02.test.js && node test/curl-import.test.js && node test/logging.test.js
 # 全量单测
 cd server && for f in test/*.test.js; do node $f; done
+# 前端规范（生成本地 .agents/skills，不入库）
+npx modern-web-guidance@latest install
 ```
 
 质量护栏（都可用本地命令跑，命中即 exit 1）：

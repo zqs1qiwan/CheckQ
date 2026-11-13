@@ -57,3 +57,22 @@ export const CHANNEL_LABELS = {
 
 /** 角色 → 中文名 */
 export const ROLE_LABELS = { admin: '管理员', operator: '操作员', viewer: '只读' };
+
+/** 任务级失败重试策略 → 中文描述（与后端 describeRetry 同口径） */
+export function describeRetryPolicy(r) {
+  if (!r || !r.enabled) return '不重试（失败即结束）';
+  const name = { exponential: '指数退避', linear: '线性退避', fixed: '固定间隔' }[r.backoff] || '指数退避';
+  const base = Number(r.baseDelayMs) >= 60000
+    ? `${Math.round(Number(r.baseDelayMs) / 60000)} 分钟`
+    : `${Math.round(Number(r.baseDelayMs) / 1000)} 秒`;
+  return `最多 ${r.maxAttempts} 次 · ${name} · ${base}起`;
+}
+
+/** 悬停提示用的完整策略（含单次上限 / 抖动） */
+export function describeRetryPolicyDetail(r) {
+  if (!r || !r.enabled) return '失败后不重试：第一次失败即判定任务失败';
+  const max = Number(r.maxDelayMs) >= 60000
+    ? `单次最长 ${Math.round(Number(r.maxDelayMs) / 60000)} 分钟`
+    : `单次最长 ${Math.round(Number(r.maxDelayMs) / 1000)} 秒`;
+  return `${describeRetryPolicy(r)} · ${max}${r.jitter ? ' · 随机抖动' : ''}`;
+}

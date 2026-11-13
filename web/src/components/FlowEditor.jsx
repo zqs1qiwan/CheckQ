@@ -1039,19 +1039,49 @@ function VarsEditor({ flow, onVars }) {
   );
 }
 
-/** 调度弹窗（v0.4.2）：cron / 时区 / 抖动 / 启用调度，独立弹窗统一风格 */
+/** 调度弹窗（v0.4.2）：cron / 时区 / 抖动 / 启用调度 + 失败重试，独立弹窗统一风格 */
 function ScheduleModal({ flow, onClose, onSave }) {
   const [cron, setCron] = useState(flow.cron || '');
   const [timezone, setTimezone] = useState(flow.timezone || 'Asia/Shanghai');
   const [jitter, setJitter] = useState(flow.jitterMinutes ?? 0);
   const [enabled, setEnabled] = useState(!!flow.enabled);
+  const [retry, setRetry] = useState(() => ({
+    enabled: true, maxAttempts: 3, backoff: 'exponential', baseDelayMs: 5000, maxDelayMs: 300000, jitter: true,
+    ...(flow.retry || {}),
+  }));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+
+  const setR = (patch) => setRetry((r) => ({ ...r, ...patch }));
+  // 预览前三次重试的等待时间（与后端 retryDelayMs 同公式，抖动取中值）
+  const preview = (() => {
+    if (!retry.enabled) return '';
+    const base = Math.max(1000, Number(retry.baseDelayMs) || 5000);
+    const max = Math.max(base, (Number(retry.maxDelayMs) || 300000));
+    const waits = [];
+    for (let n = 1; n < Math.min(4, Number(retry.maxAttempts) || 3); n++) {
+      let d = retry.backoff === 'fixed' ? base : retry.backoff === 'linear' ? base * n : base * 2 ** (n - 1);
+      d = Math.min(d, max);
+      if (retry.jitter) d = d * 0.75;
+      waits.push(d >= 60000 ? `${Math.round(d / 60000)} 分钟` : `${Math.round(d / 1000)} 秒`);
+    }
+    return waits.length ? `失败后依次等待：${waits.join(' → ')}${Number(retry.maxAttempts) > 4 ? ' …' : ''}` : '';
+  })();
 
   const save = async () => {
     setBusy(true); setErr('');
     try {
-      await onSave({ cron: cron.trim(), timezone, jitterMinutes: Number(jitter) || 0, enabled });
+      await onSave({
+        cron: cron.trim(), timezone, jitterMinutes: Number(jitter) || 0, enabled,
+        retry: {
+          enabled: !!retry.enabled,
+          maxAttempts: Number(retry.maxAttempts) || 3,
+          backoff: retry.backoff,
+          baseDelayMs: Math.round((Number(retry.baseDelayMs) || 5) * 1000),
+          maxDelayMs: Math.round((Number(retry.maxDelayMs) || 300) * 1000),
+          jitter: !!retry.jitter,
+        },
+      });
       onClose();
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
@@ -1060,7 +1090,7 @@ function ScheduleModal({ flow, onClose, onSave }) {
     <Modal
       title="调度"
       onClose={onClose}
-      width={480}
+      width={520}
       footer={
         <>
           <button onClick={onClose}>取消</button>
@@ -1070,12 +1100,12 @@ function ScheduleModal({ flow, onClose, onSave }) {
     >
       <div className="field">
         <label title="例：30 8 * * * = 每天 08:30；13 0 * * * = 每天 00:13">cron 表达式</label>
-        <input className="mono" placeholder="30 8 * * *（留空=手动）" value={cron} onChange={(e) => setCron(e.target.value)} />
+        <input className="mono" placeholder="30 8 * * *（留空=手动）" aria-label="cron 表达式" value={cron} onChange={(e) => setCron(e.target.value)} />
       </div>
       <div className="field-inline">
         <div className="field">
           <label>时区</label>
-          <select value={timezone} onChange={(e) => setTimezone(e.target.value)}>
+          <select value={timezone} aria-label="时区" onChange={(e) => setTimezone(e.target.value)}>
             <option value="Asia/Shanghai">Asia/Shanghai</option>
             <option value="UTC">UTC</option>
             <option value="Asia/Tokyo">Asia/Tokyo</option>
@@ -1084,13 +1114,57 @@ function ScheduleModal({ flow, onClose, onSave }) {
         </div>
         <div className="field">
           <label>抖动（分钟）</label>
-          <input type="number" min={0} max={60} value={jitter} onChange={(e) => setJitter(e.target.value)} title="cron 触发后随机延迟 0-N 分钟，0=不抖动" />
+          <input type="number" min={0} max={60} value={jitter} aria-label="抖动（分钟）" onChange={(e) => setJitter(e.target.value)} title="cron 触发后随机延迟 0-N 分钟，0=不抖动" />
         </div>
       </div>
       <label className="checkline">
         <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
         启用定时调度
       </label>
+
+      <div className="retry-box">
+        <label className="checkline retry-head">
+          <input type="checkbox" checked={!!retry.enabled} onChange={(e) => setR({ enabled: e.target.checked })} />
+          <span>失败后重试</span>
+          <span className="retry-hint">跑满次数才判定失败</span>
+        </label>
+        {retry.enabled && (
+          <>
+            <div className="field-inline">
+              <div className="field">
+                <label>最多尝试</label>
+                <input type="number" min={1} max={10} value={retry.maxAttempts} aria-label="最多尝试次数"
+                  onChange={(e) => setR({ maxAttempts: Number(e.target.value) })} />
+              </div>
+              <div className="field">
+                <label>退避方式</label>
+                <select value={retry.backoff} aria-label="退避方式" onChange={(e) => setR({ backoff: e.target.value })}>
+                  <option value="exponential">指数退避</option>
+                  <option value="linear">线性退避</option>
+                  <option value="fixed">固定间隔</option>
+                </select>
+              </div>
+            </div>
+            <div className="field-inline">
+              <div className="field">
+                <label>首次等待（秒）</label>
+                <input type="number" min={1} max={60} value={Math.round((Number(retry.baseDelayMs) || 5000) / 1000)} aria-label="首次等待（秒）"
+                  onChange={(e) => setR({ baseDelayMs: Number(e.target.value) * 1000 })} />
+              </div>
+              <div className="field">
+                <label>最长等待（分钟）</label>
+                <input type="number" min={1} max={30} value={Math.round((Number(retry.maxDelayMs) || 300000) / 60000)} aria-label="最长等待（分钟）"
+                  onChange={(e) => setR({ maxDelayMs: Number(e.target.value) * 60000 })} />
+              </div>
+            </div>
+            <label className="checkline">
+              <input type="checkbox" checked={!!retry.jitter} onChange={(e) => setR({ jitter: e.target.checked })} />
+              随机抖动（避免多个任务同时重试）
+            </label>
+            {preview && <p className="retry-preview">{preview}</p>}
+          </>
+        )}
+      </div>
       {err && <p style={{ color: 'var(--fail)', fontSize: 12 }}>{err}</p>}
     </Modal>
   );

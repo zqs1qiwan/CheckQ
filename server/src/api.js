@@ -25,6 +25,7 @@ import { validateFlow } from './model.js';
 import { importHar } from './har-import.js';
 import { parseCurl } from './curl-import.js';
 import { Scheduler } from './scheduler.js';
+import { runWithRetry, normalizeRetry, attemptLabel } from './retry.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -119,22 +120,74 @@ export function buildServer({ dataDir, port }) {
           const run = {
             id: runId, flowId: flow.id, flowName: flow.name, trigger,
             startedAt: Date.now(), status: 'running', logs: [], vars: {}, finalMessage: '',
+            attempts: [],
           };
+          // 任务级重试：调试运行不重试（要看到断点处的真实失败）
+          const cfg = normalizeRetry(flow.retry);
+          if (debugStopId) cfg.enabled = false;
+          const maxAttempts = cfg.enabled ? cfg.maxAttempts : 1;
+          let lastMessage = '';
           try {
-            const engine = new Engine(flow);
-            const result = await engine.run({ trigger, runId, debugStopId, debug: debug === true, logSink: onLog });
-            run.status = result.ok ? 'success' : 'failed';
-            run.logs = result.logs;
-            run.finalMessage = result.finalMessage || (result.ok ? '' : '执行失败');
-            run.summary = result.summary || '';
-            run.vars = redactVars(result.vars);
-            run.durationMs = Date.now() - run.startedAt;
+            const outcome = await runWithRetry({
+              retry: cfg,
+              runOnce: async (attempt) => {
+                if (attempt > 1) {
+                  const marker = {
+                    stepId: null, index: run.logs.length + 1, name: '重试', type: 'system', ok: true,
+                    message: `${attemptLabel(attempt, maxAttempts)}：上一次失败（${lastMessage}）`,
+                    detail: null, ms: 0,
+                  };
+                  run.logs.push(marker);
+                  onLog?.(marker);
+                }
+                const engine = new Engine(flow);
+                let result;
+                try {
+                  result = await engine.run({
+                    trigger, runId, debugStopId, debug: debug === true,
+                    logSink: (entry) => onLog?.(entry),
+                  });
+                } catch (err) {
+                  result = {
+                    ok: false,
+                    logs: [{
+                      stepId: null, index: 1, name: '引擎', type: 'error', ok: false,
+                      message: `引擎异常: ${err.message}`, detail: null, ms: 0,
+                    }],
+                    vars: {},
+                    finalMessage: `引擎异常: ${err.message}`,
+                  };
+                }
+                lastMessage = result.finalMessage || '执行失败';
+                run.logs.push(...(result.logs || []));
+                return result;
+              },
+              onAttempt: (rec) => {
+                run.attempts.push(rec);
+                run.attempt = rec.attempt;
+                run.maxAttempts = maxAttempts;
+              },
+            });
+            run.status = outcome.ok ? 'success' : 'failed';
+            run.finalMessage = outcome.finalMessage || (outcome.ok ? '' : '执行失败');
+            run.summary = outcome.summary || '';
+            run.vars = redactVars(outcome.vars || {});
           } catch (err) {
             run.status = 'failed';
             run.finalMessage = `引擎异常: ${err.message}`;
-            run.durationMs = Date.now() - run.startedAt;
           } finally {
             runningFlows.delete(flow.id);
+          }
+          if (!run.logs.length && run.finalMessage) {
+            run.logs = [{
+              stepId: null, index: 1, name: '引擎', type: 'error', ok: false,
+              message: run.finalMessage, detail: null, ms: 0,
+            }];
+          }
+          run.durationMs = Date.now() - run.startedAt;
+          // 重试过的运行：把尝试次数写进结论，列表/通知/日志都能看到
+          if (run.attempts.length > 1) {
+            run.finalMessage = `${run.finalMessage || (run.status === 'success' ? '执行成功' : '执行失败')}（第 ${run.attempts.length}/${maxAttempts} 次尝试）`;
           }
           store.addRun(run);
           await sendNotify(flow, run);
@@ -143,6 +196,10 @@ export function buildServer({ dataDir, port }) {
       } finally {
         if (queuedSet.has(flow.id) && !runningFlows.has(flow.id)) queuedSet.delete(flow.id);
       }
+    },
+    /** 调度器用：上一次运行（含重试等待）还没结束就跳过这一拍，避免堆积 */
+    isBusy(flowId) {
+      return runningFlows.has(flowId) || queuedSet.has(flowId);
     },
   };
 

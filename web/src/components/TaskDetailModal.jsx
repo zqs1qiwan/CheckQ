@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Modal from './Modal.jsx';
 import { api } from '../api.js';
-import { fmtDateTime, fmtAgo, isSensitiveName, CHANNEL_LABELS, ROLE_LABELS } from '../util.js';
+import { fmtDateTime, fmtAgo, isSensitiveName, CHANNEL_LABELS, describeRetryPolicy, describeRetryPolicyDetail } from '../util.js';
 
 /**
  * 任务详情：点任务名打开（对应 qiandao 的「点名字看任务信息」）
@@ -64,11 +64,11 @@ export default function TaskDetailModal({ summary, onClose, onSaved, onToast, on
     >
       <div className="field">
         <label>任务名</label>
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="给任务起个好找的名字" />
+        <input value={name} aria-label="任务名" onChange={(e) => setName(e.target.value)} placeholder="给任务起个好找的名字" />
       </div>
       <div className="field">
         <label title="备注会显示在任务列表里，也能被搜索">备注</label>
-        <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="例如：账号 A，每天一次" />
+        <textarea rows={2} value={note} aria-label="任务备注" onChange={(e) => setNote(e.target.value)} placeholder="例如：账号 A，每天一次" />
       </div>
 
       <div className="detail-panel">
@@ -89,6 +89,12 @@ export default function TaskDetailModal({ summary, onClose, onSaved, onToast, on
               <span className={`status-dot${summary.enabled ? ' on' : ''}`} />
               {summary.enabled ? '已启用调度' : '已停用'}
               {flow?.jitterMinutes ? <span className="muted">抖动 {flow.jitterMinutes} 分钟</span> : null}
+            </span>
+          </div>
+          <div className="detail-cell">
+            <span className="detail-k">失败重试</span>
+            <span className="detail-v">
+              <span className={flow?.retry?.enabled ? '' : 'muted'} title={describeRetryPolicyDetail(flow?.retry)}>{describeRetryPolicy(flow?.retry)}</span>
             </span>
           </div>
           <div className="detail-cell">

@@ -22,6 +22,8 @@ server/data/
 .DS_Store
 .DS_*
 server/public
+# Modern Web Guidance 本地技能包（npx 安装，第三方内容不入库）
+.agents/
 # ---- 本地私有内容（项目金标准：仓库只放 CheckQ 本身）----
 AGENTS.md
 docs/agent-notes/

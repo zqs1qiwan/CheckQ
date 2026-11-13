@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import { Cron } from 'croner';
 import { hashPwd, checkPassword } from './auth.js';
 import { secretKey, encryptSecrets, decryptSecrets, maskSecrets } from './secret.js';
+import { normalizeRetry, DEFAULT_RETRY } from './retry.js';
 
 /**
  * 稳定序列化（对象键排序）：比较流程图时忽略 JSON 键顺序，避免「同内容不同顺序」被误判为改动
@@ -71,6 +72,9 @@ export class Store {
     let tplCleaned = 0;
     for (const f of this.flows) {
       if (f.tplUpdatedAt !== undefined) { delete f.tplUpdatedAt; tplCleaned++; }
+      // 迁移：老任务没有重试配置 → 补默认值（默认开启，失败后自动退避重试）
+      if (f.retry === undefined) f.retry = { ...DEFAULT_RETRY };
+      else f.retry = normalizeRetry(f.retry);
     }
     for (const t of this.templates) {
       if (t.updatedAt === undefined) t.updatedAt = t.createdAt || Date.now();
@@ -216,6 +220,7 @@ export class Store {
       return {
         id: f.id, name: f.name, note: f.note, cron: f.cron, timezone: f.timezone,
         enabled: f.enabled, jitterMinutes: f.jitterMinutes || 0, varsCount: Object.keys(f.vars || {}).length,
+        retry: normalizeRetry(f.retry),       // 失败重试策略（列表/详情展示用）
         nodesCount: (resolved.nodes || []).length, tplId: f.tplId || null,
         template: this.templateInfo(f),        // { id, name } —— 来源模板标注
         lastRun,
@@ -270,6 +275,8 @@ export class Store {
       edges: data.edges || [],
       notify: data.notify || {},
       log: data.log || null,
+      // 任务级失败重试：默认开启（3 次、指数退避），用户可在「调度」里关闭
+      retry: normalizeRetry(data.retry),
       tplId: data.tplId || null,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -282,7 +289,7 @@ export class Store {
   updateFlow(id, patch) {
     const f = this.getFlowRaw(id);
     if (!f) return null;
-    const allowed = ['name', 'note', 'cron', 'timezone', 'enabled', 'vars', 'nodes', 'edges', 'notify', 'log', 'jitterMinutes', 'tplId'];
+    const allowed = ['name', 'note', 'cron', 'timezone', 'enabled', 'vars', 'nodes', 'edges', 'notify', 'log', 'jitterMinutes', 'retry', 'tplId'];
     // 派生任务改了「脚本内容」→ 自动转成独立任务（否则模板下次更新会把用户的改动覆盖掉）
     let detached = null;
     if (f.tplId && (patch.nodes !== undefined || patch.edges !== undefined)) {
@@ -295,6 +302,8 @@ export class Store {
     for (const k of allowed) {
       if (patch[k] !== undefined) f[k] = patch[k];
     }
+    // 重试配置始终收敛成合法值（手写 API / 旧前端都不会把引擎搞崩）
+    if (patch.retry !== undefined) f.retry = normalizeRetry(patch.retry);
     f.updatedAt = Date.now();
     this.flush();
     const out = this.resolveFlow(f);

@@ -125,6 +125,10 @@ async function newPage(cdp) {
       if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
       return r.result.value;
     },
+    async key(key, code = key, keyCode = 0) {
+      await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key, code, windowsVirtualKeyCode: keyCode }, sessionId);
+      await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: keyCode }, sessionId);
+    },
     async shot(file) {
       const r = await cdp.send('Page.captureScreenshot', { format: 'png' }, sessionId);
       fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -197,7 +201,7 @@ const ASSERT = `
 async function checkDropdown(page, where, openExpr, label = '') {
   await page.eval(`${openExpr}\nawait new Promise(r => setTimeout(r, 260));`);
   const res = await page.eval(`
-    const pop = document.querySelector('.dd-pop');
+    const pop = document.querySelector('.dd-pop:popover-open');
     if (!pop) return { ok: false, why: '菜单没有打开' };
     const r = pop.getBoundingClientRect();
     const vw = innerWidth, vh = innerHeight;
@@ -225,16 +229,15 @@ async function checkModal(page, where, openExpr, opts = {}) {
   const name = label ? `「${label}」` : '';
   await page.eval(`${openExpr}\nawait new Promise(r => setTimeout(r, 320));`);
   const res = await page.eval(`
-    const m = document.querySelector('.modal-mask .modal') || document.querySelector('.modal');
+    const m = document.querySelector('dialog.modal[open]') || document.querySelector('.modal');
     if (!m) return { ok: false, why: '弹窗未打开' };
     const r = m.getBoundingClientRect();
     const issues = [];
     if (r.width > innerWidth + 1 || r.height > innerHeight + 1) issues.push('弹窗超出视口 ' + Math.round(r.width) + 'x' + Math.round(r.height));
     if (r.top < -1 || r.left < -1) issues.push('弹窗位置出界');
     const hasX = !!m.querySelector('.modal-close,[aria-label="关闭"],button.modal-x');
-    const body = getComputedStyle(document.body);
-    const locked = body.overflow === 'hidden' || body.position === 'fixed';
-    if (!locked) issues.push('背景滚动未锁定');
+    const locked = m.matches(':modal');
+    if (!locked) issues.push('不是模态 dialog（背景未 inert）');
     // 正文内部横向溢出
     const bodyEl = m.querySelector('.modal-body') || m;
     if (bodyEl.scrollWidth > bodyEl.clientWidth + 2) issues.push('弹窗内容横向溢出 ' + bodyEl.scrollWidth + '>' + bodyEl.clientWidth);
@@ -247,11 +250,12 @@ async function checkModal(page, where, openExpr, opts = {}) {
   else ok(where, `弹窗${name}「${res.title.trim().slice(0, 12)}」正常（尺寸合规、背景已锁、✕ 齐全）`);
   if (expectClose && !res.hasX) fail(where, `弹窗${name}「${res.title.trim()}」缺少右上角 ✕ 关闭按钮`);
   // Esc 关闭
-  await page.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await new Promise(r => setTimeout(r, 260));`);
-  const closed = await page.eval(`return !document.querySelector('.modal-mask .modal');`);
+  await page.key('Escape', 'Escape', 27);
+  await new Promise(r => setTimeout(r, 320));
+  const closed = await page.eval(`return !document.querySelector('dialog.modal[open]');`);
   if (!closed) {
     fail(where, `弹窗${name}「${res.title.trim()}」Esc 未关闭`);
-    await page.eval(`document.querySelector('.modal-close,[aria-label="关闭"],.modal-mask')?.click(); await new Promise(r => setTimeout(r, 200));`);
+    await page.eval(`document.querySelector('.modal-close,[aria-label="关闭"]')?.click(); await new Promise(r => setTimeout(r, 200));`);
   } else ok(where, `弹窗${name} Esc 关闭正常`);
   // 背景滚动还原
   const restored = await page.eval(`const b = getComputedStyle(document.body); return b.overflow !== 'hidden' || b.position !== 'fixed';`);
@@ -322,7 +326,7 @@ async function checkModal(page, where, openExpr, opts = {}) {
       await new Promise(r=>setTimeout(r,300));
       row.scrollIntoView({block:'center'}); await new Promise(r=>setTimeout(r,250));
       row.querySelector('.dd-trigger').click(); await new Promise(r=>setTimeout(r,320));
-      const items=[...document.querySelectorAll('.dd-pop button')].map(b=>b.textContent.trim());
+      const items=[...document.querySelectorAll('.dd-pop:popover-open button')].map(b=>b.textContent.trim());
       document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
       await new Promise(r=>setTimeout(r,200));
       return { ok:true, title, cells, hasNote, items };
@@ -408,16 +412,16 @@ async function checkModal(page, where, openExpr, opts = {}) {
 
     /* 7) 快速组装 / cURL / 导入 弹窗 */
     await page.eval(`document.querySelector('.topbar .dd-trigger').click(); await new Promise(r=>setTimeout(r,250));`);
-    await checkModal(page, '首页/1440', `document.querySelector('.dd-pop button').click(); await new Promise(r=>setTimeout(r,350));`, {});
+    await checkModal(page, '首页/1440', `document.querySelector('.dd-pop:popover-open button').click(); await new Promise(r=>setTimeout(r,350));`, {});
     await page.eval(`document.querySelector('.modal-close,[aria-label="关闭"]')?.click(); await new Promise(r=>setTimeout(r,200));`);
 
     /* 7b) 所有首页弹窗逐个体检（✕ / 尺寸 / Esc / 滚动锁 / 内部溢出） */
     const homeModals = [
       ['恢复', `[...document.querySelectorAll('.page button')].find(b=>b.textContent.trim()==='恢复')?.click()`],
       ['完整备份', `[...document.querySelectorAll('.page button')].find(b=>b.textContent.trim()==='完整备份')?.click()`],
-      ['导入 cURL', `document.querySelector('.topbar .dd-trigger').click(); await new Promise(r=>setTimeout(r,220)); [...document.querySelectorAll('.dd-pop button')].find(b=>b.textContent.includes('cURL'))?.click()`],
-      ['导入 HAR/JSON', `document.querySelector('.topbar .dd-trigger').click(); await new Promise(r=>setTimeout(r,220)); [...document.querySelectorAll('.dd-pop button')].find(b=>b.textContent.includes('HAR'))?.click()`],
-      ['快速组装', `document.querySelector('.topbar .dd-trigger').click(); await new Promise(r=>setTimeout(r,220)); [...document.querySelectorAll('.dd-pop button')].find(b=>b.textContent.includes('快速组装'))?.click()`],
+      ['导入 cURL', `document.querySelector('.topbar .dd-trigger').click(); await new Promise(r=>setTimeout(r,220)); [...document.querySelectorAll('.dd-pop:popover-open button')].find(b=>b.textContent.includes('cURL'))?.click()`],
+      ['导入 HAR/JSON', `document.querySelector('.topbar .dd-trigger').click(); await new Promise(r=>setTimeout(r,220)); [...document.querySelectorAll('.dd-pop:popover-open button')].find(b=>b.textContent.includes('HAR'))?.click()`],
+      ['快速组装', `document.querySelector('.topbar .dd-trigger').click(); await new Promise(r=>setTimeout(r,220)); [...document.querySelectorAll('.dd-pop:popover-open button')].find(b=>b.textContent.includes('快速组装'))?.click()`],
     ];
     for (const [label, expr] of homeModals) {
       await checkModal(page, '首页弹窗', `${expr}; await new Promise(r=>setTimeout(r,380));`, { label });
@@ -434,7 +438,7 @@ async function checkModal(page, where, openExpr, opts = {}) {
       if (btn) { btn.click(); return true; }
       const row = await waitFor('.flow-table tbody tr');
       if (row) { const m = row.querySelector('.dd-trigger'); m.click(); await new Promise(r=>setTimeout(r,250));
-        const e = [...document.querySelectorAll('.dd-pop button')].find(b=>b.textContent.trim().startsWith('编辑')); if (e) { e.click(); return true; } }
+        const e = [...document.querySelectorAll('.dd-pop:popover-open button')].find(b=>b.textContent.trim().startsWith('编辑')); if (e) { e.click(); return true; } }
       return false;
     `);
     if (openEditor) {
@@ -457,10 +461,10 @@ async function checkModal(page, where, openExpr, opts = {}) {
       /* 8b) 编辑器里的每个弹窗 */
       const editorModals = [
         ['调度', `[...document.querySelectorAll('.editor-topbar button')].find(b=>b.textContent.includes('调度'))?.click()`],
-        ['通知渠道', `document.querySelector('.editor-topbar .dd-trigger').click(); await new Promise(r=>setTimeout(r,220)); [...document.querySelectorAll('.dd-pop button')].find(b=>b.textContent.includes('通知渠道'))?.click()`],
-        ['填入 Cookie', `document.querySelector('.editor-topbar .dd-trigger').click(); await new Promise(r=>setTimeout(r,220)); [...document.querySelectorAll('.dd-pop button')].find(b=>b.textContent.includes('Cookie'))?.click()`],
-        ['日志配置', `document.querySelector('.editor-topbar .dd-trigger').click(); await new Promise(r=>setTimeout(r,220)); [...document.querySelectorAll('.dd-pop button')].find(b=>b.textContent.includes('日志配置'))?.click()`],
-        ['存为模板', `document.querySelector('.editor-topbar .dd-trigger').click(); await new Promise(r=>setTimeout(r,220)); [...document.querySelectorAll('.dd-pop button')].find(b=>b.textContent.includes('存为模板'))?.click()`],
+        ['通知渠道', `document.querySelector('.editor-topbar .dd-trigger').click(); await new Promise(r=>setTimeout(r,220)); [...document.querySelectorAll('.dd-pop:popover-open button')].find(b=>b.textContent.includes('通知渠道'))?.click()`],
+        ['填入 Cookie', `document.querySelector('.editor-topbar .dd-trigger').click(); await new Promise(r=>setTimeout(r,220)); [...document.querySelectorAll('.dd-pop:popover-open button')].find(b=>b.textContent.includes('Cookie'))?.click()`],
+        ['日志配置', `document.querySelector('.editor-topbar .dd-trigger').click(); await new Promise(r=>setTimeout(r,220)); [...document.querySelectorAll('.dd-pop:popover-open button')].find(b=>b.textContent.includes('日志配置'))?.click()`],
+        ['存为模板', `document.querySelector('.editor-topbar .dd-trigger').click(); await new Promise(r=>setTimeout(r,220)); [...document.querySelectorAll('.dd-pop:popover-open button')].find(b=>b.textContent.includes('存为模板'))?.click()`],
         ['使用引导', `document.querySelector('.editor-topbar .iconbtn[aria-label="使用引导"]')?.click()`],
       ];
       for (const [label, expr] of editorModals) {

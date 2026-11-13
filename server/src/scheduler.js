@@ -52,7 +52,13 @@ export class Scheduler {
           if (delay > 0) console.log(`[CheckQ] jitter: ${flow.name} 延迟 ${Math.round(delay / 1000)}s (${jitter}min 抖动)`);
           setTimeout(async () => {
             const cur = this.store.getFlow(id);
-            if (cur && cur.enabled) await this.runner.runFlow(cur, 'cron');
+            if (!cur || !cur.enabled) return;
+            // 上一次运行（可能正在退避重试）还没结束 → 跳过这一拍，避免同一任务堆积
+            if (this.runner.isBusy && this.runner.isBusy(id)) {
+              console.log(`[CheckQ] 跳过 ${cur.name}：上一次运行/重试尚未结束`);
+              return;
+            }
+            await this.runner.runFlow(cur, 'cron');
           }, delay);
         });
         this.jobs.set(id, job);

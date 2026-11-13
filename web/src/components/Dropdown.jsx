@@ -1,20 +1,18 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 /**
- * 浮层下拉菜单（Portal + fixed 定位）
+ * 浮层操作菜单（Popover API + fixed 定位）
  *
- * 为什么不用 <details>：
- *   <details> 里的浮层是 absolute 定位，会被祖先容器的 overflow 裁掉 ——
- *   - 任务表格 .table-scroll { overflow-x: auto } → 计算后 overflow-y 也变成 auto
- *     → 底部几行的「···」菜单被裁掉一半、根本点不到；
- *   - API 密钥列表 .key-list { overflow: hidden } → 「⋯」菜单直接消失。
- *   改成 Portal 挂到 body + fixed 定位后，任何父级 overflow 都不会再裁它。
+ * 为什么用 Popover：
+ *   - 顶层渲染：任何祖先的 overflow / transform / z-index 都裁不到它
+ *     （旧实现用 <details>+absolute，在 .table-scroll{overflow-x:auto} 里底部行菜单会被裁掉）
+ *   - 原生轻关闭：点外面 / Esc 自动收起，焦点回到触发按钮，不需要手写 document 监听
+ *   - 无障碍：触发按钮 aria-expanded/aria-controls，面板是一组按钮（不冒充 role=menu，
+ *     因为我们没有实现方向键导航，见 Modern Web Guidance: viewport-aware-dropdowns）
  *
- * 定位规则：
- *   - 默认向下展开；下方空间不够且上方更宽裕时自动向上；
- *   - align="right" 右对齐，超出视口自动夹紧；
- *   - 滚动 / 缩放时跟随触发器重定位，触发器滚出视口则自动关闭。
+ * 定位：仍用 JS 计算 fixed 坐标（CSS anchor positioning 目前跨浏览器支持不足），
+ * 默认向下、空间不够向上翻转、水平夹紧在视口内，滚动/缩放时跟随。
  */
 export default function Dropdown({
   children,
@@ -30,6 +28,7 @@ export default function Dropdown({
   const [pos, setPos] = useState({ left: 0, top: 0 });
   const btnRef = useRef(null);
   const popRef = useRef(null);
+  const popId = useId();
 
   const place = useCallback(() => {
     const btn = btnRef.current;
@@ -52,39 +51,42 @@ export default function Dropdown({
     setPos({ left, top });
   }, [align, width]);
 
-  // 打开后立即按触发器位置定位（useLayoutEffect：不闪一帧错位）
+  // 面板常驻 DOM（popover 关闭时浏览器自己隐藏），toggle 事件同步 React 状态
+  useEffect(() => {
+    const el = popRef.current;
+    const btn = btnRef.current;
+    if (!el) return undefined;
+    // 用原生 popovertarget 触发：轻关闭/再次点击触发器都由浏览器处理，不会闪一下又打开
+    btn?.setAttribute('popovertarget', popId);
+    btn?.setAttribute('popovertargetaction', 'toggle');
+    const onToggle = (e) => {
+      const isOpen = e.newState === 'open';
+      setOpen(isOpen);
+      if (isOpen) requestAnimationFrame(place);
+    };
+    el.addEventListener('toggle', onToggle);
+    return () => el.removeEventListener('toggle', onToggle);
+  }, [place, popId]);
+
   useLayoutEffect(() => {
     if (open) place();
   }, [open, place]);
 
   useEffect(() => {
     if (!open) return undefined;
-    const onDown = (e) => {
-      const t = e.target;
-      if (popRef.current?.contains(t)) return;
-      if (btnRef.current?.contains(t)) return;
-      setOpen(false);
-    };
-    const onKey = (e) => {
-      if (e.key === 'Escape') {
-        setOpen(false);
-        btnRef.current?.focus();
-      }
-    };
     const onScroll = () => {
       const r = btnRef.current?.getBoundingClientRect();
       // 触发器滚出视口 → 收起（否则浮层会孤零零飘在屏幕上）
-      if (r && (r.bottom < 0 || r.top > window.innerHeight)) { setOpen(false); return; }
+      if (r && (r.bottom < 0 || r.top > window.innerHeight)) {
+        popRef.current?.hidePopover?.();
+        return;
+      }
       place();
     };
     const onResize = () => place();
-    document.addEventListener('mousedown', onDown, true);
-    document.addEventListener('keydown', onKey);
     window.addEventListener('scroll', onScroll, true);
     window.addEventListener('resize', onResize);
     return () => {
-      document.removeEventListener('mousedown', onDown, true);
-      document.removeEventListener('keydown', onKey);
       window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', onResize);
     };
@@ -96,22 +98,24 @@ export default function Dropdown({
         ref={btnRef}
         type="button"
         className={`dd-trigger${open ? ' open' : ''}`}
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="menu"
         aria-expanded={open}
+        aria-controls={popId}
         title={title || ariaLabel}
         aria-label={ariaLabel}
       >
         {trigger}
         {caret ? <span className="dd-caret" aria-hidden="true">▾</span> : null}
       </button>
-      {open && createPortal(
+      {createPortal(
         <div
           ref={popRef}
+          id={popId}
+          popover="auto"
           className="menu-pop dd-pop"
-          role="menu"
           style={{ left: pos.left, top: pos.top, minWidth: width || undefined }}
-          onClick={(e) => { if (e.target.closest?.('button')) setOpen(false); }}
+          onClick={(e) => {
+            if (e.target.closest?.('button')) popRef.current?.hidePopover?.();
+          }}
         >
           {children}
         </div>,

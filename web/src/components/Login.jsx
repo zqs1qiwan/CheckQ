@@ -68,13 +68,18 @@ export default function Login({ onOk }) {
     return (
       <div className="login-wrap">
         <form className="login-card" onSubmit={submitSetup}>
-          <h1>Check<em style={{ color: 'var(--accent)' }}>Q</em></h1>
+          <div className="login-brand">
+            <span className="logo-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12.5l5 5L20 6.5" /></svg>
+            </span>
+            <h1>Check<em>Q</em></h1>
+          </div>
           <p className="sub">首次启动，创建管理员账号</p>
-          <input placeholder="用户名（字母数字，3-32 位）" value={username} autoFocus onChange={(e) => setUsername(e.target.value)} />
-          <input type="password" placeholder="登录密码（至少 10 位，含两类字符）" value={password} onChange={(e) => setPassword(e.target.value)} />
-          <input type="password" placeholder="再输入一次" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          <input placeholder="用户名（字母数字，3-32 位）" aria-label="用户名" name="username" autoComplete="username" value={username} autoFocus onChange={(e) => setUsername(e.target.value)} />
+          <input type="password" placeholder="登录密码（至少 10 位，含两类字符）" aria-label="登录密码" name="new-password" autoComplete="new-password" minLength={10} value={password} onChange={(e) => setPassword(e.target.value)} />
+          <input type="password" placeholder="再输入一次" aria-label="确认密码" name="confirm-password" autoComplete="new-password" minLength={10} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
           <button className="primary" disabled={busy || !username || !password}>{busy ? '创建中…' : '创建并进入'}</button>
-          <div className="login-err">{err}</div>
+          <div className="login-err" role="alert" aria-live="polite">{err}</div>
         </form>
       </div>
     );
@@ -83,9 +88,16 @@ export default function Login({ onOk }) {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={submitLogin}>
-        <h1>Check<em style={{ color: 'var(--accent)' }}>Q</em></h1>
+        <div className="login-brand">
+          <span className="logo-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12.5l5 5L20 6.5" /></svg>
+          </span>
+          <h1>Check<em>Q</em></h1>
+        </div>
         <input
           placeholder="用户名"
+          aria-label="用户名"
+          name="username"
           value={username}
           autoFocus={!needCode}
           onChange={(e) => setUsername(e.target.value)}
@@ -94,6 +106,8 @@ export default function Login({ onOk }) {
         <input
           type="password"
           placeholder="密码"
+          aria-label="密码"
+          name="password"
           value={password}
           autoFocus={needCode}
           onChange={(e) => setPassword(e.target.value)}
@@ -102,6 +116,8 @@ export default function Login({ onOk }) {
         {needCode && (
           <input
             placeholder="验证码或恢复码"
+            aria-label="验证码或恢复码"
+            name="one-time-code"
             value={code}
             onChange={(e) => setCode(e.target.value)}
             inputMode="numeric"
@@ -109,7 +125,7 @@ export default function Login({ onOk }) {
           />
         )}
         <button className="primary" disabled={busy || !password}>{busy ? '验证中…' : '进入'}</button>
-        <div className="login-err">{err}</div>
+        <div className="login-err" role="alert" aria-live="polite">{err}</div>
       </form>
     </div>
   );

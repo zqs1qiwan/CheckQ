@@ -951,29 +951,6 @@ GET    /api/notifications | POST /api/notifications/read | DELETE /api/notificat
 15. ~~编辑器能力缺口~~：本轮已补齐 Undo/Redo（Ctrl+Z / Ctrl+Y）、节点复制粘贴（Ctrl+C / Ctrl+V，含内部连线）、画布↔日志双向联动、单次运行 HAR 导出（默认脱敏）、MiniMap、按层级自动整理布局。
 16. 维护文档：`docs/GAP-ANALYSIS*.md` 已删除（内容与 PRD/ROADMAP/COMPETITIVE-ANALYSIS 重复且部分过时）；`FlowList.jsx` 已拆到 `flow-list/`（562 行）、`FlowEditor.jsx` 已拆到 `editor/`（646 行），后续可按同样方式继续下沉 hooks。
 
----
-
-## 12. 迭代记录：连续 3 轮全量验收（2026-11-13）
-
-> 本轮以「PRD 功能全量测试矩阵」为基线，对**每个已实现功能**做回归，连续 3 轮全绿、0 错误。
-> 执行方式：`node tools/verify-round.cjs http://localhost:19998`（本地 18 个泛型任务 + 1 个模板，全程只读）。
-
-| 项 | 第 1 轮 | 第 2 轮 | 第 3 轮 |
-|---|---|---|---|
-| 前端构建（`npm run build`） | ✅ | ✅ | ✅ |
-| 服务端全量单测（29 文件 / 431 断言） | ✅ | ✅ | ✅ |
-| 文案审计（`copy-audit`） | ✅ | ✅ | ✅ |
-| 秘密扫描（`secret-scan`） | ✅ | ✅ | ✅ |
-| 项目一致性（`project-audit`） | ✅ | ✅ | ✅ |
-| UI 冒烟（`ui-smoke`，60 项 / 0 问题） | ✅ | ✅ | ✅ |
-| UI 交互巡检（`ui-interaction-audit`，9 视口 × 明暗，0 findings） | ✅ | ✅ | ✅ |
-
-- 覆盖面：§11 矩阵中全部 ✅ 能力；未实现项（§10 待定）不纳入验收。
-- 本轮新增：`server/test/api-surface.test.js`（41 项断言，每个公开端点至少命中一次，含 HAR 路径）、`tools/ui-interaction-audit.cjs`（仓库护栏，固化 9 视口交互巡检）、`tools/verify-round.cjs`（一轮全量验收执行器）。
-- 结论：**当前 PRD 描述的能力集在 3 轮连续验收中均无错误**；后续变更必须按本节基线回归。
-
----
-
 ## 11. 功能全量测试矩阵（2026-11-13）
 
 > 目标：PRD 里的每个已实现能力都能对应到**代码位置 + 自动化测试 + UI 检测**。
@@ -1072,4 +1049,27 @@ GET    /api/notifications | POST /api/notifications/read | DELETE /api/notificat
 | 文案金标准 | `web/src` | `copy-audit` | ✅ |
 | 秘密 / 私有资产 / 本地测试样例 | 仓库 | `secret-scan`（内容级 + 历史） | ✅ |
 | 组件 / 链接 / CSS 契约 | 仓库 | `project-audit` | ✅ |
+
+---
+
+## 12. 迭代记录：连续 3 轮全量验收（2026-11-13）
+
+> 本轮以「PRD 功能全量测试矩阵」为基线，对**每个已实现功能**做回归，连续 3 轮全绿、0 错误。
+> 执行方式：`node tools/verify-round.cjs http://localhost:19998`（本地 18 个泛型任务 + 1 个模板，全程只读）。
+
+| 项 | 第 1 轮 | 第 2 轮 | 第 3 轮 |
+|---|---|---|---|
+| 前端构建（`npm run build`） | ✅ | ✅ | ✅ |
+| 服务端全量单测（29 文件 / 431 断言） | ✅ | ✅ | ✅ |
+| 文案审计（`copy-audit`） | ✅ | ✅ | ✅ |
+| 秘密扫描（`secret-scan`） | ✅ | ✅ | ✅ |
+| 项目一致性（`project-audit`） | ✅ | ✅ | ✅ |
+| UI 冒烟（`ui-smoke`，60 项 / 0 问题） | ✅ | ✅ | ✅ |
+| UI 交互巡检（`ui-interaction-audit`，9 视口 × 明暗，0 findings） | ✅ | ✅ | ✅ |
+
+- 覆盖面：§11 矩阵中全部 ✅ 能力；未实现项（§10 待定）不纳入验收。
+- 本轮新增：`server/test/api-surface.test.js`（41 项断言，每个公开端点至少命中一次，含 HAR 路径）、`tools/ui-interaction-audit.cjs`（仓库护栏，固化 9 视口交互巡检）、`tools/verify-round.cjs`（一轮全量验收执行器）。
+- 结论：**当前 PRD 描述的能力集在 3 轮连续验收中均无错误**；后续变更必须按本节基线回归。
+
+---
 

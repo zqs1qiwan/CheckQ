@@ -11,6 +11,10 @@ import { createPortal } from 'react-dom';
  *   - 无障碍：触发按钮 aria-expanded/aria-controls，面板是一组按钮（不冒充 role=menu，
  *     因为我们没有实现方向键导航，见 Modern Web Guidance: viewport-aware-dropdowns）
  *
+ * 弹窗内必须 Portal 到 <dialog> 内部：
+ *   showModal() 会让 dialog 之外的整份文档 inert；挂到 body 的 popover 虽能画出来但点不到。
+ *   成为 dialog 后代后仍在 top layer（不会被 dialog 的 overflow 裁切），且不再 inert。
+ *
  * 定位：仍用 JS 计算 fixed 坐标（CSS anchor positioning 目前跨浏览器支持不足），
  * 默认向下、空间不够向上翻转、水平夹紧在视口内，滚动/缩放时跟随。
  */
@@ -26,9 +30,16 @@ export default function Dropdown({
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ left: 0, top: 0 });
+  const [portalTarget, setPortalTarget] = useState(null);
   const btnRef = useRef(null);
   const popRef = useRef(null);
   const popId = useId();
+
+  // 触发器在 <dialog> 内时，浮层必须是该 dialog 的后代（否则被 showModal() 的 inert 拦住）
+  useEffect(() => {
+    const d = btnRef.current?.closest?.('dialog.modal');
+    setPortalTarget(d || document.body);
+  }, []);
 
   const place = useCallback(() => {
     const btn = btnRef.current;
@@ -119,7 +130,7 @@ export default function Dropdown({
         >
           {children}
         </div>,
-        document.body,
+        portalTarget || document.body,
       )}
     </span>
   );

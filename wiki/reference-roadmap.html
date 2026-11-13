@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark light" />
 <title>路线图 · CheckQ 文档</title>
 <meta name="description" content="版本计划" />
 <link rel="stylesheet" href="./assets/style.css" />
@@ -17,8 +18,9 @@
     <div id="results"></div>
     <nav>
 <a class="" href="index.html">概览<em>CheckQ 是什么、能做什么</em></a>
-<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个签到</em></a>
-<a class="" href="tasks.html">任务与流程<em>节点、变量、调度、模板</em></a>
+<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个任务</em></a>
+<a class="" href="tasks.html">任务与流程<em>节点、变量、调度、重试、模板</em></a>
+<a class="" href="uiux.html">交互与视觉规范<em>入口契约、原生组件、双主题、响应式</em></a>
 <a class="" href="logs.html">日志与通知<em>干净日志、连续日志流、通知渠道</em></a>
 <a class="" href="security.html">账号与安全<em>多用户、2FA、凭据加密、访问控制</em></a>
 <a class="" href="api.html">API 与 MCP<em>开放 API、API Key、外部 Agent 接入</em></a>
@@ -35,12 +37,12 @@
   </aside>
   <main>
 <p>﻿# CheckQ 迭代路线图（v0.4）</p>
-<blockquote>2026-11-10 · 目标：从「签到自动化」升级为「完整产品形态」。</blockquote>
-<h2 id="当前状态-v0-3-x">当前状态（v0.3.x）</h2>
-<ul><li>引擎：10 种节点（http/condition/set/extract/delay/random-delay/log/notify/script/foreach），单链 DAG，500 步上限；</li><li>存储：JSON 文件（flows/runs/templates/meta/notifications），原子写 + 变更立即 flush + SIGTERM flush；</li><li>调度：croner，每任务独立 cron/时区/抖动；</li><li>日志：默认干净模式（只出 log 节点）+ 连续日志流 + 调试模式；</li><li>通知：12 渠道原生集成（站内/Webhook/Bark/Telegram/Server酱/PushPlus/钉钉/企业微信/飞书/Gotify/ntfy/邮件SMTP）+ 站内通知中心；</li><li>日志：level 三档 + record 三档（all/log/log-final）+ 关键字摘要；</li><li>API：REST + X-API-Key；MCP：stdio 10 工具；</li><li>任务：某签到应用「签到 + 成长中心」19 项任务全自动。</li></ul>
+<blockquote>2026-11-13 · 目标：框架能力、交互可靠性与文档一致性持续收敛；公开内容只描述框架，不含任何实例与测试数据。</blockquote>
+<h2 id="当前状态-v0-3-x-v0-4-4">当前状态（v0.3.x → v0.4.4）</h2>
+<ul><li>引擎：10 种节点（http/condition/set/extract/delay/random-delay/log/notify/script/foreach），单链 DAG，500 步上限；</li><li>存储：JSON 文件（flows/runs/templates/meta/notifications），原子写 + 变更立即 flush + SIGTERM flush；</li><li>调度：croner，每任务独立 cron/时区/抖动 + <strong>任务级失败退避重试（默认 3 次，跑满才判定最终失败）</strong>；</li><li>日志：默认干净模式（只出 log 节点）+ 连续日志流 + 调试模式 + 逐次尝试记录；</li><li>通知：12 渠道原生集成 + 站内通知中心 + 每日汇总推送；</li><li>模板：自动跟随（模板一改，派生任务立刻变），无手动同步；</li><li>交互：原生 <code>&lt;dialog&gt;</code> / Popover API / <code>color-scheme</code> / 容器查询，遵循 Modern Web Guidance 1.0；</li><li>API：REST + X-API-Key + OpenAPI 3.1；MCP：stdio 工具集；</li><li>文档：PRD / API / MCP / 安全 / 存储 / 兼容矩阵 + 自动生成的文档站（含交互与视觉规范页）；</li><li>护栏：<code>ui-smoke</code> / <code>copy-audit</code> / <code>secret-scan</code> / <code>project-audit</code>，命中即 exit 1。</li></ul>
 <h2 id="p0-产品完整度">P0（产品完整度）</h2>
-<div class="table-wrap"><table><thead><tr><th>项</th><th>状态</th></tr></thead><tbody><tr><td>首次启动创建管理员密码（bootstrap）</td><td>✅</td></tr><tr><td>登录防爆破（5 次/10 分钟）</td><td>✅</td></tr><tr><td>API Key 管理</td><td>✅</td></tr><tr><td>使用引导（? 按钮 + 6 节）</td><td>✅</td></tr><tr><td>通知渠道 UI + 测试发送</td><td>✅（12 渠道 + 真实外网 webhook.site 验证 + 站内通知落库）</td></tr><tr><td>日志 record 模式 + UI</td><td>✅（all / log / log-final）</td></tr><tr><td>备份/恢复 API + 页面入口</td><td>✅（任务页「备份 / 恢复」）</td></tr><tr><td>存储可靠性（立即 flush / SIGTERM flush）</td><td>✅</td></tr><tr><td>19/19 任务自动完成</td><td>✅（71 节点流程）</td></tr><tr><td>UI 全量遍历（设置/日志/通知/引导/调度/导入/批量/移动端）</td><td>✅ 2026-11-11（修复日志配置白屏）</td></tr></tbody></table></div>
-<div class="table-wrap"><table><thead><tr><th>日志干净模式（默认只出 log 节点 + 失败步骤）</th><th>✅ 2026-11-11（无 log 节点自动退回全步骤）</th></tr></thead><tbody><tr><td>调试模式（任务级 + 单次运行临时开启）</td><td>✅ 2026-11-11（<code>log.debug</code> / <code>run {debug:true}</code>）</td></tr><tr><td>界面提示级别（默认仅错误）</td><td>✅ 2026-11-11（<code>GET/PUT /api/system/ui</code>）</td></tr><tr><td>每日总推送独立可选（默认关）+ 立即推送</td><td>✅ 2026-11-11（面板汇总始终实时）</td></tr><tr><td>带 challenge 校验的签到流程</td><td>✅ 2026-11-11（13 节点，真实 cookie 实跑通过）</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>项</th><th>状态</th></tr></thead><tbody><tr><td>首次启动创建管理员密码（bootstrap）</td><td>✅</td></tr><tr><td>登录防爆破（5 次/10 分钟）</td><td>✅</td></tr><tr><td>API Key 管理</td><td>✅</td></tr><tr><td>使用引导（? 按钮 + 6 节）</td><td>✅</td></tr><tr><td>通知渠道 UI + 测试发送</td><td>✅（12 渠道 + 测试发送 + 站内通知落库）</td></tr><tr><td>日志 record 模式 + UI</td><td>✅（all / log / log-final）</td></tr><tr><td>备份/恢复 API + 页面入口</td><td>✅（任务页「备份 / 恢复」）</td></tr><tr><td>存储可靠性（立即 flush / SIGTERM flush）</td><td>✅</td></tr><tr><td>全量 UI 遍历（设置/日志/通知/引导/调度/导入/批量/移动端）</td><td>✅ 2026-11-11</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>日志干净模式（默认只出 log 节点 + 失败步骤）</th><th>✅ 2026-11-11（无 log 节点自动退回全步骤）</th></tr></thead><tbody><tr><td>调试模式（任务级 + 单次运行临时开启）</td><td>✅ 2026-11-11（<code>log.debug</code> / <code>run {debug:true}</code>）</td></tr><tr><td>界面提示级别（默认仅错误）</td><td>✅ 2026-11-11（<code>GET/PUT /api/system/ui</code>）</td></tr><tr><td>每日汇总推送独立可选（默认关）+ 立即推送</td><td>✅ 2026-11-11（面板汇总始终实时）</td></tr><tr><td>条件分支与断言（含 challenge 类响应校验）</td><td>✅ 2026-11-11（流程节点可配置断言与提取）</td></tr></tbody></table></div>
 <div class="table-wrap"><table><thead><tr><th>UI/UX 全量迭代（统一弹窗骨架 + 统一日志入口 + 触达面积）</th><th>✅ 2026-11-11（PRD §4.14）</th></tr></thead><tbody></tbody></table></div>
 <div class="table-wrap"><table><thead><tr><th>UI/UX 二轮（调试运行 / 推送单位 / SVG 图标 / 调度弹窗 / 品牌令牌 / 应用内确认）</th><th>✅ 2026-11-11（PRD §4.14.6-4.14.8）</th></tr></thead><tbody></tbody></table></div>
 <div class="table-wrap"><table><thead><tr><th>账号管理系统（多用户 + 角色 + TOTP 2FA + 会话管理 + 安全加固）</th><th>✅ 2026-11-11（PRD §4.10 / docs/SECURITY.md）</th></tr></thead><tbody></tbody></table></div>
@@ -49,10 +51,12 @@
 <div class="table-wrap"><table><thead><tr><th>开放 API 索引 + OpenAPI 描述 + Key 回收日期</th><th>✅ 2026-11-11（docs/AGENT-ACCESS.md）</th></tr></thead><tbody></tbody></table></div>
 <div class="table-wrap"><table><thead><tr><th>IP 允许名单（Key 级）+ 全局 IP 黑名单</th><th>✅ 2026-11-11（docs/SECURITY.md §6.1）</th></tr></thead><tbody></tbody></table></div>
 <div class="table-wrap"><table><thead><tr><th>文案金标准（说明转悬停/条件提示 + copy-audit 机械审计）</th><th>✅ 2026-11-11（PRD §4.14.6）</th></tr></thead><tbody></tbody></table></div>
-<div class="table-wrap"><table><thead><tr><th>设置页 GitHub 风格 + API 密钥页 token 化 + GitHub Pages 文档站</th><th>✅ 2026-11-11（wiki/，16 页）</th></tr></thead><tbody></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>设置页 GitHub 风格 + API 密钥页 token 化 + GitHub Pages 文档站</th><th>✅ 2026-11-11（wiki/，含交互与视觉规范页）</th></tr></thead><tbody></tbody></table></div>
 <div class="table-wrap"><table><thead><tr><th>首页任务/模板大 Tab + 菜单出界修复 + 文档站框架化（含站内搜索/更新日志）</th><th>✅ 2026-11-11（zqs1qiwan.github.io/checkq）</th></tr></thead><tbody></tbody></table></div>
+<h3 id="2026-11-13-交互与可靠性专项">2026-11-13 交互与可靠性专项</h3>
+<div class="table-wrap"><table><thead><tr><th>项</th><th>状态</th></tr></thead><tbody><tr><td>任务级失败退避重试（次数上限、最终失败判定、日志/通知/抽屉可追溯）</td><td>✅</td></tr><tr><td>模板自动跟随意定版（移除同步按钮与版本标记）</td><td>✅</td></tr><tr><td>原生 <code>&lt;dialog&gt;</code> / Popover API + 弹窗显式居中 + 弹窗内菜单可达</td><td>✅</td></tr><tr><td>窄屏顶栏单行四控件、工具条分组、控件等高对齐</td><td>✅</td></tr><tr><td>冷中性石墨双主题 + 低饱和语义色 + 圆角层级</td><td>✅</td></tr><tr><td>全量交互巡检（9 视口 × 明暗 + 居中/对齐/换行/裁剪/控制台）+ 4 个机械护栏</td><td>✅</td></tr><tr><td>PRD / API / ROADMAP / wiki 同步，脱敏内容级校验</td><td>✅</td></tr></tbody></table></div>
 <h2 id="p1-体验">P1（体验）</h2>
-<div class="table-wrap"><table><thead><tr><th>项</th><th>说明</th></tr></thead><tbody><tr><td>任务列表批量操作</td><td>✅ 多选运行/启用/停用/删除</td></tr><tr><td>模板市场</td><td>本地模板 ✅；在线索引 ⬜</td></tr><tr><td>依赖管理</td><td>⬜ Python/Node 运行时选择</td></tr><tr><td>多账号</td><td>⬜ 多用户/多账号隔离</td></tr><tr><td>日志轮转</td><td>⬜ 按天/按大小归档</td></tr><tr><td>引导式调试</td><td>⬜ 失败节点一键「重新点选」已有，扩展引导</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>项</th><th>说明</th></tr></thead><tbody><tr><td>任务列表批量操作</td><td>✅ 多选运行/启用/停用/删除</td></tr><tr><td>模板市场</td><td>本地模板 ✅；在线索引 ⬜</td></tr><tr><td>依赖管理</td><td>⬜ Python/Node 运行时选择</td></tr><tr><td>多租户</td><td>⬜ 租户级数据隔离（当前单实例多用户 + 角色）</td></tr><tr><td>日志轮转</td><td>⬜ 按天/按大小归档</td></tr><tr><td>引导式调试</td><td>⬜ 失败节点一键「重新点选」已有，扩展引导</td></tr></tbody></table></div>
 <h2 id="p2-生态">P2（生态）</h2>
 <div class="table-wrap"><table><thead><tr><th>项</th><th>说明</th></tr></thead><tbody><tr><td>MCP 扩展工具</td><td>flow_create/update/delete/import_curl 等</td></tr><tr><td>插件/技能市场</td><td>参考 qinglong 脚本仓库</td></tr><tr><td>多端通知卡片</td><td>飞书/钉钉富文本卡片</td></tr><tr><td>审计日志</td><td>谁改了什么任务</td></tr></tbody></table></div>
 <h2 id="迭代节奏">迭代节奏</h2>

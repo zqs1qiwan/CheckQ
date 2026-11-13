@@ -12,6 +12,7 @@ import UsersPanel from './UsersPanel.jsx';
 import ApiKeysPanel from './ApiKeysPanel.jsx';
 import { toast as globalToast, setToastLevel, getToastLevel } from '../toast.js';
 import { fmtDateTime, ROLE_LABELS, CHANNEL_LABELS } from '../util.js';
+import { getTheme, setTheme } from '../theme.js';
 
 function fmtTime(ts) {
   return fmtDateTime(ts);
@@ -166,6 +167,7 @@ export default function FlowList({ onOpen, onLogout }) {
   const [marketUrl, setMarketUrl] = useState('');
   const [unread, setUnread] = useState(0);
   const [me, setMe] = useState(null);
+  const [, setThemeTick] = useState(0); // 移动端「切换主题」后强制重渲染菜单文案
   const [selected, setSelected] = useState(new Set());
   const [batchBusy, setBatchBusy] = useState(false);
   const [batchMode, setBatchMode] = useState(false); // 批量管理开关：勾选列默认隐藏，不干扰日常阅读
@@ -329,11 +331,35 @@ export default function FlowList({ onOpen, onLogout }) {
           {'Check'}<em>Q</em>
         </span>
         <span className="spacer" />
-        <button className="primary" onClick={() => setModal('new')}>+ 新建任务</button>
-        <Dropdown trigger="更多" caret triggerClass="dd-menu" width={190} ariaLabel="更多操作">
+        <button className="primary new-task-btn" aria-label="新建任务" title="新建任务" onClick={() => setModal('new')}>
+          <span className="btn-label">+ 新建任务</span>
+        </button>
+        <Dropdown
+          trigger={<span className="dd-label">更多</span>}
+          caret
+          triggerClass="dd-menu"
+          width={210}
+          ariaLabel="更多操作"
+        >
           <button onClick={() => setModal('wizard')}>快速组装</button>
           <button onClick={() => setModal('curl')} disabled={importBusy}>导入 cURL 命令</button>
           <button onClick={() => setModal('import')} disabled={importBusy}>导入 HAR / JSON</button>
+          <div className="menu-sep mobile-only" />
+          {/* 窄屏：顶栏只保留「新建 / 更多 / 设置」，其余动作收进这里，避免按钮被挤到换行 */}
+          <button className="mobile-only" onClick={() => {
+            const order = ['light', 'dark', 'auto'];
+            setTheme(order[(order.indexOf(getTheme()) + 1) % order.length]);
+            setThemeTick((v) => v + 1);
+          }}>切换主题（日 / 夜 / 自动）</button>
+          <button className="mobile-only" onClick={() => setNotifOpen(true)}>站内通知{unread > 0 ? `（${unread > 99 ? '99+' : unread}）` : ''}</button>
+          <button className="mobile-only" onClick={() => window.open('https://zqs1qiwan.github.io/checkq/', '_blank', 'noopener')}>文档中心</button>
+          <div className="menu-user mobile-only">
+            {me ? (() => {
+              const roleLabel = ROLE_LABELS[me.role] || me.role;
+              const name = me.displayName || me.username;
+              return name === roleLabel ? name : `${name} · ${roleLabel}`;
+            })() : ''}
+          </div>
           <div className="menu-sep" />
           <button onClick={onLogout}>退出登录</button>
         </Dropdown>
@@ -349,12 +375,14 @@ export default function FlowList({ onOpen, onLogout }) {
             </span>
           );
         })()}
-        <ThemeToggle />
-        <button className="iconbtn bell-btn" onClick={() => setNotifOpen(true)} title="站内通知" aria-label="站内通知">
-          <IconBell size={16} />{unread > 0 && <span className="bell-dot">{unread > 99 ? '99+' : unread}</span>}
-        </button>
-        <a className="iconbtn" href="https://zqs1qiwan.github.io/checkq/" target="_blank" rel="noreferrer" title="文档中心" aria-label="文档中心"><IconGlobe size={16} /></a>
-        <button className="iconbtn" onClick={() => setModal('settings')} title="设置" aria-label="设置"><IconGear size={16} /></button>
+        <span className="topbar-actions">
+          <ThemeToggle />
+          <button className="iconbtn bell-btn" onClick={() => setNotifOpen(true)} title="站内通知" aria-label="站内通知">
+            <IconBell size={16} />{unread > 0 && <span className="bell-dot">{unread > 99 ? '99+' : unread}</span>}
+          </button>
+          <a className="iconbtn" href="https://zqs1qiwan.github.io/checkq/" target="_blank" rel="noreferrer" title="文档中心" aria-label="文档中心"><IconGlobe size={16} /></a>
+        </span>
+        <button className="iconbtn settings-btn" onClick={() => setModal('settings')} title="设置" aria-label="设置"><IconGear size={16} /></button>
         <input
           ref={fileRef} type="file" accept=".har,.json" style={{ display: 'none' }}
           onChange={(e) => { const f = e.target.files[0]; if (f) doImport(f); e.target.value = ''; }}
@@ -461,6 +489,7 @@ export default function FlowList({ onOpen, onLogout }) {
         {viewTab === 'flows' && (
         <>
         <div className="page-head" style={{ marginTop: 8 }}>
+          <div className="toolbar-left">
           {selected.size > 0 && (
             <span className="btn-row">
               <span style={{ fontSize: 12, color: 'var(--accent)', whiteSpace: 'nowrap' }}>已选 {selected.size}</span>
@@ -491,7 +520,9 @@ export default function FlowList({ onOpen, onLogout }) {
             <option value="scheduled">已启用调度</option>
             <option value="recent-failed">最近失败</option>
           </select>
+          </div>
           <span className="spacer" />
+          <div className="toolbar-right">
           <button className="small" title="下载脱敏备份（cookie/token 等凭据已清空，适合分享与存档）" onClick={async () => {
             try {
               const data = await api.backup();
@@ -506,6 +537,7 @@ export default function FlowList({ onOpen, onLogout }) {
           }}>备份</button>
           <button className="small" title="完整备份（含明文凭据，需输入当前密码）" onClick={() => setModal('backup-full')}>完整备份</button>
           <button className="small" onClick={() => setModal('restore')}>恢复</button>
+          </div>
         </div>
 
         {visibleFlows.length === 0 ? (

@@ -38,6 +38,8 @@ async function authHeaders() {
 }
 async function api(method, path, body) {
   const h = await authHeaders();
+  // 无 body 的请求（GET/DELETE）不要带 application/json，否则 Fastify 会因空 JSON 体报 400
+  if (body === undefined) delete h['content-type'];
   const r = await fetch(BASE + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) });
   const text = await r.text();
   let data; try { data = JSON.parse(text); } catch { data = text; }
@@ -60,10 +62,14 @@ const TOOLS = [
   { name: 'flow_update', description: '更新任务基础配置（name/cron/timezone/jitterMinutes/enabled/note）', inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' }, name: { type: 'string' }, cron: { type: 'string' }, timezone: { type: 'string' }, jitterMinutes: { type: 'number' }, enabled: { type: 'boolean' }, note: { type: 'string' } } } },
   { name: 'flow_toggle', description: '启用/停用某个任务的定时调度', inputSchema: { type: 'object', required: ['id', 'enabled'], properties: { id: { type: 'string' }, enabled: { type: 'boolean' } } } },
   { name: 'flow_create', description: '新建一个任务（可从模板克隆；至少给 name）', inputSchema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, cron: { type: 'string' }, timezone: { type: 'string' }, vars: { type: 'object' }, templateId: { type: 'string' }, enabled: { type: 'boolean' } } } },
+  { name: 'flow_delete', description: '删除一个任务（不可恢复；需要 write 作用域）', inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
   { name: 'flow_notify_test', description: '向某任务已配置的渠道发一条测试通知（验证 webhook/telegram 等）', inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
   // —— 模板 ——
   { name: 'templates_list', description: '列出所有模板（含变量名）', inputSchema: { type: 'object', properties: {} } },
   { name: 'template_get', description: '读取模板详情（变量名与默认变量值，敏感项已脱敏）', inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  { name: 'template_instantiate', description: '从模板创建任务（变量各自覆盖，保留模板流程图）', inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' }, name: { type: 'string' }, vars: { type: 'object' }, note: { type: 'string' } } } },
+  // —— 导入 ——
+  { name: 'import_curl', description: '把 cURL 命令解析为 http 节点配置（不创建任务）', inputSchema: { type: 'object', required: ['command'], properties: { command: { type: 'string' } } } },
   // —— 运行历史 ——
   { name: 'runs_list', description: '列出某任务的历史运行记录', inputSchema: { type: 'object', required: ['flowId'], properties: { flowId: { type: 'string' }, limit: { type: 'number' } } } },
   { name: 'run_get', description: '读取某次运行的完整日志与变量快照', inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
@@ -105,6 +111,7 @@ async function callTool(name, args) {
       });
     }
     case 'flow_notify_test': return api('POST', '/api/flows/' + encodeURIComponent(args.id) + '/notify-test', {});
+    case 'flow_delete': return api('DELETE', '/api/flows/' + encodeURIComponent(args.id));
     case 'flows_list': return api('GET', '/api/flows');
     case 'flow_get': return api('GET', '/api/flows/' + args.id);
     case 'flow_run': return api('POST', '/api/flows/' + args.id + '/run', {});
@@ -116,6 +123,10 @@ async function callTool(name, args) {
     case 'run_get': return api('GET', '/api/runs/' + args.id);
     case 'templates_list': return api('GET', '/api/templates');
     case 'template_get': return api('GET', '/api/templates/' + encodeURIComponent(args.id));
+    case 'template_instantiate': return api('POST', '/api/templates/' + encodeURIComponent(args.id) + '/instantiate', {
+      name: args.name, vars: args.vars || {}, note: args.note,
+    });
+    case 'import_curl': return api('POST', '/api/import/curl', { command: args.command });
     case 'stats': return api('GET', '/api/system/stats');
     case 'notifications_list': return api('GET', '/api/notifications?limit=' + (args.limit || 50));
     default: throw new Error('unknown tool: ' + name);

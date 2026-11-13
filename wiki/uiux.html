@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN" data-mode="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark light" />
+<title>交互与视觉规范 · CheckQ 文档</title>
+<meta name="description" content="入口契约、原生组件、双主题、响应式" />
+<link rel="stylesheet" href="./assets/style.css" />
+
+</head>
+<body>
+<div class="wrap">
+  <aside>
+    <div class="brand">Check<span>Q</span></div>
+    <div class="brand-sub">自动化签到引擎 · 文档</div>
+    <input id="search" type="search" placeholder="搜索文档…" autocomplete="off" />
+    <div id="results"></div>
+    <nav>
+<a class="" href="index.html">概览<em>CheckQ 是什么、能做什么</em></a>
+<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个任务</em></a>
+<a class="" href="tasks.html">任务与流程<em>节点、变量、调度、重试、模板</em></a>
+<a class="on" href="uiux.html">交互与视觉规范<em>入口契约、原生组件、双主题、响应式</em></a>
+<a class="" href="logs.html">日志与通知<em>干净日志、连续日志流、通知渠道</em></a>
+<a class="" href="security.html">账号与安全<em>多用户、2FA、凭据加密、访问控制</em></a>
+<a class="" href="api.html">API 与 MCP<em>开放 API、API Key、外部 Agent 接入</em></a>
+<a class="" href="deploy.html">部署与备份<em>Docker、数据目录、备份恢复</em></a>
+<a class="" href="faq.html">常见问题<em>排障速查</em></a>
+<a class="" href="changelog.html">更新日志<em>版本变更（自动生成）</em></a>
+<a class="" href="reference-api.html">API 参考<em>全部端点</em></a>
+<a class="" href="reference-mcp.html">MCP 工具<em>工具清单与接入</em></a>
+<a class="" href="reference-security.html">安全说明<em>威胁与防护全表</em></a>
+<a class="" href="reference-agent.html">Agent 接入指南<em>给外部 Agent 什么</em></a>
+<a class="" href="reference-roadmap.html">路线图<em>版本计划</em></a>
+    </nav>
+    <div class="brand-sub" style="margin-top:18px"><a href="https://github.com/zqs1qiwan/checkq">GitHub 仓库 →</a></div>
+  </aside>
+  <main>
+<h1 id="交互与视觉规范">交互与视觉规范</h1>
+<blockquote>本节描述框架的交互契约与视觉令牌，供二次开发与验收对照。所有实现均为浏览器原生能力优先，不含任何业务脚本。</blockquote>
+<h2 id="入口契约-定版">入口契约（定版）</h2>
+<div class="table-wrap"><table><thead><tr><th>动作</th><th>结果</th></tr></thead><tbody><tr><td>点任务名</td><td>「任务详情」弹窗：任务名 / 备注可改 + 只读概览（调度、时区、状态、重试策略、下次/上次运行、流程规模、变量（敏感项遮蔽）、通知渠道、来源模板、创建/修改时间）</td></tr><tr><td>任务行 ···</td><td>编辑流程 / 复制副本 / 启用或停用调度 / 删除（<strong>没有</strong>单独的基础信息入口）</td></tr><tr><td>编辑器「更多」</td><td>任务详情 / 通知渠道 / 填入 Cookie / 日志配置 / 存为模板 / 调试运行 等</td></tr><tr><td>任务行「日志」或状态徽章</td><td>连续日志流（同一入口，避免两份视图）</td></tr></tbody></table></div>
+<h2 id="原生-web-能力">原生 Web 能力</h2>
+<div class="table-wrap"><table><thead><tr><th>能力</th><th>做法</th></tr></thead><tbody><tr><td>弹窗</td><td>原生 <code>&lt;dialog&gt;</code> + <code>showModal()</code> + <code>closedby="any"</code>；浏览器负责焦点、Esc、背景 inert、顶层渲染与关闭后焦点归还</td></tr><tr><td>定位</td><td><code>position: fixed; inset: 0; margin: auto; height: fit-content</code>，跨浏览器居中，不依赖 UA 差异</td></tr><tr><td>滚动</td><td><code>dialog:modal</code> 与 <code>dialog::backdrop</code> 的 <code>overscroll-behavior: contain</code>，不给 <code>&lt;html&gt;/&lt;body&gt;</code> 上锁</td></tr><tr><td>菜单</td><td>Popover API 顶层渲染；位于弹窗内时挂到该 <code>&lt;dialog&gt;</code> 内部，否则会被 inert 拦住</td></tr><tr><td>主题</td><td><code>&lt;meta name="color-scheme"&gt;</code> + <code>:root</code> 的 <code>color-scheme</code>；日 / 夜 / 自动三段切换</td></tr><tr><td>表格</td><td>语义 <code>&lt;table&gt;/&lt;caption&gt;/&lt;th scope&gt;</code> + sticky 表头 + 容器查询；可聚焦横滚区</td></tr><tr><td>表单</td><td><code>autocomplete</code> / <code>:user-invalid</code> / <code>aria-label</code> / <code>role="alert"</code></td></tr><tr><td>动效</td><td><code>prefers-reduced-motion</code> 降级；长日志 <code>content-visibility: auto</code></td></tr></tbody></table></div>
+<p>依据 <a href="https://developer.chrome.com/docs/modern-web-guidance" target="_blank" rel="noreferrer">Modern Web Guidance 1.0</a>；机械扫描 <code>npx modern-web-guidance@latest legacy-scan web/src --json</code> 当前为 0 命中。</p>
+<h2 id="视觉令牌">视觉令牌</h2>
+<div class="table-wrap"><table><thead><tr><th>项</th><th>夜</th><th>日</th></tr></thead><tbody><tr><td>背景 / 面板</td><td><code>#0b0e11</code> / <code>#11151a</code></td><td><code>#f3f5f6</code> / <code>#ffffff</code></td></tr><tr><td>边框</td><td><code>#232a32</code></td><td><code>#d9dfe3</code></td></tr><tr><td>强调色</td><td><code>#3fa7ad</code></td><td><code>#14707a</code></td></tr><tr><td>圆角</td><td>xs 2 / sm 4 / md 6 / lg 8 / xl 12 px（层级化，不再处处同圆角）</td><td>同左</td></tr><tr><td>控件高度</td><td>标准 32 / 小 26 / 移动端 38 px</td><td>同左</td></tr></tbody></table></div>
+<ul><li>冷中性石墨 + 低饱和汽油蓝绿；状态用「小圆点 + 文字」，不用彩色药丸；数字等宽 <code>tabular-nums</code>。</li><li>节点配色为低饱和语义色，图标统一线性 SVG（设置用滑块式图标），禁止 emoji 充当图标。</li><li>元信息用细竖线分隔的 <code>.meta</code>，不堆中点串。</li></ul>
+<h2 id="响应式与对齐">响应式与对齐</h2>
+<ul><li>桌面顶栏：品牌 / 新建 / 更多 / 身份文字 / 动作组 / 设置，全部等高、单行、垂直居中。</li><li>窄屏（≤640px）：只保留「品牌 / + / ⋯ / 设置」四个 38px 控件，单行不换行；主题、站内通知、文档中心、登录身份收进「更多」。</li><li>工具条拆左右两组，组内不拆散、组间才折行；搜索框可伸缩，控件同高。</li><li>弹窗 <code>height: fit-content</code>（<code>height: auto</code> 会被 <code>inset:0</code> 拉满再截断，留下大片空白）。</li></ul>
+<h2 id="验收护栏">验收护栏</h2>
+<p><code>node tools/ui-smoke.cjs &lt;baseUrl&gt;</code>（7 视口 × 明暗主题，检查溢出 / 重叠 / 顶栏换行 / 弹窗居中 / 菜单裁剪 / 控制台报错）、</p>
+<p><code>node tools/copy-audit.cjs</code>、<code>node tools/secret-scan.cjs</code>、<code>node tools/project-audit.cjs</code>，命中即 <code>exit 1</code>。</p>
+    <div class="foot">CheckQ 文档 · 由 <code>tools/build-wiki.cjs</code> 生成 · <a href="https://github.com/zqs1qiwan/checkq/issues">反馈问题</a></div>
+  </main>
+</div>
+<script>
+(function () {
+  var input = document.getElementById('search');
+  var box = document.getElementById('results');
+  var index = [];
+  fetch('./search-index.json').then(function (r) { return r.json(); }).then(function (d) { index = d; });
+  function esc(s) { return s.replace(/[&<>]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]; }); }
+  function run() {
+    var q = input.value.trim().toLowerCase();
+    if (!q) { box.classList.remove('on'); box.innerHTML = ''; return; }
+    var hits = [];
+    for (var i = 0; i < index.length; i++) {
+      var it = index[i];
+      var pos = it.text.toLowerCase().indexOf(q);
+      if (pos < 0 && it.title.toLowerCase().indexOf(q) < 0) continue;
+      var start = Math.max(0, pos - 40);
+      var snippet = (pos >= 0 ? it.text.slice(start, start + 120) : it.text.slice(0, 120));
+      hits.push('<a href="' + it.file + '">' + esc(it.title) + '<em>' + esc(snippet) + '…</em></a>');
+      if (hits.length >= 8) break;
+    }
+    box.innerHTML = hits.join('') || '<a href="javascript:void(0)">没有匹配</a>';
+    box.classList.add('on');
+  }
+  input.addEventListener('input', run);
+  input.addEventListener('keydown', function (e) { if (e.key === 'Escape') { input.value = ''; run(); input.blur(); } });
+  document.addEventListener('click', function (e) { if (!box.contains(e.target) && e.target !== input) box.classList.remove('on'); });
+})();
+</script>
+</body>
+</html>

@@ -3,8 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark light" />
 <title>快速开始 · CheckQ 文档</title>
-<meta name="description" content="3 步跑通第一个签到" />
+<meta name="description" content="3 步跑通第一个任务" />
 <link rel="stylesheet" href="./assets/style.css" />
 
 </head>
@@ -17,8 +18,9 @@
     <div id="results"></div>
     <nav>
 <a class="" href="index.html">概览<em>CheckQ 是什么、能做什么</em></a>
-<a class="on" href="quickstart.html">快速开始<em>3 步跑通第一个签到</em></a>
-<a class="" href="tasks.html">任务与流程<em>节点、变量、调度、模板</em></a>
+<a class="on" href="quickstart.html">快速开始<em>3 步跑通第一个任务</em></a>
+<a class="" href="tasks.html">任务与流程<em>节点、变量、调度、重试、模板</em></a>
+<a class="" href="uiux.html">交互与视觉规范<em>入口契约、原生组件、双主题、响应式</em></a>
 <a class="" href="logs.html">日志与通知<em>干净日志、连续日志流、通知渠道</em></a>
 <a class="" href="security.html">账号与安全<em>多用户、2FA、凭据加密、访问控制</em></a>
 <a class="" href="api.html">API 与 MCP<em>开放 API、API Key、外部 Agent 接入</em></a>
@@ -39,14 +41,14 @@
 <p>顶栏「+ 新建任务」→ 画布自带「HTTP 请求 → 日志」两个节点 → 点 HTTP 节点填 URL、请求头（需要登录态时带上 cookie）。</p>
 <h2 id="2-跑一次">2. 跑一次</h2>
 <p>顶栏「运行」。成功时日志只有一行人话；失败时点日志步骤可看响应体。</p>
-<h2 id="3-定调度">3. 定调度</h2>
-<p>顶栏「调度」→ 填 cron（如 <code>13 0 <em> </em> *</code> = 每天 00:13）→ 启用。</p>
+<h2 id="3-定调度与重试">3. 定调度与重试</h2>
+<p>编辑器顶栏「调度」→ 填 cron（如 <code>30 8 <em> </em> *</code> = 每天 08:30）→ 启用。同一个弹窗里可配置<strong>失败重试</strong>：默认最多 3 次、指数退避 5 秒起、随机抖动；跑满次数仍失败才判定任务失败，逐次尝试与等待时长会写进日志与通知。调试运行不重试。</p>
 <h2 id="4-收通知">4. 收通知</h2>
-<p>任务 ··· →「通知渠道」→ 选类型（站内通知零依赖）→ 填地址 →「测试发送」。</p>
+<p>编辑器「更多 → 通知渠道」→ 选类型（站内通知零依赖）→ 填地址 →「测试发送」。</p>
 <h2 id="5-变成模板-可选">5. 变成模板（可选）</h2>
-<p>任务 ··· →「存为模板」→ 之后从模板创建任务时，各自填自己的变量（如 cookie）。</p>
+<p>编辑器「更多 → 存为模板」→ 之后从模板创建任务时，各自填自己的变量（如 token）。模板一改，已派生的任务立刻跟随。</p>
 <h2 id="6-自动化-可选">6. 自动化（可选）</h2>
-<ul><li><strong>调试运行</strong>：任务 ··· →「调试运行」记录每步请求/响应并展开过程窗口；日常「运行」只输出配置好的日志。</li><li><strong>连续日志流</strong>：任务行「日志」→ 多次运行滚动在一起，可上翻历史、导出。</li><li><strong>外部 Agent</strong>：设置 → API 密钥 → 生成（只读 + 可运行）→ 配合 <a href="/api.html">API 与 MCP</a>。</li></ul>
+<ul><li><strong>调试运行</strong>：编辑器顶栏「调试运行」记录每步请求/响应并展开过程窗口；日常「运行」只输出配置好的日志。</li><li><strong>连续日志流</strong>：任务行「日志」→ 多次运行滚动在一起，可上翻历史、导出。</li><li><strong>外部 Agent</strong>：设置 → API 密钥 → 生成（只读 + 可运行）→ 配合 <a href="/api.html">API 与 MCP</a>。</li><li><strong>窄屏</strong>：顶栏「+ / ⋯ / 设置」三个图标按钮；主题、站内通知、文档中心、登录身份都在「⋯」里。</li></ul>
     <div class="foot">CheckQ 文档 · 由 <code>tools/build-wiki.cjs</code> 生成 · <a href="https://github.com/zqs1qiwan/checkq/issues">反馈问题</a></div>
   </main>
 </div>

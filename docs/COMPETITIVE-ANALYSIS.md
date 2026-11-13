@@ -17,8 +17,8 @@
 
 - **可视化流程编排**（画布 + 积木 + 点选生成）是青龙/qiandao 之外的第三形态；
 - **日志只显示 log 节点**（qinglong/qiandao 风格）已落地（`log.record = log / log-final`）；
-- **通知渠道原生集成**（7 种：Webhook/Bark/Telegram/Server酱/钉钉/企业微信/飞书），无需外部脚本；
-- **任务自动完成**：某签到应用的全量 18 项任务（含专家事件链）已在 CheckQ 流程中跑通；
+- **通知渠道原生集成**（12 种：站内 / Webhook / Bark / Telegram / Server酱 / PushPlus / 钉钉 / 企业微信 / 飞书 / Gotify / ntfy / 邮件 SMTP），无需外部脚本；
+- **长链与事件链**：多步骤、带签名与会话的流程可由 http + extract + set + script 组合搭建，框架不内置任何业务模板；
 - **API + MCP**：REST + X-API-Key + stdio MCP，Agent 可直接接入。
 
 ## 3. 已借鉴并落地

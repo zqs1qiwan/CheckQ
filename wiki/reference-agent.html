@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark light" />
 <title>Agent 接入指南 · CheckQ 文档</title>
 <meta name="description" content="给外部 Agent 什么" />
 <link rel="stylesheet" href="./assets/style.css" />
@@ -17,8 +18,9 @@
     <div id="results"></div>
     <nav>
 <a class="" href="index.html">概览<em>CheckQ 是什么、能做什么</em></a>
-<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个签到</em></a>
-<a class="" href="tasks.html">任务与流程<em>节点、变量、调度、模板</em></a>
+<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个任务</em></a>
+<a class="" href="tasks.html">任务与流程<em>节点、变量、调度、重试、模板</em></a>
+<a class="" href="uiux.html">交互与视觉规范<em>入口契约、原生组件、双主题、响应式</em></a>
 <a class="" href="logs.html">日志与通知<em>干净日志、连续日志流、通知渠道</em></a>
 <a class="" href="security.html">账号与安全<em>多用户、2FA、凭据加密、访问控制</em></a>
 <a class="" href="api.html">API 与 MCP<em>开放 API、API Key、外部 Agent 接入</em></a>
@@ -75,9 +77,9 @@
 <p>所有请求带一个头即可：</p>
 <pre class="code"><code>curl -H "x-api-key: cq_xxxx" http://checkq.local:18888/api/flows</code></pre>
 <hr />
-<h2 id="3-agent-能做什么-mcp-工具清单-17-个">3. Agent 能做什么（MCP 工具清单，17 个）</h2>
-<div class="table-wrap"><table><thead><tr><th>工具</th><th>作用</th><th>需要权限</th></tr></thead><tbody><tr><td><code>health</code></td><td>连通性/版本自检</td><td>只读</td></tr><tr><td><code>whoami</code></td><td>当前身份与权限自检</td><td>只读</td></tr><tr><td><code>stats</code></td><td>任务数/今日运行/成功率/下次调度</td><td>只读</td></tr><tr><td><code>notifications_list</code></td><td>站内通知（含未读）</td><td>只读</td></tr><tr><td><code>flows_list</code></td><td>列出所有任务（含 cron/enabled/nextRunAt/上次结果）</td><td>只读</td></tr><tr><td><code>flow_get</code></td><td>任务完整定义（nodes/vars/log/notify）</td><td>只读</td></tr><tr><td><code>flow_logs</code></td><td><strong>连续日志流</strong>（多次运行的人话日志，最像 qinglong 面板）</td><td>只读</td></tr><tr><td><code>runs_list</code> / <code>run_get</code></td><td>历史运行记录 / 某次运行详情</td><td>只读</td></tr><tr><td><code>templates_list</code> / <code>template_get</code></td><td>模板列表 / 模板详情（变量名与默认值）</td><td>只读</td></tr><tr><td><strong><code>flow_run</code></strong></td><td><strong>立即跑一次签到</strong>，返回状态+摘要+人话日志</td><td>可运行</td></tr><tr><td><code>flow_update_vars</code></td><td><strong>换 cookie / token / ua</strong>（其余字段保留）</td><td>可修改</td></tr><tr><td><code>flow_update</code></td><td>改 name/cron/timezone/jitter/enabled/note</td><td>可修改</td></tr><tr><td><code>flow_toggle</code></td><td>启用/停用定时调度</td><td>可修改</td></tr><tr><td><code>flow_create</code></td><td>新建任务（可从模板克隆）</td><td>可修改</td></tr><tr><td><code>flow_notify_test</code></td><td>向已配置渠道发测试通知</td><td>可修改</td></tr></tbody></table></div>
-<blockquote><strong>刻意不提供</strong>：删除任务、删除模板、修改账号密码、导出含凭据的完整备份 —— 避免 Agent 误删或越权。</blockquote>
+<h2 id="3-agent-能做什么-mcp-工具清单-20-个">3. Agent 能做什么（MCP 工具清单，20 个）</h2>
+<div class="table-wrap"><table><thead><tr><th>工具</th><th>作用</th><th>需要权限</th></tr></thead><tbody><tr><td><code>health</code></td><td>连通性/版本自检</td><td>只读</td></tr><tr><td><code>whoami</code></td><td>当前身份与权限自检</td><td>只读</td></tr><tr><td><code>stats</code></td><td>任务数/今日运行/成功率/下次调度</td><td>只读</td></tr><tr><td><code>notifications_list</code></td><td>站内通知（含未读）</td><td>只读</td></tr><tr><td><code>flows_list</code></td><td>列出所有任务（含 cron/enabled/nextRunAt/上次结果）</td><td>只读</td></tr><tr><td><code>flow_get</code></td><td>任务完整定义（nodes/vars/log/notify）</td><td>只读</td></tr><tr><td><code>flow_logs</code></td><td><strong>连续日志流</strong>（多次运行的人话日志，最像 qinglong 面板）</td><td>只读</td></tr><tr><td><code>runs_list</code> / <code>run_get</code></td><td>历史运行记录 / 某次运行详情</td><td>只读</td></tr><tr><td><code>templates_list</code> / <code>template_get</code></td><td>模板列表 / 模板详情（变量名与默认值）</td><td>只读</td></tr><tr><td><strong><code>flow_run</code></strong></td><td><strong>立即跑一次签到</strong>，返回状态+摘要+人话日志</td><td>可运行</td></tr><tr><td><code>flow_update_vars</code></td><td><strong>换 cookie / token / ua</strong>（其余字段保留）</td><td>可修改</td></tr><tr><td><code>flow_update</code></td><td>改 name/cron/timezone/jitter/enabled/note</td><td>可修改</td></tr><tr><td><code>flow_toggle</code></td><td>启用/停用定时调度</td><td>可修改</td></tr><tr><td><code>flow_create</code></td><td>新建任务（可从模板克隆）</td><td>可修改</td></tr><tr><td><code>flow_delete</code></td><td>删除任务（不可恢复，建议只给 trusted Agent）</td><td>可修改（高风险）</td></tr><tr><td><code>flow_notify_test</code></td><td>向已配置渠道发测试通知</td><td>可修改</td></tr><tr><td><code>template_instantiate</code></td><td>从模板创建任务</td><td>可修改</td></tr><tr><td><code>import_curl</code></td><td>把 cURL 命令解析为 http 节点配置（不落库）</td><td>只读</td></tr></tbody></table></div>
+<blockquote><strong>刻意不提供</strong>：删除模板、修改账号密码、导出含凭据的完整备份 —— 避免 Agent 误删或越权。<code>flow_delete</code> 虽已提供，但建议只在受控场景发放 <code>可修改</code> 作用域。</blockquote>
 <hr />
 <h2 id="4-外部-agent-的典型工作流">4. 外部 Agent 的典型工作流</h2>
 <pre class="code"><code>① whoami / health            确认连得上、权限够

@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark light" />
 <title>MCP 工具 · CheckQ 文档</title>
 <meta name="description" content="工具清单与接入" />
 <link rel="stylesheet" href="./assets/style.css" />
@@ -17,8 +18,9 @@
     <div id="results"></div>
     <nav>
 <a class="" href="index.html">概览<em>CheckQ 是什么、能做什么</em></a>
-<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个签到</em></a>
-<a class="" href="tasks.html">任务与流程<em>节点、变量、调度、模板</em></a>
+<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个任务</em></a>
+<a class="" href="tasks.html">任务与流程<em>节点、变量、调度、重试、模板</em></a>
+<a class="" href="uiux.html">交互与视觉规范<em>入口契约、原生组件、双主题、响应式</em></a>
 <a class="" href="logs.html">日志与通知<em>干净日志、连续日志流、通知渠道</em></a>
 <a class="" href="security.html">账号与安全<em>多用户、2FA、凭据加密、访问控制</em></a>
 <a class="" href="api.html">API 与 MCP<em>开放 API、API Key、外部 Agent 接入</em></a>
@@ -45,8 +47,8 @@ node mcp/checkq-mcp.cjs</code></pre>
 <div class="table-wrap"><table><thead><tr><th>变量</th><th>必填</th><th>说明</th></tr></thead><tbody><tr><td>CHECKQ_URL</td><td>✅</td><td>CheckQ 基址（无尾斜杠）</td></tr><tr><td>CHECKQ_PASSWORD</td><td>二选一</td><td>登录密码（服务端会换 cookie）</td></tr><tr><td>CHECKQ_API_KEY</td><td>二选一</td><td>X-API-Key（推荐，免登录、免会话过期）</td></tr></tbody></table></div>
 <h2 id="2-5-鉴权方式-给外部-agent-用">2.5 鉴权方式（给外部 Agent 用）</h2>
 <ul><li>推荐 <code>CHECKQ_API_KEY</code>：面板「设置 → API Key」生成，<strong>可按作用域发放</strong>（只读 / 可运行 / 可修改）；</li><li>也支持 <code>CHECKQ_PASSWORD</code>（走登录流程）—— <strong>不要把账号密码给外部 Agent</strong>；</li><li>只读 Key 调用运行类工具会返回 403「API Key 权限不足：需要 run」；</li><li>详见 <code>docs/AGENT-ACCESS.md</code>。</li></ul>
-<h2 id="3-工具定义-17-个">3. 工具定义（17 个）</h2>
-<div class="table-wrap"><table><thead><tr><th>工具</th><th>参数</th><th>说明</th></tr></thead><tbody><tr><td>health</td><td>{}</td><td>健康检查</td></tr><tr><td>flows_list</td><td>{}</td><td>列出所有任务（含 cron/enabled/nextRunAt）</td></tr><tr><td>flow_get</td><td>{ id }</td><td>读取任务完整定义（nodes/edges/vars/log）</td></tr><tr><td>flow_run</td><td>{ id }</td><td>运行任务并返回逐步日志 + 摘要</td></tr><tr><td>flow_update_vars</td><td>{ id, vars }</td><td>更新任务变量（如 wbToken），其余字段保留</td></tr><tr><td>runs_list</td><td>{ flowId, limit? }</td><td>历史运行记录</td></tr><tr><td>run_get</td><td>{ id }</td><td>单次运行完整日志与变量快照</td></tr><tr><td>templates_list</td><td>{}</td><td>模板列表</td></tr><tr><td>stats</td><td>{}</td><td>运维健康统计</td></tr><tr><td>notifications_list</td><td>{ limit? }</td><td>站内通知列表（含未读数）</td></tr><tr><td>whoami</td><td>{}</td><td>当前身份与权限自检</td></tr><tr><td>flow_logs</td><td>{ id, limit? }</td><td>连续日志流（多次运行的人话日志，最像 qinglong 面板）</td></tr><tr><td>flow_update</td><td>{ id, name?, cron?, timezone?, jitterMinutes?, enabled?, note? }</td><td>改任务基础配置</td></tr><tr><td>flow_toggle</td><td>{ id, enabled }</td><td>启用/停用定时调度</td></tr><tr><td>flow_create</td><td>{ name, cron?, vars?, templateId?, enabled? }</td><td>新建任务（可从模板克隆）</td></tr><tr><td>flow_notify_test</td><td>{ id }</td><td>向已配置渠道发测试通知</td></tr><tr><td>template_get</td><td>{ id }</td><td>模板详情（变量名与默认值）</td></tr></tbody></table></div>
+<h2 id="3-工具定义-20-个">3. 工具定义（20 个）</h2>
+<div class="table-wrap"><table><thead><tr><th>工具</th><th>参数</th><th>说明</th></tr></thead><tbody><tr><td>health</td><td>{}</td><td>健康检查</td></tr><tr><td>flows_list</td><td>{}</td><td>列出所有任务（含 cron/enabled/nextRunAt）</td></tr><tr><td>flow_get</td><td>{ id }</td><td>读取任务完整定义（nodes/edges/vars/log）</td></tr><tr><td>flow_run</td><td>{ id }</td><td>运行任务并返回逐步日志 + 摘要</td></tr><tr><td>flow_update_vars</td><td>{ id, vars }</td><td>更新任务变量，其余字段保留</td></tr><tr><td>runs_list</td><td>{ flowId, limit? }</td><td>历史运行记录</td></tr><tr><td>run_get</td><td>{ id }</td><td>单次运行完整日志与变量快照</td></tr><tr><td>templates_list</td><td>{}</td><td>模板列表</td></tr><tr><td>stats</td><td>{}</td><td>运维健康统计</td></tr><tr><td>notifications_list</td><td>{ limit? }</td><td>站内通知列表（含未读数）</td></tr><tr><td>whoami</td><td>{}</td><td>当前身份与权限自检</td></tr><tr><td>flow_logs</td><td>{ id, limit? }</td><td>连续日志流（多次运行的人话日志）</td></tr><tr><td>flow_update</td><td>{ id, name?, cron?, timezone?, jitterMinutes?, enabled?, note? }</td><td>改任务基础配置</td></tr><tr><td>flow_toggle</td><td>{ id, enabled }</td><td>启用/停用定时调度</td></tr><tr><td>flow_create</td><td>{ name, cron?, vars?, templateId?, enabled? }</td><td>新建任务（可从模板克隆）</td></tr><tr><td>flow_delete</td><td>{ id }</td><td>删除任务（不可恢复；需要 write 作用域）</td></tr><tr><td>flow_notify_test</td><td>{ id }</td><td>向已配置渠道发测试通知</td></tr><tr><td>template_get</td><td>{ id }</td><td>模板详情（变量名与默认值）</td></tr><tr><td>template_instantiate</td><td>{ id, name?, vars?, note? }</td><td>从模板创建任务</td></tr><tr><td>import_curl</td><td>{ command }</td><td>把 cURL 命令解析为 http 节点配置（不创建任务）</td></tr></tbody></table></div>
 <h2 id="4-json-rpc-示例">4. JSON-RPC 示例</h2>
 <pre class="code"><code>// initialize
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{}}}
@@ -75,8 +77,8 @@ node mcp/checkq-mcp.cjs</code></pre>
 }</code></pre>
 <h3 id="cursor-opencode">Cursor / OpenCode</h3>
 <p>同上，按对应客户端的 MCP 配置格式填入 command/args/env。</p>
-<h2 id="8-扩展工具-规划">8. 扩展工具（规划）</h2>
-<p><code>flow_create</code> / <code>flow_update</code> / <code>flow_delete</code> / <code>template_instantiate</code> / <code>import_curl</code> 等将在后续版本加入；当前 Agent 可通过 <code>flow_update_vars</code> + 直接编辑 flow JSON（<code>flow_get</code> 读出 → 修改 → PUT <code>/api/flows/:id</code>）完成。</p>
+<h2 id="8-扩展工具">8. 扩展工具</h2>
+<p>当前文档列出的 20 个工具均已实现；后续可评估：<code>flow_clone</code>、<code>flow_export</code>、<code>template_export</code>、<code>batch_run</code> 等。新增工具必须同时更新本节与 <code>tools/project-audit.cjs</code> 的对照检查。</p>
     <div class="foot">CheckQ 文档 · 由 <code>tools/build-wiki.cjs</code> 生成 · <a href="https://github.com/zqs1qiwan/checkq/issues">反馈问题</a></div>
   </main>
 </div>

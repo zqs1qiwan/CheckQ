@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark light" />
 <title>API 与 MCP · CheckQ 文档</title>
 <meta name="description" content="开放 API、API Key、外部 Agent 接入" />
 <link rel="stylesheet" href="./assets/style.css" />
@@ -17,8 +18,9 @@
     <div id="results"></div>
     <nav>
 <a class="" href="index.html">概览<em>CheckQ 是什么、能做什么</em></a>
-<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个签到</em></a>
-<a class="" href="tasks.html">任务与流程<em>节点、变量、调度、模板</em></a>
+<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个任务</em></a>
+<a class="" href="tasks.html">任务与流程<em>节点、变量、调度、重试、模板</em></a>
+<a class="" href="uiux.html">交互与视觉规范<em>入口契约、原生组件、双主题、响应式</em></a>
 <a class="" href="logs.html">日志与通知<em>干净日志、连续日志流、通知渠道</em></a>
 <a class="" href="security.html">账号与安全<em>多用户、2FA、凭据加密、访问控制</em></a>
 <a class="on" href="api.html">API 与 MCP<em>开放 API、API Key、外部 Agent 接入</em></a>
@@ -40,9 +42,10 @@
 <h2 id="认证">认证</h2>
 <p><code>x-api-key: &lt;key&gt;</code>（推荐，可按作用域发放）或登录会话 Cookie。</p>
 <h2 id="常用端点">常用端点</h2>
-<div class="table-wrap"><table><thead><tr><th>需求</th><th>方法</th><th>路径</th></tr></thead><tbody><tr><td>列任务</td><td>GET</td><td>/api/flows</td></tr><tr><td>任务详情</td><td>GET</td><td>/api/flows/:id</td></tr><tr><td>跑一次</td><td>POST</td><td>/api/flows/:id/run</td></tr><tr><td>连续日志流</td><td>GET</td><td>/api/flows/:id/logs?limit=200</td></tr><tr><td>改变量 / 调度</td><td>PUT</td><td>/api/flows/:id</td></tr><tr><td>历史运行</td><td>GET</td><td>/api/runs?flowId=&amp;limit=30</td></tr><tr><td>模板</td><td>GET</td><td>/api/templates</td></tr><tr><td>运维统计</td><td>GET</td><td>/api/system/stats</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>需求</th><th>方法</th><th>路径</th></tr></thead><tbody><tr><td>列任务</td><td>GET</td><td>/api/flows</td></tr><tr><td>任务详情</td><td>GET</td><td>/api/flows/:id</td></tr><tr><td>跑一次</td><td>POST</td><td>/api/flows/:id/run</td></tr><tr><td>实时日志（SSE）</td><td>POST</td><td>/api/flows/:id/run（<code>{"stream": true}</code>）</td></tr><tr><td>连续日志流</td><td>GET</td><td>/api/flows/:id/logs?limit=200</td></tr><tr><td>改变量 / 调度 / 重试</td><td>PUT</td><td>/api/flows/:id</td></tr><tr><td>历史运行（含逐次尝试）</td><td>GET</td><td>/api/runs?flowId=&amp;limit=30</td></tr><tr><td>模板</td><td>GET</td><td>/api/templates</td></tr><tr><td>运维统计</td><td>GET</td><td>/api/system/stats</td></tr></tbody></table></div>
+<p>任务对象含 <code>retry = { enabled, maxAttempts, backoff, baseDelayMs, maxDelayMs, jitter }</code>（默认开启 / 3 次 / 指数 / 5s / 5min / 抖动）；运行对象含 <code>attempts[]</code>、<code>attempt</code>、<code>maxAttempts</code>。完整字段见 <a href="/reference-api.html">API 参考</a>。</p>
 <h2 id="mcp">MCP</h2>
-<p><code>mcp/checkq-mcp.cjs</code>（stdio，零依赖）暴露 17 个工具：health、whoami、stats、notifications_list、flows_list、flow_get、flow_run、flow_logs、flow_update_vars、flow_update、flow_toggle、flow_create、flow_notify_test、templates_list、template_get、runs_list、run_get。</p>
+<p><code>mcp/checkq-mcp.cjs</code>（stdio，零依赖）暴露 20 个工具：health、whoami、stats、notifications_list、flows_list、flow_get、flow_run、flow_logs、flow_update_vars、flow_update、flow_toggle、flow_create、flow_delete、flow_notify_test、templates_list、template_get、template_instantiate、import_curl、runs_list、run_get。</p>
 <p>配置：</p>
 <pre class="code"><code>{ "mcpServers": { "checkq": { "command": "node",
   "args": ["/path/CheckQ/mcp/checkq-mcp.cjs"],

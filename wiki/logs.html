@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark light" />
 <title>日志与通知 · CheckQ 文档</title>
 <meta name="description" content="干净日志、连续日志流、通知渠道" />
 <link rel="stylesheet" href="./assets/style.css" />
@@ -17,8 +18,9 @@
     <div id="results"></div>
     <nav>
 <a class="" href="index.html">概览<em>CheckQ 是什么、能做什么</em></a>
-<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个签到</em></a>
-<a class="" href="tasks.html">任务与流程<em>节点、变量、调度、模板</em></a>
+<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个任务</em></a>
+<a class="" href="tasks.html">任务与流程<em>节点、变量、调度、重试、模板</em></a>
+<a class="" href="uiux.html">交互与视觉规范<em>入口契约、原生组件、双主题、响应式</em></a>
 <a class="on" href="logs.html">日志与通知<em>干净日志、连续日志流、通知渠道</em></a>
 <a class="" href="security.html">账号与安全<em>多用户、2FA、凭据加密、访问控制</em></a>
 <a class="" href="api.html">API 与 MCP<em>开放 API、API Key、外部 Agent 接入</em></a>
@@ -41,9 +43,10 @@
 <ul><li><strong>任务级</strong>：日志配置里勾「调试模式」→ 每次运行都记录请求 / 响应。</li><li><strong>单次级</strong>：编辑器日志坞勾「调试」→ 仅当次记录，日常运行不受影响。</li></ul>
 <h2 id="连续日志流">连续日志流</h2>
 <p>任务行「日志」→ 多次运行拍平成一条时间线：可「加载更早的记录」，每组可展开调试或导出 .log。</p>
+<p>失败重试的运行会在日志里插入「第 N/M 次尝试」分隔行；运行抽屉列出每次尝试的成败与下次等待时长，结论与通知也带尝试次数。</p>
 <h2 id="通知渠道-12-种">通知渠道（12 种）</h2>
 <p>站内通知 / Webhook / Bark / Telegram / Server酱 / PushPlus / 钉钉（加签）/ 企业微信 / 飞书（加签）/ Gotify / ntfy / 邮件 SMTP。</p>
-<ul><li>成功 / 失败可分别开启；模板支持 {{flow.name}} {{status}} {{message}} {{duration}} {{time}}。</li><li><strong>每日总推送</strong>（可选，默认关）：设置 → 通知与推送 → 勾选「推送单位」（任务），可定时推送或立即推送今日汇总。</li><li><strong>界面提示级别</strong>：默认只报错误；可在设置里改为「成功 + 错误」或「全部」。</li></ul>
+<ul><li>成功 / 失败可分别开启；模板支持 {{flow.name}} {{status}} {{message}} {{duration}} {{time}}。</li><li><strong>每日汇总推送</strong>（可选，默认关）：设置 → 通知与推送 → 勾选「推送单位」（任务），可定时推送或立即推送今日汇总。</li><li><strong>界面提示级别</strong>：默认只报错误；可在设置里改为「成功 + 错误」或「全部」。</li></ul>
     <div class="foot">CheckQ 文档 · 由 <code>tools/build-wiki.cjs</code> 生成 · <a href="https://github.com/zqs1qiwan/checkq/issues">反馈问题</a></div>
   </main>
 </div>

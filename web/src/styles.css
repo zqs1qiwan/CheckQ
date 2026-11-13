@@ -270,15 +270,31 @@ select { padding-right: 26px; }
 .checkline { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; padding: 4px 0; }
 .checkline input { accent-color: var(--accent); }
 
-/* 图标按钮（不展开文字的紧凑动作）—— button 与 a（外链）外观必须完全一致 */
+/* 图标按钮（不展开文字的紧凑动作）—— button 与 a（外链）外观必须完全一致。
+   安静的幽灵样式：平时只有细边框，悬停/聚焦才浮出底色，避免顶栏堆一排「实心方块」。 */
 button.iconbtn, a.iconbtn {
   padding: 0; font-size: var(--fs-md); border-radius: var(--r-md);
   width: var(--ctl-h); height: var(--ctl-h); min-width: var(--ctl-h); min-height: var(--ctl-h);
   display: inline-flex; align-items: center; justify-content: center; flex: none;
-  background: var(--panel2); color: var(--text);
+  background: transparent; color: var(--muted);
   border: 1px solid var(--border); text-decoration: none;
 }
-a.iconbtn:hover { border-color: var(--muted); background: var(--hover-tint); color: var(--text); text-decoration: none; }
+button.iconbtn:hover, a.iconbtn:hover,
+button.iconbtn:focus-visible, a.iconbtn:focus-visible {
+  border-color: var(--border-strong); background: var(--panel2); color: var(--text); text-decoration: none;
+}
+.iconbtn svg { flex: none; }
+/* 顶栏右侧动作组：统一间距、统一高度，窄屏整体收起 */
+.topbar-actions { display: inline-flex; align-items: center; gap: 8px; flex: none; }
+.who-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: var(--ctl-h);
+  padding: 0 8px; border: none; background: transparent;
+  color: var(--muted); font-size: 12px; white-space: nowrap;
+}
+.who-chip em { font-style: normal; color: var(--muted); font-size: var(--fs-xs); }
+/* 仅在窄屏出现的菜单项 / 文字 */
+.mobile-only { display: none; }
+.menu-user { padding: 6px 9px; font-size: 11.5px; color: var(--muted); }
 
 /* 下拉菜单浮层本体（由 Dropdown.jsx 挂到 body，见文末 .dd-pop 定位规则） */
 .menu-pop {
@@ -316,6 +332,12 @@ a.iconbtn:hover { border-color: var(--muted); background: var(--hover-tint); col
 .page-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; row-gap: 8px; margin-bottom: 16px; }
 .page-head h2 { margin: 0; font-size: 17px; flex: 0 0 auto; line-height: 1.3; letter-spacing: -.01em; }
 .page-head .spacer { flex: 1 1 0; min-width: 0; }
+/* 工具条分两组：组内不拆散，组间才允许折行 */
+.toolbar-left, .toolbar-right { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.toolbar-left { flex: 1 1 auto; flex-wrap: wrap; }
+.toolbar-right { flex: 0 0 auto; flex-wrap: nowrap; }
+.toolbar-search { flex: 0 1 200px; min-width: 110px; width: 200px; }
+.toolbar-select { flex: none; width: 120px; }
 
 /* ---- 流程表：扁平、密度优先、表头吸顶 ---- */
 .table-scroll {
@@ -556,13 +578,21 @@ span.json-toggle { cursor: default; }
 /* ---- 弹窗（原生 <dialog>，顶层渲染） ---- */
 .modal-mask { position: fixed; inset: 0; background: var(--mask); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; }
 dialog.modal {
-  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
-  padding: 22px 24px; width: min(460px, calc(100vw - 24px)); max-height: 84vh;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-xl);
+  padding: 22px 24px; width: min(460px, calc(100vw - 24px)); max-height: 88vh;
   margin: auto; color: var(--text); box-shadow: var(--shadow);
 }
+/* 显式居中：不依赖各浏览器对 dialog 的 UA 样式差异（曾经出现弹窗贴到左上角）
+   fixed + inset:0 + margin:auto 会让 fit-content 的盒子在视口正中；
+   同时给 :not([open]) 兜底，防止 .modal.structured 的 display:flex 覆盖 UA 的隐藏规则。 */
+dialog.modal[open] {
+  position: fixed; inset: 0; margin: auto;
+  display: flex; flex-direction: column; overflow: hidden;
+  max-width: calc(100vw - 24px);
+}
+dialog.modal:not([open]) { display: none; }
 dialog.modal::backdrop { background: var(--mask); overflow: hidden; overscroll-behavior: contain; }
 dialog.modal:modal { overscroll-behavior: contain; }
-dialog.modal[open] { display: flex; flex-direction: column; overflow: hidden; }
 dialog.modal:focus { outline: none; }
 .modal h3 { margin: 0 0 16px; font-size: 16px; line-height: 1.4; }
 .modal.notify-modal { width: min(680px, 100%); }
@@ -672,8 +702,28 @@ dialog.modal:focus { outline: none; }
   .config-panel { flex-basis: 260px; }
 }
 @media (max-width: 640px) {
-  .topbar { padding: 9px 10px; gap: 8px; row-gap: 6px; }
+  /* 窄屏顶栏：只保留「品牌 / 新建 / 更多 / 设置」四个等高控件，单行不换行；
+     主题、通知、文档、身份信息收进「更多」菜单（见 .mobile-only）。 */
+  .topbar { padding: 9px 10px; gap: 8px; row-gap: 6px; flex-wrap: nowrap; }
   .topbar .logo { font-size: 15px; }
+  .topbar .spacer { min-width: 4px; }
+  .topbar-actions, .who-chip { display: none; }
+  .new-task-btn { width: var(--ctl-h-lg); min-width: var(--ctl-h-lg); padding: 0; font-size: 18px; }
+  .new-task-btn .btn-label { display: none; }
+  .new-task-btn::before { content: '+'; font-weight: 500; }
+  .dd-menu .dd-trigger { width: var(--ctl-h-lg); min-width: var(--ctl-h-lg); padding: 0; }
+  .dd-menu .dd-label, .dd-menu .dd-caret { display: none; }
+  .dd-menu .dd-trigger::before { content: '⋯'; font-size: 17px; line-height: 1; }
+  .menu-pop .mobile-only { display: flex; }
+  .menu-pop .menu-sep.mobile-only { display: block; }
+  .menu-pop .menu-user.mobile-only { display: block; }
+  /* 工具条：左右两组各自不换行，整体可按行折（不再把一组按钮拦腰拆开） */
+  .page-head { gap: 8px; row-gap: 8px; flex-wrap: wrap; --toolbar-h: 36px; }
+  .toolbar-left { flex: 1 1 100%; min-width: 0; }
+  .toolbar-right { margin-left: auto; }
+  /* 提高特异性：覆盖后面同名的通用工具条规则 */
+  .page-head .toolbar-search { flex: 1 1 120px; min-width: 90px; width: auto; }
+  .page-head .toolbar-select { flex: none; width: 120px; }
   .editor-topbar { gap: 6px; row-gap: 6px; }
   .editor-topbar .flow-title { flex: 1 1 110px; min-width: 84px; max-width: 180px; font-size: 14px; }
   .editor-topbar button, .editor-topbar .dd-trigger { padding: 6px 9px; font-size: 12px; }
@@ -767,9 +817,15 @@ button.icon-text svg { flex: none; }
 .menu-pop button { gap: 6px; justify-content: flex-start; }
 .menu-pop button svg { flex: none; opacity: .85; }
 
-/* 工具条控件：搜索/筛选（主导航，靠左） */
-.toolbar-search { width: 200px; min-width: 120px; flex: 0 1 200px; height: var(--ctl-h-sm); }
-.toolbar-select { width: 120px; flex: 0 0 auto; height: var(--ctl-h-sm); }
+/* 工具条控件：搜索/筛选与按钮统一高度，避免「输入框 32px / 小按钮 26px」的错位 */
+.toolbar-search { width: 200px; min-width: 120px; flex: 0 1 200px; }
+.toolbar-select { width: 120px; flex: 0 0 auto; }
+.page-head { --toolbar-h: var(--ctl-h); }
+.page-head input.toolbar-search,
+.page-head select.toolbar-select,
+.page-head button.small {
+  height: var(--toolbar-h); min-height: var(--toolbar-h);
+}
 
 /* ---- 任务详情（点任务名打开）：键值式概览 ---- */
 .detail-panel {
@@ -827,9 +883,7 @@ button.icon-text svg { flex: none; }
 .audit-action { color: var(--text); }
 .audit-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* 顶栏登录身份 */
-.who-chip { display: inline-flex; align-items: center; gap: 6px; height: var(--ctl-h); padding: 0 10px; border-radius: var(--r-md); border: 1px solid var(--border); background: var(--panel2); font-size: var(--fs-sm); color: var(--text); white-space: nowrap; }
-.who-chip em { font-style: normal; color: var(--muted); font-size: var(--fs-xs); }
+/* 顶栏登录身份（幽灵文字，不当成按钮；统一样式定义在上方） */
 
 /* =====================================================================
    设置页（GitHub 风格）：左侧图标导航 + 右侧分区内容

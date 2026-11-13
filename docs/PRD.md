@@ -1,9 +1,18 @@
 ﻿# CheckQ PRD — 可视化 HTTP 自动化流程引擎
 
-版本: 0.4 (PRD) | 基线代码: v0.3.17 | 状态: v0.2/v0.3 P0 全量实现；**v0.4 产品完整度升级**（2026-11-10）——通知 7 渠道原生集成、日志 record 三档（qinglong/qiandao 风格干净日志）、使用引导系统、首次启动 bootstrap、存储立即 flush + 备份评估、全量任务自动完成（19/19，事件链）、竞品分析与迭代管理（见 docs/ROADMAP.md / docs/COMPETITIVE-ANALYSIS.md）
+版本: 0.4 (PRD) | 基线代码: v0.3.17 | 维护更新: 2026-11-13 | 状态: v0.2/v0.3 P0 全量实现；**v0.4 产品完整度升级**——通知渠道原生集成、日志 record 三档（干净日志）、使用引导系统、首次启动 bootstrap、存储立即 flush + 备份评估、竞品分析与迭代管理（见 docs/ROADMAP.md / docs/COMPETITIVE-ANALYSIS.md）
 定位一句话: **像搭积木一样搭建"自动签到/打卡/监控"类 HTTP 流程，一个模板派生多份任务，全程可视化、可调试、可告警。**
 
-> **续建判断依据（2026-11-08 评审）**：本仓库并非空仓——已有 v0.2 可运行基线（DAG 引擎、8 类节点、Pick Panel、模板系统、SSE 日志、cURL/HAR/QD 导入、103 项单测、路由器实测实例）。产品目标（拖拽流程化、条件分支、自定义请求、日志推送、Docker 部署）与现状同向，重建只会丢弃已验证资产。决策：**续建**。缺口用实测数据驱动收敛——现网 QD 采样（39 任务/13 模板，见 docs/QIANDAO-COMPAT.md）定位出 4 个真实阻塞点（cookie 罐/util 转换/表达式层/变量 URL），本轮已全部闭环，QD 任务运行级兼容 ≥ 12/13。
+> **续建判断依据**：本仓库并非空仓——已有可运行基线（DAG 引擎、节点体系、Pick Panel、模板系统、SSE 日志、cURL/HAR/QD 导入、全量单测、本地实例验证）。产品目标与现状同向，重建只会丢弃已验证资产。决策：**续建**。缺口用兼容性采样收敛（见 docs/QIANDAO-COMPAT.md），持续回归。
+
+> **维护基线（2026-11-13，覆盖后文旧标记）**：后文各章的 ✅/🔶/⬜ 是历史规划快照，**以实现为准**。当前定版：
+> - **模板联动**：派生任务 = 模板 + 各自参数，模板一改所有派生任务立刻跟随；无同步按钮、无版本标记；派生任务改脚本内容自动转独立任务（见 §4.3）。
+> - **交互模型**：点任务名 → 任务详情（可改名/备注 + 只读概览）；进画布是显式动作「··· → 编辑流程」；任务行 ··· 只有 编辑流程 / 复制副本 / 启用|停用调度 / 删除；通知渠道、日志配置、存为模板、填 Cookie、任务详情均在**编辑器「更多」**。
+> - **任务级失败重试**：默认开启，最多 3 次、指数退避 5 秒起、随机抖动、单次上限 5 分钟；跑满次数仍失败才判定最终失败（见 §4.5、§4.7）。
+> - **前端基建**：原生 `<dialog>` + Popover API + `color-scheme` + 容器查询 + `content-visibility`，遵循 Modern Web Guidance 1.0；冷中性石墨双主题（见 §4.14）。
+> - **窄屏顶栏**：单行四控件（品牌 / 新建 / 更多 / 设置），主题、通知、文档、身份信息收进「更多」；工具条左右分组各自不拆散。
+> - **护栏**：`node tools/ui-smoke.cjs`、`copy-audit.cjs`、`secret-scan.cjs`、`project-audit.cjs`；命中即 exit 1。
+> - **脱敏**：仓库只放框架本身；具体站点、模板、实例、账号与本地测试数据一律不入库（由 `tools/secret-scan.cjs` 内容级校验）。
 
 ---
 
@@ -21,7 +30,7 @@
 非目标（明确不做）:
 - 无头浏览器/Playwright 执行（保持纯 HTTP，轻量是硬约束）
 - 验证码识别、OCR（可由用户自行接入第三方 API 节点）
-- 多用户/多租户（单管理员密码 + API Key 即可）
+- 多租户隔离（当前是单实例多用户 + 角色，不做租户级数据隔离）
 - 分布式执行、集群调度
 
 ---
@@ -97,10 +106,10 @@ Run = { id, flowId, trigger: manual|cron|debug|api, status, logs[], vars, finalM
 **模板系统** ✅
 - 从流程"存为模板"；JSON 导入；列表（步数/变量数/已建任务数）；改名/改描述；删除（不影响已建任务）
 - 实例化: 克隆节点图 + 合并默认变量 + 覆盖传入变量 + 自动命名 `模板名 · 序号`；任务与模板用 tplId 关联
-- **模板编辑器**: 只能改名/描述/查看变量（默认变量值不可编辑 ⬜）
+- **模板编辑器**: 改名 / 描述 / 变量默认值编辑；改模板后所有派生任务立刻跟随（当前实现见 §4.3）
 
 **任务与运行** ✅
-- 列表页: 名称(链接进编辑器) / cron / 调度开关 / 最近运行状态(点开看日志) / ▶立即运行 / 编辑 / 删除
+- 列表页: 名称(点开任务详情) / cron / 调度开关 / 最近运行状态(点开连续日志) / 运行 / 日志 / ···(编辑流程·复制副本·启停调度·删除)
 - 运行结果弹窗: 步骤列表、每步展开看请求头(脱敏)/body/响应、同步等待（流程通常 <60s）
 - 编辑器内 ▶运行 + ConfigPanel "▶ 调试到此为止"（从头执行到所选节点含，trigger=debug）
 - 运行历史: 每 flow 保留 500 条；listRuns(limit=30)
@@ -108,9 +117,9 @@ Run = { id, flowId, trigger: manual|cron|debug|api, status, logs[], vars, finalM
 **调度** ✅ croner 实现；分钟级 cron + 每流时区（默认 Asia/Shanghai）；enabled 开关；60s 对账自动重建
 **通知** ✅ 流级（webhook/telegram/bark × onSuccess/onFailure）+ notify 节点级
 **导入** ✅ HAR → 流程；qiandao 模板 → 流程（含 SKIP 变量过滤、init_env → vars）
-**认证** ✅ 单密码（scrypt）+ session cookie 7d + X-API-Key
-**存储** ✅ JSON 文件（flows/runs/templates/meta），原子写 + 400ms 节流
-**部署** ✅ Dockerfile + docker-compose（prod 映射 18888）；测试 4 项全过
+**认证** ✅ 多用户 + 角色 + TOTP；session cookie + X-API-Key
+**存储** ✅ JSON 文件（flows/runs/templates/meta/notifications），原子写 + 变更立即 flush
+**部署** ✅ Dockerfile + docker-compose（端口可按需映射）；服务端全量单测 + 浏览器回归
 
 **已知短板（本 PRD 要解决的）**
 1. 无每节点自动重试/退避（当前靠流程图手工连"failed→改UA→再试"）✅ v0.2 已实现（retry 配置 + 指数退避）
@@ -317,14 +326,15 @@ script 沙箱细则:
 | 导入 | 现有 JSON 导入直接进模板库（现进流程 ⬜ 需改）；格式校验 + 报错定位 | 🔶 |
 | CSV 批量建任务 | 模板卡片"批量创建"：粘贴 CSV（首行=变量名，一列可映射到任务名），预览表格 → 确认生成 N 个任务 | ✅ v0.2 |
 | 模板市场 | 框架内置"从 URL 导入"和"粘贴 JSON"；市场本体是独立仓库/站点（框架不内置业务），提供市场索引 JSON 规范：`{name, desc, url, vars, sha256}`，一键拉取校验后入库 | ⬜ P1 |
-| 版本与同步 | 模板更新后已有任务**不自动变**（克隆语义）；提供"检查模板更新"→ diff 视图（节点/变量差异）→ 手动应用 | ⬜ P2 |
+| 模板联动 | 派生任务 = 模板 + 各自参数：**模板一改，所有派生任务立刻跟随**（`store.resolveFlow()` 读时取模板当前流程图）；无「更新到模板版本」按钮、无「待更新」标记；模板删除后回退到任务自己保存的最后一份流程图 | ✅ 定版 |
+| 派生任务改脚本 | 派生任务改了**脚本内容**（稳定序列化比较、忽略节点坐标）→ 自动转为独立任务并提示一次（`PUT` 返回 `detached`）；变量值、通知渠道保留，日志配置随模板 | ✅ 定版 |
 | 删除保护 | 模板删除时若有关联任务，弹窗提示数量；任务不受影响（现语义保持） | ✅ |
 
 CSV 批量创建格式:
 ```csv
-name,cookie,note
-主号,koa:sess=xxx; gld:sess=yyy,
-备用,koa:sess=zzz,低频号
+name,example_token,note
+task-01,placeholder-a,示例 A
+task-02,placeholder-b,示例 B
 ```
 - `name` 列可选（缺省自动 `模板名 · 序号`）；其余列名必须 ⊆ 模板 varNames，多余列报错
 - 预览页可勾选跳过某行；生成后跳回列表并高亮新任务
@@ -350,12 +360,12 @@ Template = {
 
 | 功能 | 设计 | 状态 |
 |---|---|---|
-| 列表 | 现有列 + **下次运行时间**（croner 支持 nextRun）+ 来源模板名 + 标签/分组 | 🔶 |
-| 搜索/筛选 | 顶部搜索框（名称/备注）；筛选: 按模板、按状态（最近失败）、按调度开关 | ✅ v0.2（搜索 + 全部/已启用调度/最近失败；按模板筛选 ⬜） |
-| 批量操作 | 多选 → 批量运行 / 批量启停 / 批量删除 | ⬜ P1 |
-| 立即运行 | ✅ 已有；运行中显示"运行中…"+ 行内 spinner | ✅ |
-| 运行排队 | 并发保护开启后，手动点击进入队列，列表状态显示"排队中 #n" | ⬜ P1 |
-| 变量查看/编辑 | 任务行"变量"按钮 → 弹窗查看+编辑 vars（敏感值默认打码，点眼睛显示，改后需保存） | ✅ v0.2（编辑器内 VarsEditor；首页任务行"变量"按钮 ⬜） |
+| 列表 | 列：名称/备注、调度、下次运行、状态、上次运行、操作；只读来源模板标注；表头 sticky、窄屏横滚时操作列固定 | ✅ |
+| 搜索/筛选 | 顶部搜索框（名称/备注）；筛选: 全部 / 已启用调度 / 最近失败 | ✅ |
+| 批量操作 | 「批量管理」勾选 → 批量运行 / 启用 / 停用 / 删除（`POST /api/flows/batch`） | ✅ |
+| 立即运行 | 行内「运行」；运行中显示「运行中…」 | ✅ |
+| 运行排队 | 同任务串行队列，第二次请求进入排队；统计里显示排队中任务数 | ✅ |
+| 任务详情 | 点任务名打开：改名 / 改备注 + 只读概览（调度、时区、状态、重试策略、下次/上次运行、流程规模、变量（敏感项遮蔽）、通知渠道、来源模板、创建/修改时间） | ✅ 定版 |
 | 克隆任务 | 行内"复制"→ 复制为新任务（名字 + ` · 副本`，保留 tplId/jitter/log） | ✅ v0.2 + v0.3.4 修复 |
 | 删除确认 | ✅ confirm 弹窗（保持） | ✅ |
 
@@ -368,7 +378,8 @@ Template = {
 | 随机抖动 | 流级 `jitterMinutes: 0-30`：触发时刻在 cron 点后随机延迟 0-n 分钟（反风控整点指纹；编辑器顶栏可设） | ✅ v0.3.4 |
 | 错峰预设 | cron 预设里提供"每天随机时间 8-10 点"这类模板（本质 jitter） | ⬜ P2 |
 | 补跑策略 | 容器重启错过的运行：不补跑（保持签到类语义，下次 cron 到点再跑）；页面显示"上次错过的计划时间" | ⬜ P2 |
-| 调度健康 | 列表页顶部状态条：调度器活跃、共 N 个任务启用、下次最近触发 | ⬜ P2 |
+| 调度健康 | 列表页状态读数条：任务数 / 调度中 / 模板数 / 今日次数 / 成功 / 失败 / 成功率 / 下次调度及任务名 | ✅ |
+| **失败重试（任务级）** | 编辑器「调度」里配置：`enabled / maxAttempts / backoff(exponential\|linear\|fixed) / baseDelayMs / maxDelayMs / jitter`；默认开启、3 次、指数退避 5 秒起、上限 5 分钟、equal jitter。**只有最后一次仍失败才判定任务失败**；调试运行不重试；上一次运行/重试未结束时调度跳过下一拍 | ✅ 定版 |
 
 ### 4.6 编辑器 UX（ReactFlow 画布）
 
@@ -442,9 +453,9 @@ ConfigPanel 改进:
 | 运行历史页 | 任务详情：运行列表（时间/触发/状态/耗时/最终消息），筛选触发方式 | 🔶 |
 | 日志详情 | 每步请求(脱敏)/body/响应(截断 2k)/断言结果/耗时 | ✅ |
 | 敏感脱敏 | 头部 cookie/authorization 前 12 字符（现有）；**扩展：所有值中命中敏感变量名（cookie/token/password/secret/key）的片段替换 `***`；vars 快照同样脱敏** | ✅ v0.2 |
-| 错误分类 | 每步错误标注类型：`network`（网络/超时）/ `assert`（断言）/ `engine`（配置/脚本），Timeline 过滤器按类筛 | ⬜ P1 |
+| 错误分类 | 每步错误标注类型：`network` / `assert` / `engine`，运行抽屉按类过滤 | ✅ |
 | 保留策略 | 每 flow 500 条（现有）；runs.json > 50MB 提示清理 | 🔶 |
-| 实时推送 | SSE `GET /api/runs/:id/stream`；引擎 logSink → SSE；断线自动重连补拉 | ⬜ P1 |
+| 实时推送 | `POST /api/flows/:id/run { "stream": true }` → SSE（start / log / done），引擎 `logSink` 边执行边推 | ✅ |
 
 #### 4.7.4 日志内容配置（记录什么、记多少、提炼什么）
 
@@ -493,7 +504,7 @@ ConfigPanel 改进:
 | `success` | 成功与错误都提示 |
 | `all` | 全部提示（含信息类） |
 
-面板上的「今日汇总」始终是**实时数据**（`GET /api/system/stats`），打开首页即见；定时推送是**独立可选**项（「每日总推送」，默认关），见 §4.8。
+面板上的「今日汇总」始终是**实时数据**（`GET /api/system/stats`），打开首页即见；定时推送是**独立可选**项（「每日汇总推送」，默认关），见 §4.8。
 
 **记录内容开关（`log.include`）**
 
@@ -533,6 +544,21 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 - Pick"记录到日志" → 生成 **keywords 规则** → 只影响日志展示/摘要/通知内容
 - 两者可一键互转（extract 节点↔keywords 规则，语义对齐时）
 
+#### 4.7.5 任务级失败重试（定版）
+
+一次「运行」= 最多 `retry.maxAttempts` 次**整流尝试**，与 http 节点内的节点级重试互补：
+
+| 层 | 触发 | 粒度 | 默认 |
+|---|---|---|---|
+| 节点级 `config.retry` | 单请求网络错误 / 断言失败 | 同一次执行内立刻重发 | 关闭 |
+| 任务级 `flow.retry` | 整条流程跑完仍失败 | 从头再跑，间隔按退避策略 | **开启，最多 3 次** |
+
+- 退避：`exponential`（5s → 10s → 20s …）、`linear`、`fixed`；`jitter=true` 用 equal jitter 避免多任务同时重试；单次等待封顶 `maxDelayMs`。
+- **最终失败判定**：只有第 N 次尝试仍失败，`run.status` 才为 `failed`；前几次失败不算任务失败。
+- 记录：`run.attempts[]`（次数、开始时间、耗时、成功与否、下次等待毫秒）、`run.attempt`、`run.maxAttempts`；日志插入「第 N/M 次尝试」分隔行；`finalMessage` 与通知模板都带尝试次数。
+- UI：调度弹窗可开关与调参并预览等待序列；任务详情显示策略摘要（悬停看完整）；运行抽屉显示「共 N 次尝试」与每次的成败/等待。
+- 边界：调试运行（`debugStopId`）不重试；cron 触发时若上一次运行/退避尚未结束则跳过这一拍；老数据启动自动迁移到默认配置；非法值由 `normalizeRetry()` 收敛。
+
 ### 4.8 通知（v0.4：qinglong 标准原生集成）
 
 | 功能 | 设计 | 状态 |
@@ -545,7 +571,7 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 | 消息模板 | 流级 `notify.template`，可用变量: flow.name/status/message/duration/time | ✅ v0.4 |
 | 配置 UI | 编辑器 ··· →「通知渠道」：渠道卡片、字段按类型动态显示、保存/测试发送 | ✅ v0.4 |
 | 发送测试 | 「测试发送」立即向所有渠道发测试消息并回显成功/失败 | ✅ v0.4 |
-| 每日汇总 | 面板上的汇总**始终实时**（`GET /api/system/stats`，打开首页即见）；**定时推送是独立可选项**「每日总推送」（默认关）：可选时间 + 目标任务，把"今日 N 次 / 成功 / 失败 / 下次调度"推到该任务的通知渠道；也可「立即推送今日汇总」手动发一次 | ✅ v0.4.1 |
+| 每日汇总 | 面板上的汇总**始终实时**（`GET /api/system/stats`，打开首页即见）；**定时推送是独立可选项**「每日汇总推送」（默认关）：可选时间 + 目标任务，把"今日 N 次 / 成功 / 失败 / 下次调度"推到该任务的通知渠道；也可「立即推送今日汇总」手动发一次 | ✅ v0.4.1 |
 | 界面提示级别 | 右上角提示默认**只报错误**；设置里可切「仅错误 / 成功+错误 / 全部」（`GET/PUT /api/system/ui`） | ✅ v0.4.1 |
 | 静默时段 | 失败通知勿扰 23:00-7:00（汇总里合并） | ⬜ P2 |
 | 通知节点 | 流程内 notify 节点（webhook/telegram/bark），用于自定义推送内容 | ✅ |
@@ -606,34 +632,39 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 | 形态 | 左导航 + 右内容，一屏无滚动；文案全部中文、去技术黑话 | ✅ v0.4 |
 | 上下文引导 | 编辑器空画布引导、变量面板「运行日志里出现过未定义的变量」提示 | ✅ |
 
-### 4.13 自动化任务完成（事件链，v0.4）
+### 4.13 多步骤事件链（通用能力）
 
-> 以「多账号签到 + 任务中心活动」这类场景为最佳案例：不仅自动签到，还能自动完成「任务中心」全部活动。
+> 框架不内置任何业务事件；下述能力用于把「上报 → 回读进度 → 条件领取 → 幂等重跑」这类多步骤链路搭成流程。
 
-| 功能 | 设计 | 状态 |
+| 能力 | 实现方式 | 状态 |
 |---|---|---|
-| 事件上报 | `POST /v2/report`（桌面/web/小程序三种客户端指纹），支持批量事件数组 | ✅ v0.4 |
-| 任务事件链 | 桌面对话链（agent_task_created→chat_response）、应用五连、template_used、playbook、automation、expert_summon/use、skill_info、skill_share | ✅ v0.4（19/19 全量通过） |
-| 专家真实对话 | `POST /v2/chat/completions`（SSE 抓服务端 requestId）→ 使用事件必须带真实 id | ✅ v0.4 |
-| 幂等与回读 | 上报后轮询任务进度，达标才 claim；重复运行不重复领奖 | ✅ v0.4 |
-| 通用化 | 其他站点若有类似埋点/进度接口，可用 script 生成事件体 + http 上报（框架能力，非内置模板） | ✅ 能力具备 |
+| 事件体生成 | `script` 沙箱或 `set` 节点用表达式拼装请求体；支持时间戳、哈希、随机值 | ✅ |
+| 批量上报 | http 节点支持自定义方法 / 头 / body；可用 `foreach` 遍历数组逐项上报 | ✅ |
+| 会话与令牌 | run 级 cookie 罐 + `extract` 提取响应里的 token / id，后续步骤引用 | ✅ |
+| 进度回读与条件分支 | 再发一个 http 请求 → `condition` 用 jexl 判断是否达标 → 双出口分流 | ✅ |
+| 幂等 | 条件判断 + 变量记录「已完成」标记；重复运行不会重复执行副作用步骤 | ✅ 由流程编排保证 |
+| 失败可恢复 | 任务级退避重试（默认 3 次）+ 节点级重试；每次尝试有日志与通知 | ✅ |
+| 调试 | 调试运行 / 调试到此为止 / 连续日志流，逐步查看请求与响应 | ✅ |
+
+边界：具体接口路径、事件名、进度判定规则都属于**用户自己的业务流程**，通过画布配置，不写进框架、不写进公开文档。
 
 ---
 
-### 4.14 UI/UX 规范（v0.4.2）
+### 4.14 UI/UX 规范（2026-11-13 定版）
 
 > 目标：交互「少按钮、强一致、可预期」。本节是所有页面的实现约束，新增页面必须遵守。
 
-#### 4.14.1 弹窗（Modal）统一骨架
+#### 4.14.1 弹窗（原生 `<dialog>`）统一骨架
 
 | 元素 | 规范 |
 |---|---|
-| 头部 | 标题（必填）+ 副标题（可选，一行说明），**右上角固定 ✕ 关闭按钮**（28×28，hover 描边） |
-| 关闭方式 | ✕ / `Esc` / 点击遮罩，三者等价；**底部不再堆「关闭」按钮** |
-| 正文 | 独立滚动区（头部与底部操作区固定）；内容超出时只滚正文，不滚弹窗 |
-| 底部操作区 | 固定在底部、右对齐；**主操作在最右**，次操作在左（如 `取消` → `保存`）；破坏性操作（删除/清空）放最左并用 danger 样式 |
-| 实现 | 统一用 `web/src/components/Modal.jsx`，禁止各页面自建 `modal-mask` 结构 |
-| 焦点 | 打开时焦点移入弹窗第一个可交互元素；`role="dialog" aria-modal="true"` |
+| 头部 | 标题（必填）+ 动态副标题（可选）；**右上角固定 ✕ 关闭按钮**（26×26，hover 描边） |
+| 关闭方式 | ✕ / `Esc` / 点击遮罩，三者等价；**底部不再堆「关闭」按钮**（任务详情的「关闭」是次要操作，与保存并列，属例外） |
+| 正文 | 独立滚动区（头部与底部操作区固定）；`overscroll-behavior: contain` 阻止滚动链穿透 |
+| 底部操作区 | 固定在底部、右对齐；**主操作在最右**，次操作在左；破坏性操作用 danger 样式 |
+| 实现 | 统一用 `web/src/components/Modal.jsx`：`showModal()` + `closedby="any"` + `aria-labelledby`；**禁止**手写 `role="dialog"` / `aria-modal` / 焦点陷阱 / `body` 滚动锁 / 自建 `modal-mask` |
+| 定位 | 显式 `position: fixed; inset: 0; margin: auto; height: fit-content`，跨浏览器都居中；`dialog.modal:not([open]) { display: none }` 兜底 |
+| 焦点 | 首表单控件优先；无表单控件时聚焦 dialog 本身（不要落到右上角 ✕）；关闭后焦点回到触发按钮 |
 
 #### 4.14.2 日志与运行结果
 
@@ -645,7 +676,7 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 
 | 项 | 规范 |
 |---|---|
-| 图标按钮 | ≥ 30×30px（顶栏 `?` / 主题 / 🔔 / 日志坞 ✕） |
+| 图标按钮 | ≥ 30×30px（桌面 32、移动端 38，幽灵边框 + hover 底色）；顶栏 `?` / 主题 / 🔔 / 文档 / 设置 / 日志坞 ✕ |
 | 小按钮 | ≥ 26px 高；文字型链接按钮 ≥ 22px 高 |
 | 危险操作 | 必须二次确认（`confirm` 或删除态样式），文案说明对象 |
 | 文案 | 按钮用动词短语（取消 / 保存 / 创建任务 / 测试发送）；不用 emoji 代替文字（去 emoji 化） |
@@ -655,55 +686,74 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 
 | 功能 | 位置 | 说明 |
 |---|---|---|
-| 每日总推送（定时） | 设置 → 通知与汇总 | 默认关；可选时间 + 目标任务 |
-| 立即推送今日汇总 | 设置 → 通知与汇总 | 面板汇总本身始终实时 |
-| 通知渠道 / 日志配置 / 存为模板 / 填 Cookie | 任务编辑器 ··· | 任务级配置 |
+| 每日汇总推送（定时） | 设置 → 通知与推送 | 默认关；可选时间 + 推送单位（任务） |
+| 立即推送今日汇总 | 设置 → 通知与推送 | 面板汇总本身始终实时 |
+| 通知渠道 / 日志配置 / 存为模板 / 填 Cookie / 任务详情 | **编辑器「更多」** | 任务级配置；编辑器「更多 → 任务详情…」复用首页同一个 `TaskDetailModal` |
+| 点任务名 | 任务详情弹窗 | 改名 / 改备注 + 只读概览；**进画布必须走「··· → 编辑流程」** |
+| 任务行 ··· | 编辑流程 / 复制副本 / 启用\|停用调度 / 删除 | 不再有单独的基础信息入口 |
 | 任务级「发送每日汇总」 | ❌ 已移除 | 避免与全局推送设置重复 |
 
 #### 4.14.5 布局底线
 
-- 编辑器与首页在 1440×900 下一屏放下（`body.scrollHeight == innerHeight`），无横向溢出；
-- 移动端（<640px）：顶栏不换行挤压、表格横向滚动、弹窗宽度自适应、日志坞改为纵向文档流。
+- 编辑器与首页在 1440×900 下一屏放下，无横向溢出；表格 sticky 表头 + 容器查询，数字等宽 `tabular-nums`；
+- 桌面顶栏：`品牌 / 新建 / 更多 / 身份（纯文字） / 动作组（主题·通知·文档） / 设置`，**全部等高、单行、垂直居中**；
+- 窄屏（≤640px）：顶栏 `flex-wrap: nowrap`，只保留 `品牌 / + / ⋯ / 设置` 四个 38px 控件；主题、站内通知、文档中心、登录身份收进「更多」菜单（`.mobile-only`）；
+- 工具条拆成 `.toolbar-left` / `.toolbar-right` 两组：组内不拆散，组间才折行；搜索框可伸缩，所有控件同高（`--toolbar-h`）；
+- 弹窗宽度自适应、内容区独立滚动；日志坞移动端接近全屏；
+- 护栏：`node tools/ui-smoke.cjs` 在 7 视口 × 明暗主题下机器检查溢出、重叠、换行、菜单裁剪、弹窗居中与控制台报错。
 
 #### 4.14.6 调试运行 vs 正常运行（v0.4.2）
 
 | 入口 | 行为 | 日志 |
 |---|---|---|
-| 顶栏「运行」 | 正常执行 | **只输出配置好的日志**（默认 `record=log`：log 节点输出 + 失败步骤）；多余细节不落库 |
-| 任务 ··· →「调试运行」 | 正常执行，但强制记录每步请求/响应 | 自动展开**运行过程窗口**，逐步显示（含请求头/体、响应体），可展开每步细节 |
-| 节点「调试到此为止」 | 执行到指定节点即停 | 同调试运行（强制记录细节） |
-| 顶栏「日志」/ 状态徽章 | 不执行 | 打开**连续日志流**（历史多次运行），多余日志在这里查 |
+| 编辑器「运行」 | 正常执行 | **只输出配置好的日志**（默认 `record=log`：log 节点输出 + 失败步骤）；多余细节不落库 |
+| 编辑器「调试运行」/ 节点「调试到此为止」 | 正常执行，但强制记录每步请求/响应 | 展开运行过程窗口（含请求头/体、响应体），可展开每步细节 |
+| 任务行「日志」/ 状态徽章 | 不执行 | 打开**连续日志流**（历史多次运行），多余日志在这里查 |
 
 - 日志坞里的「调试」开关只是**视图开关**（看已记录的每步细节），不会改变后续运行记录什么；
 - 流程里没有 log 节点时，正常运行会自动退回「记录全部步骤」，避免日志空白。
 
-#### 4.14.7 每日总推送的「推送单位」（v0.4.2）
+#### 4.14.7 每日汇总推送的「推送单位」
 
 - 推送单位 = **任务**（用该任务自己的通知渠道发）；
-- 设置 →「每日总推送」里勾选哪些任务要收汇总（可多选），没有通知渠道的任务不出现；
-- 接口：`GET /api/system/push-targets`（可推送单位列表）、`GET/PUT /api/system/daily-summary-config`（`targetFlowIds` 数组）、`POST /api/system/daily-summary`（`flowIds`）。
+- 设置 →「每日汇总推送」里勾选哪些任务要收汇总（可多选），没有通知渠道的任务不出现；
+- 接口：`GET /api/system/push-targets`（可推送单位列表）、`GET/PUT /api/system/daily-summary-config`（`targetFlowIds` 数组）、`POST /api/system/daily-summary`（`flowIds` 或 `flowId`）。
 
-#### 4.14.8 品牌与设计令牌（v0.4.2）
+#### 4.14.8 品牌与设计令牌（2026-11-13 定版）
 
 全站尺寸只认一套令牌（`web/src/styles.css` 顶部 `:root`）：
 
 | 令牌 | 值 | 用途 |
 |---|---|---|
-| `--ctl-h` / `--ctl-h-sm` / `--ctl-h-lg` | 32 / 26 / 38px | 标准 / 小号 / 移动端控件高度（按钮、输入、选择、下拉 summary） |
+| `--ctl-h` / `--ctl-h-sm` / `--ctl-h-lg` | 32 / 26 / 38px | 标准 / 小号 / 移动端控件高度 |
 | `--ctl-px` / `--ctl-px-sm` | 14 / 11px | 横向内边距 |
-| `--r-sm` … `--r-xl` | 6 / 8 / 12 / 14px | 圆角梯度 |
+| `--r-xs` … `--r-xl` | 2 / 4 / 6 / 8 / 12px | 圆角梯度（收敛，不再处处同圆角） |
 | `--fs-xs` … `--fs-xl` | 11 … 17px | 字号梯度 |
 | `--sp-1` … `--sp-6` | 4 … 24px | 间距梯度 |
 | `--icon-sm/md/lg` | 13 / 16 / 20px | 图标尺寸 |
+| `--bg` / `--panel` / `--border` / `--accent` | 夜 `#0b0e11` / `#11151a` / `#232a32` / `#3fa7ad`；日 `#f3f5f6` / `#fff` / `#d9dfe3` / `#14707a` | 冷中性石墨 + 低饱和汽油蓝绿双主题 |
 
 规范：
 - 所有按钮（主/次/小/图标/菜单项）走同一高度与圆角，**不得再写行内 padding/height**；
-- 图标统一用 `web/src/components/Icons.jsx` 的线性 SVG（`IconBell / IconHelp / IconSun / IconMoon / IconAuto / IconClose / IconBug / IconDownload / IconTrash / IconMore`），**禁止 emoji 充当图标**；
+- 状态用「小圆点 + 文字」，不用彩色药丸；`.chip` 是小号方角标签；元信息用 `.meta` 细竖线分隔；
+- 图标统一用 `web/src/components/Icons.jsx` 的线性 SVG，**禁止 emoji 充当图标**；设置按钮用滑块式图标（16px 下比多齿齿轮干净）；
 - 危险操作统一走应用内确认弹窗（`web/src/confirm.jsx` 的 `confirmDialog`），不再用浏览器 `confirm`；
-- 日志坞高度可拖拽（把手 `drawer-grip`，记住高度），移动端默认 92vh 接近全屏。
+- 日志坞高度可拖拽（把手 `drawer-grip`），移动端接近全屏。
 
+#### 4.14.9 现代 Web 原生能力（Modern Web Guidance 1.0）
 
-#### 4.14.6 文案金标准（v0.4.3）
+| 能力 | 落地 |
+|---|---|
+| 弹窗 | 原生 `<dialog>` + `showModal()` + `closedby="any"`；浏览器负责焦点、Esc、背景 inert、顶层渲染 |
+| 滚动 | `dialog:modal` / `dialog::backdrop` 的 `overscroll-behavior: contain`（不再给 `html/body` 上锁） |
+| 菜单 | Popover API + 顶层渲染；**弹窗内的菜单必须 Portal 到该 `<dialog>` 内部**，否则被 inert 拦住点不到 |
+| 主题 | `<meta name="color-scheme" content="dark light">` + `:root` 上的 `color-scheme`；`prefers-reduced-motion` 降级动效 |
+| 表格 | 语义 `<table>/<thead>/<th scope>` + `<caption class="sr-only">` + sticky 表头 + `container-type: inline-size`；可聚焦横滚区 |
+| 表单 | `autocomplete="current-password" / "new-password" / "one-time-code"`、`:user-invalid`、`aria-label`、`role="alert"` |
+| 性能 | 长日志 `content-visibility: auto` + `contain-intrinsic-size` |
+| 机械校验 | `npx modern-web-guidance@latest legacy-scan web/src --json`（当前 0 命中）；规范包 `.agents/` 本地留存不入库 |
+
+#### 4.14.10 文案金标准（v0.4.3）
 
 > 用户是**终端用户**，不是需要被科普的开发者。面板里不写"给你讲道理"的说明文字。
 
@@ -729,7 +779,7 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 | 目标站对 Node TLS 指纹风控 | curl 后端 | ✅ | http2 配套 (P1) |
 | GBK 编码站点（老 PT 论坛） | charset 转码 | ✅ v0.2 | — |
 | 需代理出口 | proxy | ✅ v0.2 | — |
-| 偶发失败需重试 | 节点级重试+退避 | ✅ v0.2 | — |
+| 偶发失败需重试 | 节点级重试 + **任务级退避重试（默认 3 次）** | ✅ | — |
 | 反自动化风控（整点高峰、固定间隔指纹） | 随机延迟 + cron 抖动 | 🔶 | random-delay 节点 ✅ v0.2；cron jitter ⬜ (P1) |
 | 翻页/列表批量操作（如批量保种页面遍历） | foreach | ⬜ | foreach (P1) |
 | 多账号同站 | 模板 → CSV 批量建任务 | ✅(手动逐个) | CSV 批量 (P0) |
@@ -742,37 +792,54 @@ reqHeaders / reqBody / resBody / varsSnapshot 四项独立开关；resBodyLimit 
 
 ## 6. API 规格
 
-现有（✅）+ 规划（⬜）。全部 JSON；鉴权除 login/health 外必须 session 或 X-API-Key。
+全部 JSON；除 `login` / `health` / `bootstrap` / `openapi.json` 外需要会话 Cookie 或 `X-API-Key`；写操作校验同源 `Origin`。
+完整端点表见 `docs/API.md` 与 `GET /api/openapi.json`，以下为**当前实现基线**（不是规划）：
 
 ```
-POST /api/login {password}                          ✅
-POST /api/logout                                    ✅
-GET  /api/health                                    ✅
-GET  /api/flows                                     ✅  列表(含 lastRun/nextRun⬜)
-POST /api/flows                                     ✅  创建
-GET  /api/flows/:id                                 ✅  详情(含 nodes/edges/vars)
-PATCH /api/flows/:id                                ✅  更新(白名单字段)
-DELETE /api/flows/:id                               ✅  删除(连带 runs)
-POST /api/flows/:id/run {debugStopId?}              ✅  同步执行；⬜ 增排队/409
-GET  /api/flows/:id/runs?limit=                     ✅
-GET  /api/runs/:id                                  ✅
-GET  /api/templates                                 ✅
-POST /api/templates                                 ✅
-POST /api/templates/from-flow/:flowId               ✅
-GET  /api/templates/:id                             ✅
-PATCH /api/templates/:id                            ✅
-DELETE /api/templates/:id                           ✅
-POST /api/templates/:id/instantiate {name?,vars?,note?}  ✅
-POST /api/templates/:id/instantiate-csv {csv}       ⬜ P0 批量
-GET  /api/templates/:id/export                      ⬜ P0 脱敏导出
-POST /api/import/curl {command}                     ⬜ P0 → 返回 http 节点 config
-GET  /api/system/backup                             ⬜ P1 全量导出
-POST /api/system/restore                            ⬜ P1
-GET  /api/system/stats                              ⬜ P2 首页统计
-GET  /api/runs/:id/stream (SSE)                     ⬜ P1 实时日志
+# 任务
+GET    /api/flows                        列表（摘要含 lastRun / nextRunAt / retry / template）
+POST   /api/flows                        创建（显式 enabled:true 且给 cron 才启用）
+GET    /api/flows/:id                    详情（派生任务返回模板当前流程图）
+PUT    /api/flows/:id                    部分更新（改脚本内容会自动脱离模板，返回 detached）
+DELETE /api/flows/:id                    删除
+POST   /api/flows/:id/run               { stream?, debugStopId?, debug? }；失败按 retry 退避重试
+POST   /api/flows/:id/clone             复制副本
+POST   /api/flows/:id/curl              生成等价 curl
+POST   /api/flows/:id/notify-test       测试通知渠道
+POST   /api/flows/batch                  batch: run | enable | disable | delete
+GET    /api/flows/:id/logs              连续日志流
+POST   /api/import/curl / har           cURL / HAR 解析为节点草稿
+
+# 模板
+GET/POST /api/templates                 列表 / 新建
+GET/PUT/DELETE /api/templates/:id       详情 / 更新（改了模板，派生任务立刻跟随）/ 删除
+POST   /api/templates/from-flow/:flowId 从任务存为模板
+POST   /api/templates/from-url          从索引 URL 导入
+POST   /api/templates/:id/instantiate   实例化
+POST   /api/templates/:id/instantiate-csv CSV 批量实例化
+GET    /api/templates/:id/export        脱敏导出（samplesIncluded:false）
+
+# 运行记录
+GET    /api/runs?flowId=&limit=         历史
+GET    /api/runs/:id                    单次完整记录（含 attempts[]）
+
+# 系统 / 账号 / 安全
+GET    /api/health  /api/me  /api/system/stats  /api/openapi.json
+GET/POST /api/system/bootstrap           首次启动建管理员
+GET/POST /api/system/backup              脱敏 / 完整备份
+POST   /api/system/restore               恢复（新 ID、停用）
+GET/PUT /api/system/account | password | users | apikeys | ip-blocklist | audit
+GET/PUT /api/system/ai | /api/system/ui | /api/system/2fa/* | /api/system/sessions/*
+GET/PUT /api/system/daily-summary-config
+GET    /api/system/push-targets
+POST   /api/system/daily-summary        立即推送汇总
+GET    /api/notifications | POST /api/notifications/read | DELETE /api/notifications
 ```
 
-错误约定: 400 参数/校验（附 `error` 中文消息 + ⬜ `details[]` 字段级）；401 未登录；404 不存在；409 并发冲突。
+**关键数据形状**：`Flow.retry = { enabled, maxAttempts, backoff, baseDelayMs, maxDelayMs, jitter }`（默认开启 / 3 次 / 指数 / 5s / 5min / 抖动）；
+`Run.attempts[] = { attempt, startedAt, durationMs, ok, message, nextDelayMs? }`，`Run.attempt / maxAttempts` 供列表与通知展示。
+
+错误约定: 400 参数/校验（附 `error` 中文消息）；401 未登录；403 跨站或权限不足；404 不存在。
 
 ---
 
@@ -782,10 +849,11 @@ GET  /api/runs/:id/stream (SSE)                     ⬜ P1 实时日志
 |---|---|
 | 性能 | 单容器 2 核 1GB 内存可稳定跑 100 任务；JSON 存储在 <10k runs 时无卡顿 |
 | 可靠性 | 原子写文件（现有）；进程重启后调度自动恢复（现有）；调度器 60s 对账（现有） |
-| 兼容 | 现代 Chrome/Safari/Firefox；移动端可看列表和日志（编辑器 P2 适配） |
-| 可观测 | 每步日志含耗时；失败必含失败原因与响应片段 |
-| 测试 | 引擎单测（现有 4 项）+ 每新增节点/能力配单测；关键路径 E2E 真实浏览器验证 |
-| 文档 | README 部署/快速上手；docs/ 下节点用法、表达式手册、模板市场规范 |
+| 兼容 | 现代 Chrome / Edge / Firefox；移动端可看列表、日志与设置；编辑器窄屏纵向布局 |
+| 可观测 | 每步日志含耗时；失败必含失败原因与响应片段；多次尝试逐条记录 | 
+| 测试 | 服务端 `node --test "test/*.test.js"`（368 项断言）；每新增能力配单测；关键路径真实浏览器 E2E |
+| 文档 | README 部署/快速上手；`docs/` 下 API、MCP、安全、存储、兼容性与 PRD；`wiki/` 由 `tools/build-wiki.cjs` 生成 |
+| 护栏 | `ui-smoke`（7 视口 × 明暗 + 弹窗居中/顶栏对齐/菜单裁剪）、`copy-audit`、`secret-scan`（含内容级私有词）、`project-audit`（组件/链接/端点/CSS 契约）；命中即 exit 1 |
 
 ---
 
@@ -814,17 +882,22 @@ GET  /api/runs/:id/stream (SSE)                     ⬜ P1 实时日志
 - 通知：消息模板；发送测试
 - 任务：批量操作；克隆任务；空状态引导；统计卡(轻量)
 
-**v0.4 — 产品完整度（P0，2026-11-10）**
-- 通知：7 渠道原生集成（Webhook/Bark/Telegram/Server酱/钉钉/企业微信/飞书，含加签）+ 配置 UI + 测试发送；
-- 日志：`log.record` 三档（all / log / log-final）——qinglong/qiandao 风格「只显示调教好的干净日志」；
-- 引导：顶栏 `?` + 6 节使用引导，首次自动打开；
-- 账号：首次启动 bootstrap 创建管理员密码；API Key 管理完善；
+**v0.4 — 产品完整度（P0）**
+- 通知：多类型渠道原生集成（含加签）+ 配置 UI + 测试发送；
+- 日志：`log.record` 三档（all / log / log-final）——干净日志；
+- 引导：顶栏 `?` + 分节使用引导，首次自动打开；
+- 账号：首次启动 bootstrap 创建管理员；API Key 管理完善；
 - 存储：每次变更立即 flush + SIGTERM/SIGINT flush；备份/恢复 API；STORAGE-BACKUP.md；
-- 任务：某签到应用的全量 18 项任务自动完成（事件链 + 专家真实对话 + 回读领奖）；
 - UI：「下次触发」→「下次调度」；设置逐项走查（设置/日志/通知/引导一屏无滚动）。
 
+**v0.4.4 — 交互与可靠性（2026-11-13）**
+- 任务级失败退避重试（默认 3 次、跑满才判定最终失败）；模板自动跟随；点任务名打开任务详情；
+- 原生 `<dialog>` / Popover API / `color-scheme` / 容器查询，遵循 Modern Web Guidance 1.0；冷中性石墨双主题；
+- 窄屏顶栏单行四控件、工具条分组、弹窗显式居中；全量交互巡检与 4 个机械护栏；
+- 文档与 wiki 同步（PRD / API / 交互规范页 / 上手页），全程脱敏。
+
 **v0.5 — 生态（P2）**
-模板市场索引规范 + 从 URL 导入；模板更新 diff/应用；运行导出 HAR；每日汇总/静默时段；minimap/自动布局/移动端适配；错峰预设；补跑提示；MCP 扩展工具（flow_create/update/delete/import_curl）。
+模板市场索引规范 + 从 URL 导入；运行导出 HAR；每日汇总静默时段；minimap / 自动布局；错峰预设；补跑提示；MCP 扩展工具（flow_create/update/delete/import_curl）。
 
 **v1.0 — 收敛**
 文档完备（节点手册/表达式手册）；镜像发布；性能与压力验证；安全复查。
@@ -833,31 +906,44 @@ GET  /api/runs/:id/stream (SSE)                     ⬜ P1 实时日志
 
 ## 9. 验收标准（Definition of Done）
 
-1. **体验验收（核心差异化）**: §4.0.7 三条基准全部通过——cURL 到带通知模板 ≤5 分钟零正则；生成即正确；日志点选修复 ≤1 分钟。这是第一验收项，不过则产品定位不成立。
-2. **HAR 验收**: 拖入 HAR → 勾选请求 → 自动生成节点链 → 无需发起真实请求，直接基于 HAR 响应快照完成变量点选 + 日志规则配置 → 存为模板 → 实例化填变量即可运行。
-3. **日志验收**: log.level 三档行为符合 §4.7.4 表格定义；keywords 规则命中值在 Timeline 高亮、进运行摘要、进通知消息；Pick"记录到日志"生成的 regex 规则可直接使用。
-4. **功能验收**: 第 5 节矩阵中 P0 缺口全部闭环，且每项有一个真实站点的验证记录（真实浏览器/真实请求跑通，不接受仅单测）。
-5. **回归**: 现有 4 项引擎测试 + 新增单测全绿；docker compose 重建后数据无损。
-6. **交互验收**: 新用户 10 分钟内完成"导入模板→建 2 个账号任务→启用调度→收到通知"全流程，无需看文档。
-7. **安全验收**: 日志/导出中搜不到任何完整 cookie/token；登录爆破被锁定；HAR 样本不入库不入模板。
-8. **红线**: 公开仓库 `git grep` 无任何真实站点业务信息。
-9. **通知验收（v0.4）**: 7 渠道各发出一条真实测试消息（或本地 echo 等效验证），模板变量正确渲染；钉钉/飞书加签可通过服务端校验；失败渠道在 UI 明确报错。
-10. **日志验收（v0.4）**: `record=log` 运行日志只包含 log 节点（+失败步骤），http/script 等技术步骤不可见；`record=log-final` 输出一条合并日志。
-11. **引导验收（v0.4）**: 首次访问自动打开引导；`?` 在首页与编辑器均可打开；6 节内容一屏可读。
-12. **账号与存储验收（v0.4）**: 全新数据目录启动 → 登录页出现「创建管理员账号」→ 创建后可登录；`kill -TERM` 后配置不丢；备份 JSON 可恢复。
-13. **任务完成验收（v0.4）**: 案例 19/19 任务完成并领奖，重复运行零重复领奖；定时自动执行有日志证据。
+1. **体验验收**: 点选生成逻辑三条基准——导入请求到可用流程无需手写正则；生成节点能直接跑；日志点选可修复断言/提取，全程在浏览器内完成。
+2. **导入验收**: 拖入 HAR 或粘贴 cURL → 勾选请求 → 自动生成节点链；不发起真实请求即可基于响应快照配置变量点选与日志规则 → 存为模板 → 实例化填变量可运行。
+3. **日志验收**: `log.level` 三档行为符合 §4.7.4；关键字规则命中值进运行摘要与通知消息；Pick「记录到日志」生成的规则可直接使用；长日志不阻塞主线程。
+4. **功能验收**: 第 5 节矩阵中已实现项全部有单测或真实浏览器回归证据；新增能力必须补单测。
+5. **回归**: 服务端全量单测 368 项断言全绿；`docker commit` 后的镜像重建数据无损。
+6. **交互验收**: 新用户 10 分钟内完成「导入模板 → 建 2 个任务 → 启用调度 → 收到通知」，无需看文档；点任务名 = 详情，进画布 = 显式动作。
+7. **安全验收**: 日志 / 导出 / 模板导出中搜不到完整 cookie/token；登录爆破被锁定；HAR 样本不入库不入模板。
+8. **脱敏红线**: `git grep` 与 `tools/secret-scan.cjs` 均无真实站点、实例、账号或本地测试样例；`tools/project-audit.cjs` 通过。
+9. **通知验收**: 各渠道模板变量正确渲染；失败渠道在 UI 明确报错；每日汇总推送单位可勾选。
+10. **日志验收（干净日志）**: `record=log` 只含 log 节点（+失败步骤），技术步骤不可见；`record=log-final` 输出一条合并日志。
+11. **引导验收**: 首次访问自动打开引导；`?` 在首页与编辑器均可打开；内容一屏可读。
+12. **账号与存储验收**: 全新数据目录启动 → 「创建管理员账号」→ 可登录；`kill -TERM` 后配置不丢；备份 JSON 可恢复。
+13. **重试验收**: 失败任务按退避策略跑满 N 次才最终失败；`attempts[]`、日志分隔行、通知结论、运行抽屉四处都能看到第几次尝试；调试运行不重试；调度不会在重试期间重复触发。
+14. **UI 验收**: `node tools/ui-smoke.cjs` 在 7 视口 × 明暗主题 0 问题；弹窗居中、顶栏单行等高、菜单不被裁、控制台无报错；`npx modern-web-guidance@latest legacy-scan web/src` 0 命中。
+15. **文档一致性验收**: `node tools/project-audit.cjs` 通过——组件引用、文档链接、wiki 来源、API 端点、MCP 工具、CSS 契约一致，且无陈旧交互说法。
 
 ---
 
-## 10. 待决策点（请评审时定夺）
+## 10. 决策记录与待定项
 
-1. **Pick Panel 首发视图范围（v0.2）**: 建议 JSON 树 + 文本划选首发，HTML 渲染点选（沙箱 iframe + CSS 选择器）放 v0.3——HTML 点选实现成本高（postMessage 沙箱通信 + 选择器生成），且多数签到 API 是 JSON。
-2. failed 出口未连线时的默认行为：停（现状）vs 继续——建议保持"停"，`onError: continue` 放 v0.3。
-3. CSV 批量上限：建议单次 ≤ 50 任务。
-4. script 沙箱是否进 v0.3：若有签到场景强依赖加密签名则提前。
-5. 模板市场是否做自建站点，还是仅约定索引 JSON 让社区自发（建议后者，成本最低）。
-6. 列表页"标签/分组"与"按模板筛选"是否二选一先行（建议先做模板筛选，标签延后）。
-7. 生成节点的变量命名策略：自动起名（如点选"积分"→ `points`，中文自动转拼音/语义映射表）vs 统一 `var1/var2`——建议中英文小词表映射 + 冲突自动加后缀，用户随时可改。
-8. 通知渠道范围：v0.4 已覆盖 7 种主流渠道；是否继续扩展 PushPlus / 邮箱 / 自定义卡片？（建议按需再加，保持内核轻量）
-9. 多用户/多账号：当前单管理员 + API Key；是否做多用户隔离（建议 v1.0 后再评估，当前自部署个人场景足够）。
-10. 事件链案例定位：作为「事件链自动完成任务」的验收样板（已 19/19），是否将事件链能力抽象为通用节点（report 节点）？（建议先保持 script+http 组合，观察第二案例再抽象）。
+**已定版（勿回退）**
+
+1. 模板联动 = 自动跟随，不做手动同步 / 版本标记；派生任务改脚本内容自动转独立任务。
+2. 点任务名 = 任务详情；进画布 = 「··· → 编辑流程」；任务行 ··· 只有 4 项；编辑器「更多 → 任务详情…」复用同一组件。
+3. 弹窗用原生 `<dialog>`，菜单用 Popover API；弹窗内菜单必须挂到该 dialog 内部。
+4. 任务级失败重试默认开启（3 次 / 指数退避 / 抖动），跑满次数才判定最终失败。
+5. 窄屏顶栏单行四控件，次要动作收进「更多」；工具条分组、弹窗显式居中。
+6. 公开仓库只放框架；具体站点、模板、实例、账号、本地测试样例一律不入库。
+
+**待用户决策 / 后续评估**
+
+7. HTML 渲染点选（沙箱 iframe + CSS 选择器）是否投入；当前 JSON 树 + 文本划选已覆盖主流接口。
+8. `failed` 出口未连线时默认「停」还是「继续」：建议保持停，`onError: continue` 后续再评估。
+9. CSV 单次批量上限：建议 ≤ 50 任务。
+10. 模板市场：建议只约定索引 JSON 规范、社区自建，框架不内置业务模板。
+11. 列表「标签/分组」与「按模板筛选」优先级：建议先做模板筛选。
+12. 生成节点的变量命名策略：建议中英文小词表映射 + 冲突加后缀，用户随时可改。
+13. 通知渠道是否继续扩展：按需求追加，保持内核轻量。
+14. 多租户隔离：当前单实例多用户 + 角色已足够，租户级隔离留到 v1.0 后评估。
+15. 编辑器能力缺口：Undo/Redo、节点复制粘贴、画布↔时间轴双向联动、单次运行 HAR 导出、minimap / 自动布局。
+16. 维护文档：`docs/GAP-ANALYSIS*.md` 是否保留、`FlowList.jsx` / `FlowEditor.jsx` 是否拆分。

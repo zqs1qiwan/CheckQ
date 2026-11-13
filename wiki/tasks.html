@@ -3,8 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark light" />
 <title>任务与流程 · CheckQ 文档</title>
-<meta name="description" content="节点、变量、调度、模板" />
+<meta name="description" content="节点、变量、调度、重试、模板" />
 <link rel="stylesheet" href="./assets/style.css" />
 
 </head>
@@ -17,8 +18,9 @@
     <div id="results"></div>
     <nav>
 <a class="" href="index.html">概览<em>CheckQ 是什么、能做什么</em></a>
-<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个签到</em></a>
-<a class="on" href="tasks.html">任务与流程<em>节点、变量、调度、模板</em></a>
+<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个任务</em></a>
+<a class="on" href="tasks.html">任务与流程<em>节点、变量、调度、重试、模板</em></a>
+<a class="" href="uiux.html">交互与视觉规范<em>入口契约、原生组件、双主题、响应式</em></a>
 <a class="" href="logs.html">日志与通知<em>干净日志、连续日志流、通知渠道</em></a>
 <a class="" href="security.html">账号与安全<em>多用户、2FA、凭据加密、访问控制</em></a>
 <a class="" href="api.html">API 与 MCP<em>开放 API、API Key、外部 Agent 接入</em></a>
@@ -39,10 +41,10 @@
 <div class="table-wrap"><table><thead><tr><th>类型</th><th>用途</th></tr></thead><tbody><tr><td>HTTP 请求</td><td>方法 / URL / 头 / 体 / 断言 / 超时 / 后端(fetch·curl) / 编码 / 代理 / 重试</td></tr><tr><td>条件判断</td><td>jexl 表达式分流（真→true 出口，假→false 出口）</td></tr><tr><td>赋值</td><td>变量或表达式求值</td></tr><tr><td>提取</td><td>正则 / JSON 路径 / 响应头 / Set-Cookie</td></tr><tr><td>延迟 / 随机延迟</td><td>固定或区间等待（避开整点风控）</td></tr><tr><td>日志</td><td>输出人话日志（默认唯一可见的日志）</td></tr><tr><td>通知</td><td>流程内自定义推送</td></tr><tr><td>脚本</td><td>JS 沙箱（vars/last/steps 只读，1s 超时）</td></tr><tr><td>遍历</td><td>数组逐项循环（上限 50 轮）</td></tr></tbody></table></div>
 <h2 id="变量与表达式">变量与表达式</h2>
 <ul><li>流程变量在编辑器「流程变量」面板维护；敏感值（cookie / token / 密码）<strong>落盘加密</strong>，API 返回明文以便编辑。</li><li>模板语法：<code>{{var}}</code>、<code>{{x|urlencode}}</code>、<code>{{x|num}}</code>、<code>{{x|sha256}}</code>、<code>{{now:%Y-%m-%d}}</code></li><li>表达式：<code>=last.json.code == 0</code>（<code>vars.xxx</code> 取变量，<code>last</code> 是上一个响应）</li></ul>
-<h2 id="调度">调度</h2>
-<ul><li>每个任务独立 cron + 时区 + 抖动（0-N 分钟）；空 cron = 只手动运行。</li><li>调度弹窗里可随时启用 / 停用；首页健康条显示「下一次调度」及是哪个任务。</li></ul>
+<h2 id="调度与失败重试">调度与失败重试</h2>
+<ul><li>每个任务独立 cron + 时区 + 抖动（0-N 分钟）；空 cron = 只手动运行。</li><li>调度弹窗里可随时启用 / 停用；首页健康条显示「下一次调度」及是哪个任务。</li><li><strong>任务级失败重试</strong>（默认开启）：最多 3 次尝试、指数退避 5 秒起、随机抖动、单次等待上限 5 分钟；只有最后一次仍失败才判定任务失败。可选线性 / 固定间隔，也可关闭。</li><li>调试运行不重试；上一次运行或退避尚未结束时，调度会跳过这一拍，避免堆积。</li><li>节点级重试（http 节点配置）是同一次执行内立刻重发，与任务级重试互补。</li></ul>
 <h2 id="模板">模板</h2>
-<ul><li>存为模板会带走节点 / 连线 / 变量 / 日志 / 通知。</li><li>从模板创建任务时逐个覆盖变量；敏感默认值在模板导出时自动脱敏。</li><li>模板市场：设置或「模板」页可从 JSON 索引地址批量导入。</li></ul>
+<ul><li>存为模板会带走节点 / 连线 / 变量 / 日志 / 通知。</li><li>派生任务 = 模板 + 各自参数：<strong>模板一改，所有派生任务立刻跟随，无需任何同步操作</strong>；没有「更新到模板版本」按钮或「待更新」标记。</li><li>派生任务改了脚本内容（忽略节点坐标）会自动转成独立任务；变量值、通知渠道保留，日志配置随模板。</li><li>模板删除后，已建任务回退到自己保存的最后一份流程图，不受影响。</li><li>从模板创建任务时逐个覆盖变量；敏感默认值在模板导出时自动脱敏。</li><li>模板市场：「模板」页可从 JSON 索引地址批量导入。</li></ul>
 <h2 id="点选生成逻辑">点选生成逻辑</h2>
 <p>在编辑器里运行一次 → 日志里展开响应 → 点任意 JSON 值或划选文字 → 选择用途（存为变量 / 断言成功 / 记录到日志 / 加进通知）→ 自动生成标准节点并接到链尾。</p>
     <div class="foot">CheckQ 文档 · 由 <code>tools/build-wiki.cjs</code> 生成 · <a href="https://github.com/zqs1qiwan/checkq/issues">反馈问题</a></div>

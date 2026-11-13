@@ -1,8 +1,8 @@
 
-:root { --bg:#0f1115; --panel:#161a20; --panel2:#1c2129; --border:#2a303a; --text:#e8e6e1; --muted:#9aa1ad; --accent:#6b93f0; --ok:#4caf7d; --warn:#d9a441; --code-bg:#11141a; }
-html[data-mode='light'] { --bg:#f6f7f9; --panel:#fff; --panel2:#f0f2f5; --border:#d7dae0; --text:#1b1f24; --muted:#5b6472; --accent:#2f6feb; --ok:#1a7f43; --warn:#9a6700; --code-bg:#f6f8fa; }
+:root { color-scheme: dark; --bg:#0b0e11; --panel:#11151a; --panel2:#171c22; --border:#232a32; --text:#e3e7eb; --muted:#8a949e; --accent:#3fa7ad; --ok:#3fae7d; --warn:#c99a3f; --code-bg:#0e1216; }
+html[data-mode='light'] { color-scheme: light; --bg:#f3f5f6; --panel:#fff; --panel2:#eef1f3; --border:#d9dfe3; --text:#15191d; --muted:#5f6a73; --accent:#14707a; --ok:#1b7a52; --warn:#8a6116; --code-bg:#f8fafb; }
 * { box-sizing: border-box; }
-body { margin:0; background: var(--bg); color: var(--text); font: 15px/1.7 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+body { margin:0; background: var(--bg); color: var(--text); font: 14px/1.65 "Segoe UI Variable Text", -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-font-smoothing: antialiased; }
 a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
 .wrap { display: flex; min-height: 100vh; }
 aside { width: 272px; flex: none; border-right: 1px solid var(--border); background: var(--panel); padding: 20px 14px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
@@ -38,3 +38,4 @@ hr { border: none; border-top: 1px solid var(--border); margin: 22px 0; }
 .log { font-size: 12.5px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--code-bg); margin-bottom: 12px; }
 .log b { color: var(--accent); }
 @media (max-width: 880px) { aside { position: static; height: auto; width: 100%; } .wrap { flex-direction: column; } main { padding: 22px 18px 60px; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }

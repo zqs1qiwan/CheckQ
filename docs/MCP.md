@@ -26,7 +26,7 @@ node mcp/checkq-mcp.cjs
 - 只读 Key 调用运行类工具会返回 403「API Key 权限不足：需要 run」；
 - 详见 `docs/AGENT-ACCESS.md`。
 
-## 3. 工具定义（17 个）
+## 3. 工具定义（20 个）
 
 | 工具 | 参数 | 说明 |
 |---|---|---|
@@ -34,19 +34,22 @@ node mcp/checkq-mcp.cjs
 | flows_list | {} | 列出所有任务（含 cron/enabled/nextRunAt） |
 | flow_get | { id } | 读取任务完整定义（nodes/edges/vars/log） |
 | flow_run | { id } | 运行任务并返回逐步日志 + 摘要 |
-| flow_update_vars | { id, vars } | 更新任务变量（如 wbToken），其余字段保留 |
+| flow_update_vars | { id, vars } | 更新任务变量，其余字段保留 |
 | runs_list | { flowId, limit? } | 历史运行记录 |
 | run_get | { id } | 单次运行完整日志与变量快照 |
 | templates_list | {} | 模板列表 |
 | stats | {} | 运维健康统计 |
 | notifications_list | { limit? } | 站内通知列表（含未读数） |
 | whoami | {} | 当前身份与权限自检 |
-| flow_logs | { id, limit? } | 连续日志流（多次运行的人话日志，最像 qinglong 面板） |
+| flow_logs | { id, limit? } | 连续日志流（多次运行的人话日志） |
 | flow_update | { id, name?, cron?, timezone?, jitterMinutes?, enabled?, note? } | 改任务基础配置 |
 | flow_toggle | { id, enabled } | 启用/停用定时调度 |
 | flow_create | { name, cron?, vars?, templateId?, enabled? } | 新建任务（可从模板克隆） |
+| flow_delete | { id } | 删除任务（不可恢复；需要 write 作用域） |
 | flow_notify_test | { id } | 向已配置渠道发测试通知 |
 | template_get | { id } | 模板详情（变量名与默认值） |
+| template_instantiate | { id, name?, vars?, note? } | 从模板创建任务 |
+| import_curl | { command } | 把 cURL 命令解析为 http 节点配置（不创建任务） |
 
 ## 4. JSON-RPC 示例
 
@@ -96,6 +99,6 @@ node mcp/checkq-mcp.cjs
 ### Cursor / OpenCode
 同上，按对应客户端的 MCP 配置格式填入 command/args/env。
 
-## 8. 扩展工具（规划）
+## 8. 扩展工具
 
-`flow_create` / `flow_update` / `flow_delete` / `template_instantiate` / `import_curl` 等将在后续版本加入；当前 Agent 可通过 `flow_update_vars` + 直接编辑 flow JSON（`flow_get` 读出 → 修改 → PUT `/api/flows/:id`）完成。
+当前文档列出的 20 个工具均已实现；后续可评估：`flow_clone`、`flow_export`、`template_export`、`batch_run` 等。新增工具必须同时更新本节与 `tools/project-audit.cjs` 的对照检查。

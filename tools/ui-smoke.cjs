@@ -6,7 +6,8 @@
  *   - 横向溢出（内容比视口宽 → 出现横向滚动条）
  *   - 图标按钮没有按钮框（外链 a.iconbtn 曾经没有边框/底色）
  *   - 下拉菜单被祖先 overflow 裁掉 / 超出视口 / 点不到（底部那几行最常见）
- *   - 弹窗：右上角 ✕、Esc 关闭、遮罩关闭、超出视口、背景滚动未锁
+ *   - 弹窗：右上角 ✕、Esc 关闭、遮罩关闭、超出视口、**视口居中（不贴左上角）**、背景滚动未锁
+ *   - 顶栏控件：单行、等高、垂直对齐；按钮不被挤到换行
  *   - 控制台报错 / 未捕获异常
  *
  * 用法：
@@ -235,6 +236,14 @@ async function checkModal(page, where, openExpr, opts = {}) {
     const issues = [];
     if (r.width > innerWidth + 1 || r.height > innerHeight + 1) issues.push('弹窗超出视口 ' + Math.round(r.width) + 'x' + Math.round(r.height));
     if (r.top < -1 || r.left < -1) issues.push('弹窗位置出界');
+    // 弹窗必须在视口正中：贴到左上角（0,0）也是 bug，不能只查负数
+    const dx = r.left + r.width / 2 - innerWidth / 2;
+    const dy = r.top + r.height / 2 - innerHeight / 2;
+    if (Math.abs(dx) > 12 || Math.abs(dy) > 12) {
+      issues.push('弹窗未居中（疑似贴到左上角）dx=' + Math.round(dx) + ' dy=' + Math.round(dy) + ' rect=' + [r.left, r.top, r.width, r.height].map(Math.round).join(','));
+    }
+    const cs = getComputedStyle(m);
+    if (cs.position !== 'fixed') issues.push('弹窗未用 fixed 定位（滚动时会跑偏）');
     const hasX = !!m.querySelector('.modal-close,[aria-label="关闭"],button.modal-x');
     const locked = m.matches(':modal');
     if (!locked) issues.push('不是模态 dialog（背景未 inert）');
@@ -282,11 +291,11 @@ async function checkModal(page, where, openExpr, opts = {}) {
     await page.reload();
 
     const home = await page.eval(ASSERT + `
-      // 图标按钮必须有按钮框（边框 + 底色 + 尺寸）
+      // 图标按钮必须有按钮框（边框 + 尺寸）；幽灵样式平时透明是刻意的
       for (const el of document.querySelectorAll('.topbar .iconbtn')) {
         const cs = getComputedStyle(el); const r = rect(el);
+        if (r.width < 1 || r.height < 1) continue; // 窄屏隐藏的动作组
         if (parseFloat(cs.borderTopWidth) < 1) bad('图标按钮没有边框: ' + (el.getAttribute('title')||el.className));
-        if (cs.backgroundColor === 'rgba(0, 0, 0, 0)') bad('图标按钮没有底色: ' + (el.getAttribute('title')||el.className));
         if (r.width < 24 || r.height < 24) bad('图标按钮太小: ' + Math.round(r.width) + 'x' + Math.round(r.height));
       }
       if (!document.querySelector('.topbar a.iconbtn[href*="github.io"]')) bad('顶栏缺少「文档中心」外链');
@@ -569,13 +578,20 @@ async function checkModal(page, where, openExpr, opts = {}) {
               if (ox > 2 && oy > 2) bad('顶栏元素重叠: ' + (items[i].className||items[i].tagName) + ' × ' + (items[j].className||items[j].tagName));
             }
           }
-          // 图标按钮：边框 + 底色 + 尺寸
+          // 图标按钮：细边框 + 足够点击区（幽灵样式平时透明是刻意的，悬停才浮出底色）
           for (const el of document.querySelectorAll('.topbar .iconbtn')) {
             const cs = getComputedStyle(el); const r = rect(el);
+            if (r.width < 1 || r.height < 1) continue; // 窄屏收进「更多」的动作组是隐藏的
             if (parseFloat(cs.borderTopWidth) < 1) bad('图标按钮没有边框: ' + (el.getAttribute('title')||el.className));
-            if (cs.backgroundColor === 'rgba(0, 0, 0, 0)') bad('图标按钮没有底色: ' + (el.getAttribute('title')||el.className));
             if (r.width < 24 || r.height < 24) bad('图标按钮太小: ' + Math.round(r.width) + 'x' + Math.round(r.height));
           }
+          // 顶栏可交互控件：必须单行、等高、垂直居中对齐（按钮被挤到换行是回归项）
+          const ctrls = [...document.querySelectorAll('.topbar button, .topbar a.iconbtn, .topbar .dd-trigger')]
+            .filter(e => { const q = rect(e); return q.width > 0 && q.height > 0 && getComputedStyle(e).visibility !== 'hidden'; });
+          const heights = [...new Set(ctrls.map(e => Math.round(rect(e).height)))];
+          if (heights.length > 1) bad('顶栏控件高度不一致: ' + heights.join(','));
+          const tops = [...new Set(ctrls.map(e => Math.round(rect(e).top)))];
+          if (tops.length > 1) bad('顶栏控件被挤到换行: top=' + tops.join(','));
           // 主题必须真的切过去（背景色变化）
           const bg = getComputedStyle(document.body).backgroundColor;
           return { A, bg };

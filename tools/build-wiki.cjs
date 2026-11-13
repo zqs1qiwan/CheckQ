@@ -101,8 +101,9 @@ const plainText = (md) => md
 // ---------- 页面清单（只讲框架功能，不含具体脚本） ----------
 const PAGES = [
   { file: 'index.md', title: '概览', desc: 'CheckQ 是什么、能做什么' },
-  { file: 'quickstart.md', title: '快速开始', desc: '3 步跑通第一个签到' },
-  { file: 'tasks.md', title: '任务与流程', desc: '节点、变量、调度、模板' },
+  { file: 'quickstart.md', title: '快速开始', desc: '3 步跑通第一个任务' },
+  { file: 'tasks.md', title: '任务与流程', desc: '节点、变量、调度、重试、模板' },
+  { file: 'uiux.md', title: '交互与视觉规范', desc: '入口契约、原生组件、双主题、响应式' },
   { file: 'logs.md', title: '日志与通知', desc: '干净日志、连续日志流、通知渠道' },
   { file: 'security.md', title: '账号与安全', desc: '多用户、2FA、凭据加密、访问控制' },
   { file: 'api.md', title: 'API 与 MCP', desc: '开放 API、API Key、外部 Agent 接入' },
@@ -129,12 +130,13 @@ CheckQ 是一个**可视化 HTTP 自动化流程引擎**（框架 / 平台）：
 | 积木式流程 | HTTP / 条件 / 赋值 / 提取 / 延迟 / 日志 / 通知 / 脚本 / 遍历 节点，拖拽连线即成流程 |
 | 点选生成逻辑 | 运行后点响应里的任意值 → 一键生成提取 / 断言 / 关键字 / 通知 节点 |
 | 导入 | 浏览器 HAR、cURL 命令、JSON 模板导入，自动生成流程图 |
-| 调度 | 每个任务独立 cron + 时区 + 抖动；支持手动运行与「调试运行」 |
-| 日志 | 默认只输出人话日志（qinglong / qiandao 风格），可开调试模式看每步请求与响应 |
+| 调度 | 每个任务独立 cron + 时区 + 抖动；支持手动运行与「调试运行」；**失败按退避策略自动重试，跑满次数才判定最终失败** |
+| 日志 | 默认只输出人话日志，可开调试模式看每步请求与响应；运行记录含逐次尝试与等待时长 |
 | 通知 | 12 种渠道：站内通知、Webhook、Bark、Telegram、Server酱、PushPlus、钉钉、企业微信、飞书、Gotify、ntfy、邮件 SMTP |
-| 模板 | 调试好的流程存为模板，一份模板派生多份任务，各自填自己的变量 |
+| 模板 | 调试好的流程存为模板，一份模板派生多份任务；**模板一改，派生任务立刻跟随，零同步操作** |
 | 账号安全 | 多用户 + 角色、TOTP 两步验证、会话吊销、凭据静态加密、API Key 作用域与 IP 名单 |
-| 开放接口 | REST（OpenAPI 3.1）+ MCP（17 个工具），外部 Agent 可直接操作 |
+| 开放接口 | REST（OpenAPI 3.1）+ MCP（20 个工具），外部 Agent 可直接操作 |
+| 现代 Web | 原生 \`<dialog>\` / Popover API / \`color-scheme\` / 容器查询 / 内容可见性；遵循 Modern Web Guidance 1.0 |
 
 ## 设计原则
 
@@ -142,6 +144,8 @@ CheckQ 是一个**可视化 HTTP 自动化流程引擎**（框架 / 平台）：
 - **干净日志**：默认只有你写的日志节点出现，技术细节按需展开。
 - **凭据不落明文**：cookie / token / 密码加密存储，备份默认脱敏。
 - **终端用户优先**：面板里不写"给你讲道理"的说明文字，说明走悬停标注或按需出现。
+- **原生能力优先**：弹窗/菜单/主题交给浏览器（\`<dialog>\` / Popover / \`color-scheme\`），减少自造轮子。
+- **窄屏单行**：小屏顶栏只留「品牌 / 新建 / 更多 / 设置」，其余动作收进菜单，按钮不被挤到换行。
 
 ## 接下来去哪
 
@@ -164,23 +168,24 @@ CheckQ 是一个**可视化 HTTP 自动化流程引擎**（框架 / 平台）：
 
 顶栏「运行」。成功时日志只有一行人话；失败时点日志步骤可看响应体。
 
-## 3. 定调度
+## 3. 定调度与重试
 
-顶栏「调度」→ 填 cron（如 \`13 0 * * *\` = 每天 00:13）→ 启用。
+编辑器顶栏「调度」→ 填 cron（如 \`30 8 * * *\` = 每天 08:30）→ 启用。同一个弹窗里可配置**失败重试**：默认最多 3 次、指数退避 5 秒起、随机抖动；跑满次数仍失败才判定任务失败，逐次尝试与等待时长会写进日志与通知。调试运行不重试。
 
 ## 4. 收通知
 
-任务 ··· →「通知渠道」→ 选类型（站内通知零依赖）→ 填地址 →「测试发送」。
+编辑器「更多 → 通知渠道」→ 选类型（站内通知零依赖）→ 填地址 →「测试发送」。
 
 ## 5. 变成模板（可选）
 
-任务 ··· →「存为模板」→ 之后从模板创建任务时，各自填自己的变量（如 cookie）。
+编辑器「更多 → 存为模板」→ 之后从模板创建任务时，各自填自己的变量（如 token）。模板一改，已派生的任务立刻跟随。
 
 ## 6. 自动化（可选）
 
-- **调试运行**：任务 ··· →「调试运行」记录每步请求/响应并展开过程窗口；日常「运行」只输出配置好的日志。
+- **调试运行**：编辑器顶栏「调试运行」记录每步请求/响应并展开过程窗口；日常「运行」只输出配置好的日志。
 - **连续日志流**：任务行「日志」→ 多次运行滚动在一起，可上翻历史、导出。
 - **外部 Agent**：设置 → API 密钥 → 生成（只读 + 可运行）→ 配合 [API 与 MCP](/api.html)。
+- **窄屏**：顶栏「+ / ⋯ / 设置」三个图标按钮；主题、站内通知、文档中心、登录身份都在「⋯」里。
 `,
   'tasks.md': `# 任务与流程
 
@@ -204,20 +209,80 @@ CheckQ 是一个**可视化 HTTP 自动化流程引擎**（框架 / 平台）：
 - 模板语法：\`{{var}}\`、\`{{x|urlencode}}\`、\`{{x|num}}\`、\`{{x|sha256}}\`、\`{{now:%Y-%m-%d}}\`
 - 表达式：\`=last.json.code == 0\`（\`vars.xxx\` 取变量，\`last\` 是上一个响应）
 
-## 调度
+## 调度与失败重试
 
 - 每个任务独立 cron + 时区 + 抖动（0-N 分钟）；空 cron = 只手动运行。
 - 调度弹窗里可随时启用 / 停用；首页健康条显示「下一次调度」及是哪个任务。
+- **任务级失败重试**（默认开启）：最多 3 次尝试、指数退避 5 秒起、随机抖动、单次等待上限 5 分钟；只有最后一次仍失败才判定任务失败。可选线性 / 固定间隔，也可关闭。
+- 调试运行不重试；上一次运行或退避尚未结束时，调度会跳过这一拍，避免堆积。
+- 节点级重试（http 节点配置）是同一次执行内立刻重发，与任务级重试互补。
 
 ## 模板
 
 - 存为模板会带走节点 / 连线 / 变量 / 日志 / 通知。
+- 派生任务 = 模板 + 各自参数：**模板一改，所有派生任务立刻跟随，无需任何同步操作**；没有「更新到模板版本」按钮或「待更新」标记。
+- 派生任务改了脚本内容（忽略节点坐标）会自动转成独立任务；变量值、通知渠道保留，日志配置随模板。
+- 模板删除后，已建任务回退到自己保存的最后一份流程图，不受影响。
 - 从模板创建任务时逐个覆盖变量；敏感默认值在模板导出时自动脱敏。
-- 模板市场：设置或「模板」页可从 JSON 索引地址批量导入。
+- 模板市场：「模板」页可从 JSON 索引地址批量导入。
 
 ## 点选生成逻辑
 
 在编辑器里运行一次 → 日志里展开响应 → 点任意 JSON 值或划选文字 → 选择用途（存为变量 / 断言成功 / 记录到日志 / 加进通知）→ 自动生成标准节点并接到链尾。
+`,
+  'uiux.md': `# 交互与视觉规范
+
+> 本节描述框架的交互契约与视觉令牌，供二次开发与验收对照。所有实现均为浏览器原生能力优先，不含任何业务脚本。
+
+## 入口契约（定版）
+
+| 动作 | 结果 |
+|---|---|
+| 点任务名 | 「任务详情」弹窗：任务名 / 备注可改 + 只读概览（调度、时区、状态、重试策略、下次/上次运行、流程规模、变量（敏感项遮蔽）、通知渠道、来源模板、创建/修改时间） |
+| 任务行 ··· | 编辑流程 / 复制副本 / 启用或停用调度 / 删除（**没有**单独的基础信息入口） |
+| 编辑器「更多」 | 任务详情 / 通知渠道 / 填入 Cookie / 日志配置 / 存为模板 / 调试运行 等 |
+| 任务行「日志」或状态徽章 | 连续日志流（同一入口，避免两份视图） |
+
+## 原生 Web 能力
+
+| 能力 | 做法 |
+|---|---|
+| 弹窗 | 原生 \`<dialog>\` + \`showModal()\` + \`closedby="any"\`；浏览器负责焦点、Esc、背景 inert、顶层渲染与关闭后焦点归还 |
+| 定位 | \`position: fixed; inset: 0; margin: auto; height: fit-content\`，跨浏览器居中，不依赖 UA 差异 |
+| 滚动 | \`dialog:modal\` 与 \`dialog::backdrop\` 的 \`overscroll-behavior: contain\`，不给 \`<html>/<body>\` 上锁 |
+| 菜单 | Popover API 顶层渲染；位于弹窗内时挂到该 \`<dialog>\` 内部，否则会被 inert 拦住 |
+| 主题 | \`<meta name="color-scheme">\` + \`:root\` 的 \`color-scheme\`；日 / 夜 / 自动三段切换 |
+| 表格 | 语义 \`<table>/<caption>/<th scope>\` + sticky 表头 + 容器查询；可聚焦横滚区 |
+| 表单 | \`autocomplete\` / \`:user-invalid\` / \`aria-label\` / \`role="alert"\` |
+| 动效 | \`prefers-reduced-motion\` 降级；长日志 \`content-visibility: auto\` |
+
+依据 [Modern Web Guidance 1.0](https://developer.chrome.com/docs/modern-web-guidance)；机械扫描 \`npx modern-web-guidance@latest legacy-scan web/src --json\` 当前为 0 命中。
+
+## 视觉令牌
+
+| 项 | 夜 | 日 |
+|---|---|---|
+| 背景 / 面板 | \`#0b0e11\` / \`#11151a\` | \`#f3f5f6\` / \`#ffffff\` |
+| 边框 | \`#232a32\` | \`#d9dfe3\` |
+| 强调色 | \`#3fa7ad\` | \`#14707a\` |
+| 圆角 | xs 2 / sm 4 / md 6 / lg 8 / xl 12 px（层级化，不再处处同圆角） | 同左 |
+| 控件高度 | 标准 32 / 小 26 / 移动端 38 px | 同左 |
+
+- 冷中性石墨 + 低饱和汽油蓝绿；状态用「小圆点 + 文字」，不用彩色药丸；数字等宽 \`tabular-nums\`。
+- 节点配色为低饱和语义色，图标统一线性 SVG（设置用滑块式图标），禁止 emoji 充当图标。
+- 元信息用细竖线分隔的 \`.meta\`，不堆中点串。
+
+## 响应式与对齐
+
+- 桌面顶栏：品牌 / 新建 / 更多 / 身份文字 / 动作组 / 设置，全部等高、单行、垂直居中。
+- 窄屏（≤640px）：只保留「品牌 / + / ⋯ / 设置」四个 38px 控件，单行不换行；主题、站内通知、文档中心、登录身份收进「更多」。
+- 工具条拆左右两组，组内不拆散、组间才折行；搜索框可伸缩，控件同高。
+- 弹窗 \`height: fit-content\`（\`height: auto\` 会被 \`inset:0\` 拉满再截断，留下大片空白）。
+
+## 验收护栏
+
+\`node tools/ui-smoke.cjs <baseUrl>\`（7 视口 × 明暗主题，检查溢出 / 重叠 / 顶栏换行 / 弹窗居中 / 菜单裁剪 / 控制台报错）、
+\`node tools/copy-audit.cjs\`、\`node tools/secret-scan.cjs\`、\`node tools/project-audit.cjs\`，命中即 \`exit 1\`。
 `,
   'logs.md': `# 日志与通知
 
@@ -235,13 +300,14 @@ CheckQ 是一个**可视化 HTTP 自动化流程引擎**（框架 / 平台）：
 ## 连续日志流
 
 任务行「日志」→ 多次运行拍平成一条时间线：可「加载更早的记录」，每组可展开调试或导出 .log。
+失败重试的运行会在日志里插入「第 N/M 次尝试」分隔行；运行抽屉列出每次尝试的成败与下次等待时长，结论与通知也带尝试次数。
 
 ## 通知渠道（12 种）
 
 站内通知 / Webhook / Bark / Telegram / Server酱 / PushPlus / 钉钉（加签）/ 企业微信 / 飞书（加签）/ Gotify / ntfy / 邮件 SMTP。
 
 - 成功 / 失败可分别开启；模板支持 {{flow.name}} {{status}} {{message}} {{duration}} {{time}}。
-- **每日总推送**（可选，默认关）：设置 → 通知与推送 → 勾选「推送单位」（任务），可定时推送或立即推送今日汇总。
+- **每日汇总推送**（可选，默认关）：设置 → 通知与推送 → 勾选「推送单位」（任务），可定时推送或立即推送今日汇总。
 - **界面提示级别**：默认只报错误；可在设置里改为「成功 + 错误」或「全部」。
 `,
   'security.md': `# 账号与安全
@@ -293,15 +359,18 @@ CSP / X-Frame-Options / nosniff / Referrer-Policy；写操作校验 Origin 同�
 | 列任务 | GET | /api/flows |
 | 任务详情 | GET | /api/flows/:id |
 | 跑一次 | POST | /api/flows/:id/run |
+| 实时日志（SSE） | POST | /api/flows/:id/run（\`{"stream": true}\`） |
 | 连续日志流 | GET | /api/flows/:id/logs?limit=200 |
-| 改变量 / 调度 | PUT | /api/flows/:id |
-| 历史运行 | GET | /api/runs?flowId=&limit=30 |
+| 改变量 / 调度 / 重试 | PUT | /api/flows/:id |
+| 历史运行（含逐次尝试） | GET | /api/runs?flowId=&limit=30 |
 | 模板 | GET | /api/templates |
 | 运维统计 | GET | /api/system/stats |
 
+任务对象含 \`retry = { enabled, maxAttempts, backoff, baseDelayMs, maxDelayMs, jitter }\`（默认开启 / 3 次 / 指数 / 5s / 5min / 抖动）；运行对象含 \`attempts[]\`、\`attempt\`、\`maxAttempts\`。完整字段见 [API 参考](/reference-api.html)。
+
 ## MCP
 
-\`mcp/checkq-mcp.cjs\`（stdio，零依赖）暴露 17 个工具：health、whoami、stats、notifications_list、flows_list、flow_get、flow_run、flow_logs、flow_update_vars、flow_update、flow_toggle、flow_create、flow_notify_test、templates_list、template_get、runs_list、run_get。
+\`mcp/checkq-mcp.cjs\`（stdio，零依赖）暴露 20 个工具：health、whoami、stats、notifications_list、flows_list、flow_get、flow_run、flow_logs、flow_update_vars、flow_update、flow_toggle、flow_create、flow_delete、flow_notify_test、templates_list、template_get、template_instantiate、import_curl、runs_list、run_get。
 
 配置：
 
@@ -322,10 +391,12 @@ CSP / X-Frame-Options / nosniff / Referrer-Policy；写操作校验 Origin 同�
 单容器（Docker），数据落在 \`data/\`（flows / runs / templates / meta / notifications），JSON 存储 + 原子写 + 立即落盘。
 
 \`\`\`bash
-docker run -d --name checkq --restart unless-stopped -p 18888:8888 \\
-  -v /path/checkq/data:/data -e TZ=Asia/Shanghai \\
+docker run -d --name checkq --restart unless-stopped -p 8888:8888 \\
+  -v /path/to/data:/data -e TZ=Asia/Shanghai \\
   -e PORT=8888 -e DATA_DIR=/data checkq:latest
 \`\`\`
+
+端口可按需映射（例如 \`-p 18888:8888\`）；数据目录务必挂载到宿主机持久化。
 
 ## 数据目录
 
@@ -355,20 +426,24 @@ docker run -d --name checkq --restart unless-stopped -p 18888:8888 \\
 | 超时 | HTTP 节点超时填秒（30），不是毫秒 |
 | 变量未定义 | 日志配置开启变量快照，或看运行记录里的「未定义变量」 |
 | 提示太吵 | 设置 → 通知与推送 → 界面提示 → 仅错误 |
-| 日志太啰嗦 | 任务 ··· → 日志配置 → 记录范围「仅 log 节点」 |
+| 日志太啰嗦 | 编辑器「更多 → 日志配置」→ 记录范围「仅 log 节点」 |
 | 忘记密码 | 管理员重置；或按安全说明里的容器命令重置 |
 | 忘记两步验证码 | 用恢复码；管理员可在「用户管理」重置 2FA |
-| 弹窗里滚动会带着背景滚 | 已修复：打开弹窗会锁定背景滚动 |
+| 弹窗贴到屏幕左上角 / 打开后背景跟着滚 | 已修复：弹窗用原生 \`<dialog>\` 显式居中，遮罩与弹窗用 \`overscroll-behavior: contain\` 收敛滚动；不再给页面加锁 |
+| 弹窗里的下拉菜单点不到 | 已修复：菜单挂到该弹窗内部，避免被模态的 inert 拦住 |
+| 窄屏顶栏按钮被挤到换行 | 已修复：小屏只留四个等高控件，其余动作收进「更多」 |
+| 任务失败一次就停了 | 默认会按退避策略自动重试（最多 3 次）；在编辑器「调度 → 失败后重试」可关闭或调次数 |
+| 怎么知道到底试了几次 | 任务详情显示策略；运行抽屉列出每次尝试与等待；通知结论带「第 N/M 次尝试」 |
 | API Key 报权限不足 | 缺哪种能力就补勾哪种作用域（只读 / 可运行 / 可修改） |
 `,
 };
 
 // ---------- 静态资源 ----------
 const CSS = `
-:root { --bg:#0f1115; --panel:#161a20; --panel2:#1c2129; --border:#2a303a; --text:#e8e6e1; --muted:#9aa1ad; --accent:#6b93f0; --ok:#4caf7d; --warn:#d9a441; --code-bg:#11141a; }
-html[data-mode='light'] { --bg:#f6f7f9; --panel:#fff; --panel2:#f0f2f5; --border:#d7dae0; --text:#1b1f24; --muted:#5b6472; --accent:#2f6feb; --ok:#1a7f43; --warn:#9a6700; --code-bg:#f6f8fa; }
+:root { color-scheme: dark; --bg:#0b0e11; --panel:#11151a; --panel2:#171c22; --border:#232a32; --text:#e3e7eb; --muted:#8a949e; --accent:#3fa7ad; --ok:#3fae7d; --warn:#c99a3f; --code-bg:#0e1216; }
+html[data-mode='light'] { color-scheme: light; --bg:#f3f5f6; --panel:#fff; --panel2:#eef1f3; --border:#d9dfe3; --text:#15191d; --muted:#5f6a73; --accent:#14707a; --ok:#1b7a52; --warn:#8a6116; --code-bg:#f8fafb; }
 * { box-sizing: border-box; }
-body { margin:0; background: var(--bg); color: var(--text); font: 15px/1.7 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+body { margin:0; background: var(--bg); color: var(--text); font: 14px/1.65 "Segoe UI Variable Text", -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-font-smoothing: antialiased; }
 a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
 .wrap { display: flex; min-height: 100vh; }
 aside { width: 272px; flex: none; border-right: 1px solid var(--border); background: var(--panel); padding: 20px 14px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
@@ -404,6 +479,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 22px 0; }
 .log { font-size: 12.5px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--code-bg); margin-bottom: 12px; }
 .log b { color: var(--accent); }
 @media (max-width: 880px) { aside { position: static; height: auto; width: 100%; } .wrap { flex-direction: column; } main { padding: 22px 18px 60px; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
 `;
 
 const SEARCH_JS = `
@@ -449,6 +525,7 @@ function page({ file, title, desc, body, extraHead = '' }) {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark light" />
 <title>${title} · CheckQ 文档</title>
 <meta name="description" content="${desc}" />
 <link rel="stylesheet" href="./assets/style.css" />

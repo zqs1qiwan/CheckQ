@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark light" />
 <title>常见问题 · CheckQ 文档</title>
 <meta name="description" content="排障速查" />
 <link rel="stylesheet" href="./assets/style.css" />
@@ -17,8 +18,9 @@
     <div id="results"></div>
     <nav>
 <a class="" href="index.html">概览<em>CheckQ 是什么、能做什么</em></a>
-<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个签到</em></a>
-<a class="" href="tasks.html">任务与流程<em>节点、变量、调度、模板</em></a>
+<a class="" href="quickstart.html">快速开始<em>3 步跑通第一个任务</em></a>
+<a class="" href="tasks.html">任务与流程<em>节点、变量、调度、重试、模板</em></a>
+<a class="" href="uiux.html">交互与视觉规范<em>入口契约、原生组件、双主题、响应式</em></a>
 <a class="" href="logs.html">日志与通知<em>干净日志、连续日志流、通知渠道</em></a>
 <a class="" href="security.html">账号与安全<em>多用户、2FA、凭据加密、访问控制</em></a>
 <a class="" href="api.html">API 与 MCP<em>开放 API、API Key、外部 Agent 接入</em></a>
@@ -35,7 +37,7 @@
   </aside>
   <main>
 <h1 id="常见问题">常见问题</h1>
-<div class="table-wrap"><table><thead><tr><th>现象</th><th>处理</th></tr></thead><tbody><tr><td>找不到入口节点</td><td>流程成环，所有节点都有入线</td></tr><tr><td>HTTP 400</td><td>不一定是错误，断言通过即可继续；点日志步骤看响应体</td></tr><tr><td>超时</td><td>HTTP 节点超时填秒（30），不是毫秒</td></tr><tr><td>变量未定义</td><td>日志配置开启变量快照，或看运行记录里的「未定义变量」</td></tr><tr><td>提示太吵</td><td>设置 → 通知与推送 → 界面提示 → 仅错误</td></tr><tr><td>日志太啰嗦</td><td>任务 ··· → 日志配置 → 记录范围「仅 log 节点」</td></tr><tr><td>忘记密码</td><td>管理员重置；或按安全说明里的容器命令重置</td></tr><tr><td>忘记两步验证码</td><td>用恢复码；管理员可在「用户管理」重置 2FA</td></tr><tr><td>弹窗里滚动会带着背景滚</td><td>已修复：打开弹窗会锁定背景滚动</td></tr><tr><td>API Key 报权限不足</td><td>缺哪种能力就补勾哪种作用域（只读 / 可运行 / 可修改）</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>现象</th><th>处理</th></tr></thead><tbody><tr><td>找不到入口节点</td><td>流程成环，所有节点都有入线</td></tr><tr><td>HTTP 400</td><td>不一定是错误，断言通过即可继续；点日志步骤看响应体</td></tr><tr><td>超时</td><td>HTTP 节点超时填秒（30），不是毫秒</td></tr><tr><td>变量未定义</td><td>日志配置开启变量快照，或看运行记录里的「未定义变量」</td></tr><tr><td>提示太吵</td><td>设置 → 通知与推送 → 界面提示 → 仅错误</td></tr><tr><td>日志太啰嗦</td><td>编辑器「更多 → 日志配置」→ 记录范围「仅 log 节点」</td></tr><tr><td>忘记密码</td><td>管理员重置；或按安全说明里的容器命令重置</td></tr><tr><td>忘记两步验证码</td><td>用恢复码；管理员可在「用户管理」重置 2FA</td></tr><tr><td>弹窗贴到屏幕左上角 / 打开后背景跟着滚</td><td>已修复：弹窗用原生 <code>&lt;dialog&gt;</code> 显式居中，遮罩与弹窗用 <code>overscroll-behavior: contain</code> 收敛滚动；不再给页面加锁</td></tr><tr><td>弹窗里的下拉菜单点不到</td><td>已修复：菜单挂到该弹窗内部，避免被模态的 inert 拦住</td></tr><tr><td>窄屏顶栏按钮被挤到换行</td><td>已修复：小屏只留四个等高控件，其余动作收进「更多」</td></tr><tr><td>任务失败一次就停了</td><td>默认会按退避策略自动重试（最多 3 次）；在编辑器「调度 → 失败后重试」可关闭或调次数</td></tr><tr><td>怎么知道到底试了几次</td><td>任务详情显示策略；运行抽屉列出每次尝试与等待；通知结论带「第 N/M 次尝试」</td></tr><tr><td>API Key 报权限不足</td><td>缺哪种能力就补勾哪种作用域（只读 / 可运行 / 可修改）</td></tr></tbody></table></div>
     <div class="foot">CheckQ 文档 · 由 <code>tools/build-wiki.cjs</code> 生成 · <a href="https://github.com/zqs1qiwan/checkq/issues">反馈问题</a></div>
   </main>
 </div>

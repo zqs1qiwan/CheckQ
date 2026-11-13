@@ -82,7 +82,7 @@ curl -H "x-api-key: cq_xxxx" http://checkq.local:18888/api/flows
 
 ---
 
-## 3. Agent 能做什么（MCP 工具清单，17 个）
+## 3. Agent 能做什么（MCP 工具清单，20 个）
 
 | 工具 | 作用 | 需要权限 |
 |---|---|---|
@@ -100,9 +100,12 @@ curl -H "x-api-key: cq_xxxx" http://checkq.local:18888/api/flows
 | `flow_update` | 改 name/cron/timezone/jitter/enabled/note | 可修改 |
 | `flow_toggle` | 启用/停用定时调度 | 可修改 |
 | `flow_create` | 新建任务（可从模板克隆） | 可修改 |
+| `flow_delete` | 删除任务（不可恢复，建议只给 trusted Agent） | 可修改（高风险） |
 | `flow_notify_test` | 向已配置渠道发测试通知 | 可修改 |
+| `template_instantiate` | 从模板创建任务 | 可修改 |
+| `import_curl` | 把 cURL 命令解析为 http 节点配置（不落库） | 只读 |
 
-> **刻意不提供**：删除任务、删除模板、修改账号密码、导出含凭据的完整备份 —— 避免 Agent 误删或越权。
+> **刻意不提供**：删除模板、修改账号密码、导出含凭据的完整备份 —— 避免 Agent 误删或越权。`flow_delete` 虽已提供，但建议只在受控场景发放 `可修改` 作用域。
 
 ---
 

@@ -37,7 +37,9 @@ Docker 一行部署，导入浏览器 HAR 自动生成流程，条件分支 / �
 - **失败自动重试** — 任务级退避重试：默认最多 3 次、指数退避 5 秒起、随机抖动、单次等待上限 5 分钟；**跑满次数仍失败才判定真正失败**，每次尝试与等待时长都写进运行记录、日志与通知。调试运行不重试，调度不会在重试期间重复触发
 - **现代 Web 原生能力** — 弹窗用原生 `<dialog>`（焦点管理 / Esc / 背景 inert / 顶层渲染），菜单用 Popover API，明暗主题声明 `color-scheme`，表格 sticky 表头 + 容器查询，长日志 `content-visibility`；UI 决策依据 [Modern Web Guidance 1.0](https://developer.chrome.com/docs/modern-web-guidance)
 - **基础信息可改** — 点任务名打开任务详情（备注、调度、重试策略、变量、通知渠道…），名字与备注当场就能改；进画布是「更多 → 编辑流程」这样的显式动作
-- **下拉不丢** — 所有菜单以浮层渲染并自动避让边界，表格底部那几行的「···」也点得到
+- **下拉不丢** — 所有菜单以浮层渲染并自动避让边界，表格底部那几行的「···」也点得到；弹窗内的菜单挂到该弹窗内部，不会被模态遮罩拦住
+- **窄屏不挤** — 小屏顶栏只留「品牌 / 新建 / 更多 / 设置」四个等高控件，主题、通知、文档、身份收进「更多」；工具条左右分组各自不拆散，弹窗显式居中不会贴到左上角
+- **文档与护栏齐全** — PRD / API / MCP / 安全 / 存储文档 + 自动生成的文档站（含交互与视觉规范页）；`ui-smoke` / `copy-audit` / `secret-scan` / `project-audit` 四个机械护栏，命中即 exit 1
 - **单容器部署** — 无原生编译依赖，`docker compose up -d` 即用
 - **框架即框架** — 不内置任何业务模板；模板来自用户创建 / JSON 导入（产品路线图见 docs/PRD.md）
 
@@ -121,7 +123,8 @@ npx modern-web-guidance@latest install
 |---|---|
 | `node tools/ui-smoke.cjs <baseUrl>` | UI 冒烟检查：无依赖 CDP 驱动真实浏览器，按 7 种视口 × 明暗主题逐项体检（横向溢出 / 顶栏重叠 / 图标按钮框 / 下拉菜单被裁 / 弹窗 ✕·Esc·滚动锁 / 页面出现 undefined·NaN / 控制台报错） |
 | `node tools/copy-audit.cjs` | 文案金标准审计：无常驻说明性文字、无说明性副标题、label 无括号说明 |
-| `node tools/secret-scan.cjs` | 秘密扫描：工作区 + 完整 git 历史的高危凭据 + 仓库内容政策 |
+| `node tools/secret-scan.cjs` | 秘密扫描：工作区 + 完整 git 历史的高危凭据 + 仓库内容政策（私有词表本地留存，不入库） |
+| `node tools/project-audit.cjs` | 项目一致性：相对 import、文档链接、wiki 页面来源、API 端点、MCP 工具、CSS 契约与陈旧交互说法 |
 
 UI 冒烟检查需要先起一个本地实例（默认 `http://localhost:19998`）：
 

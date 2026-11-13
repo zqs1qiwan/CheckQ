@@ -950,3 +950,126 @@ GET    /api/notifications | POST /api/notifications/read | DELETE /api/notificat
 14. 多租户隔离：当前单实例多用户 + 角色已足够，租户级隔离留到 v1.0 后评估。
 15. ~~编辑器能力缺口~~：本轮已补齐 Undo/Redo（Ctrl+Z / Ctrl+Y）、节点复制粘贴（Ctrl+C / Ctrl+V，含内部连线）、画布↔日志双向联动、单次运行 HAR 导出（默认脱敏）、MiniMap、按层级自动整理布局。
 16. 维护文档：`docs/GAP-ANALYSIS*.md` 已删除（内容与 PRD/ROADMAP/COMPETITIVE-ANALYSIS 重复且部分过时）；`FlowList.jsx` 已拆到 `flow-list/`（562 行）、`FlowEditor.jsx` 已拆到 `editor/`（646 行），后续可按同样方式继续下沉 hooks。
+
+---
+
+## 12. 迭代记录：连续 3 轮全量验收（2026-11-13）
+
+> 本轮以「PRD 功能全量测试矩阵」为基线，对**每个已实现功能**做回归，连续 3 轮全绿、0 错误。
+> 执行方式：`node tools/verify-round.cjs http://localhost:19998`（本地 18 个泛型任务 + 1 个模板，全程只读）。
+
+| 项 | 第 1 轮 | 第 2 轮 | 第 3 轮 |
+|---|---|---|---|
+| 前端构建（`npm run build`） | ✅ | ✅ | ✅ |
+| 服务端全量单测（29 文件 / 431 断言） | ✅ | ✅ | ✅ |
+| 文案审计（`copy-audit`） | ✅ | ✅ | ✅ |
+| 秘密扫描（`secret-scan`） | ✅ | ✅ | ✅ |
+| 项目一致性（`project-audit`） | ✅ | ✅ | ✅ |
+| UI 冒烟（`ui-smoke`，60 项 / 0 问题） | ✅ | ✅ | ✅ |
+| UI 交互巡检（`ui-interaction-audit`，9 视口 × 明暗，0 findings） | ✅ | ✅ | ✅ |
+
+- 覆盖面：§11 矩阵中全部 ✅ 能力；未实现项（§10 待定）不纳入验收。
+- 本轮新增：`server/test/api-surface.test.js`（41 项断言，每个公开端点至少命中一次，含 HAR 路径）、`tools/ui-interaction-audit.cjs`（仓库护栏，固化 9 视口交互巡检）、`tools/verify-round.cjs`（一轮全量验收执行器）。
+- 结论：**当前 PRD 描述的能力集在 3 轮连续验收中均无错误**；后续变更必须按本节基线回归。
+
+---
+
+## 11. 功能全量测试矩阵（2026-11-13）
+
+> 目标：PRD 里的每个已实现能力都能对应到**代码位置 + 自动化测试 + UI 检测**。
+> 自动化命令：`cd server && node --test "test/*.test.js"`；UI：`node tools/ui-smoke.cjs <baseUrl>`、`node tools/ui-interaction-audit.cjs <baseUrl>`；一致性：`node tools/project-audit.cjs`。
+
+### 11.1 引擎与节点
+
+| 功能 | 实现 | 自动化 / 检测 | 状态 |
+|---|---|---|---|
+| HTTP 请求（fetch / curl 双后端） | `server/src/engine.js` | `engine.test.js`、`engine-v02.test.js`、`qd-compat-e2e.test.js` | ✅ |
+| 条件分支（jexl 双出口） | `engine.js` | `engine-v02.test.js` | ✅ |
+| 赋值 / 提取（正则 / JSON / 头 / Set-Cookie） | `engine.js` | `engine-v02.test.js`、`filters.test.js` | ✅ |
+| 延迟 / 随机延迟 | `engine.js` | `engine-v02.test.js` | ✅ |
+| 日志 / 通知节点 | `engine.js` | `logging.test.js`、`notify.test.js` | ✅ |
+| 脚本沙箱（1s 超时、只读上下文） | `engine.js` | `script.test.js` | ✅ |
+| 遍历 foreach（each/next、50 轮） | `engine.js` | `engine-v02.test.js` | ✅ |
+| 变量渲染 / 表达式 / 过滤器 | `render.js` | `filters.test.js`、`text-regex.test.js` | ✅ |
+| 断言（jexl + 正则 / 取反） | `engine.js` | `engine.test.js`、`qd-compat.test.js` | ✅ |
+| run 级 Cookie 罐 | `cookiejar.js` | `engine-v02.test.js` | ✅ |
+| 节点级重试 / 退避 | `engine.js` | `engine-v02.test.js` | ✅ |
+| 任务级失败重试（次数 / 最终失败 / 尝试记录） | `retry.js` + `api.js` | `retry.test.js`（含 Store 迁移）+ `har-export` 无关；E2E 已实测 | ✅ |
+
+### 11.2 任务 / 模板 / 调度
+
+| 功能 | 实现 | 自动化 / 检测 | 状态 |
+|---|---|---|---|
+| 任务 CRUD / 克隆 / 批量 | `api.js` + `store.js` | `p1.test.js`、`batch.test.js`、`api-surface.test.js` | ✅ |
+| 任务详情（改名 / 备注 / 只读概览） | `TaskDetailModal.jsx` | UI 冒烟「点任务名开详情」+ 交互巡检 | ✅ |
+| 模板自动跟随 / 脚本改动自动脱离 | `store.resolveFlow/sameLogic` | `template-link.test.js` | ✅ |
+| 模板导出（脱敏）/ CSV 批量 / URL 导入 | `api.js` | `api-surface.test.js`、`p1.test.js` | ✅ |
+| cron / 时区 / 抖动 / 启停 | `scheduler.js` + 调度弹窗 | `p2b.test.js`、UI 冒烟「调度弹窗」 | ✅ |
+| 同任务串行排队 / 状态徽章 | `api.js` + `stats` | `p2.test.js`、`p2b.test.js` | ✅ |
+| 运行历史 / 连续日志流 | `api.js` + `LogStream.jsx` | `logging.test.js`、UI 冒烟 | ✅ |
+| 运行抽屉（重试尝试条 / 变量快照 / 历史） | `RunDrawer.jsx` | 交互巡检 + E2E | ✅ |
+| 派生任务来源标注 | `store.templateInfo` | `template-link.test.js` | ✅ |
+
+### 11.3 日志 / 通知
+
+| 功能 | 实现 | 自动化 / 检测 | 状态 |
+|---|---|---|---|
+| `log.level` 三档 / `log.record` 三档 | `engine.js` + `LogConfigModal` | `log-config.test.js`、`log-clean.test.js` | ✅ |
+| 关键字规则 / 运行摘要 | `engine.js` | `log-config.test.js` | ✅ |
+| 敏感头与变量脱敏 | `engine.js` + `secret.js` | `logging.test.js`、`secrets.test.js` | ✅ |
+| 12 种通知渠道 / 加签 | `api.js` + `NotifyModal` | `notify.test.js`、`email-smtp.test.js` | ✅ |
+| 站内通知 / 未读角标 | `api.js` + `FlowList` | `api-surface.test.js`、UI 冒烟 | ✅ |
+| 每日汇总推送 / 推送单位 | `api.js` + `SettingsFlow` | `push-units.test.js`、`api-surface.test.js` | ✅ |
+| 界面提示级别 | `api.js` + `toast.js` | `api-surface.test.js` | ✅ |
+
+### 11.4 导入 / 导出 / 备份
+
+| 功能 | 实现 | 自动化 / 检测 | 状态 |
+|---|---|---|---|
+| HAR 导入 | `har-import.js` | `qd-compat.test.js`、`p1.test.js` | ✅ |
+| cURL 导入 / 生成 curl | `curl-import.js` + `api.js` | `curl-import.test.js`、`api-surface.test.js` | ✅ |
+| QD 模板导入（util / 表达式 / 变量 URL / retry） | `har-import.js` + `render.js` | `qd-compat.test.js`、`qd-compat-e2e.test.js` | ✅ |
+| 单次运行导出 HAR（默认脱敏） | `har-export.js` + `api.js` + `RunDrawer` | `har-export.test.js`、`api-surface.test.js`、E2E 下载 | ✅ |
+| 脱敏备份 / 完整备份 / 恢复 | `api.js` + 备份弹窗 | `secrets.test.js`、`api-surface.test.js` | ✅ |
+| 数据目录 / 原子写 / 立即 flush | `store.js` | `p1.test.js`、`p2.test.js` | ✅ |
+
+### 11.5 账号 / 安全 / API / MCP
+
+| 功能 | 实现 | 自动化 / 检测 | 状态 |
+|---|---|---|---|
+| 多用户 / 角色 / 禁用 | `auth.js` + `UsersPanel` | `auth.test.js` | ✅ |
+| 密码策略 / 限流 / 锁定 | `auth.js` + `api.js` | `auth.test.js`、`login-lockout.test.js` | ✅ |
+| TOTP / 恢复码 / 重置 2FA | `totp.js` | `auth.test.js` | ✅ |
+| 会话列表 / 吊销 / 退出所有设备 | `api.js` | `auth.test.js`、`api-surface.test.js` | ✅ |
+| API Key 作用域 / 回收 / IP 名单 | `auth.js` + `iprange.js` | `agent-access.test.js`、`ip-acl.test.js` | ✅ |
+| 凭据静态加密 / 备份脱敏 | `secret.js` | `secrets.test.js` | ✅ |
+| REST / OpenAPI 3.1 | `api.js` + `openapi.js` | `api-surface.test.js`（含 HAR 路径） | ✅ |
+| MCP 20 工具 | `mcp/checkq-mcp.cjs` | MCP E2E（tools/list + 新增 3 工具） | ✅ |
+
+### 11.6 UI / UX
+
+| 功能 | 实现 | 自动化 / 检测 | 状态 |
+|---|---|---|---|
+| 原生 `<dialog>` / Popover / 居中 / inert | `Modal.jsx`、`Dropdown.jsx`、`styles.css` | `ui-smoke`（弹窗居中/菜单裁剪）+ 交互巡检 | ✅ |
+| 冷中性石墨双主题 / 令牌 | `styles.css` | 交互巡检 9 视口 × 明暗 | ✅ |
+| 首页任务表 / 表头 sticky / 窄屏操作列 | `FlowList.jsx` | `ui-smoke`、交互巡检 | ✅ |
+| 窄屏顶栏单行四控件 / 更多菜单 | `FlowList.jsx` + CSS | 交互巡检（320/360/390） | ✅ |
+| 工具条分组 / 控件等高 | `FlowList.jsx` + CSS | 交互巡检（全视口） | ✅ |
+| 设置 5 分区 / API Key 菜单 | `flow-list/settings.jsx` | `ui-smoke`（5 分区 + 菜单）+ 交互巡检 | ✅ |
+| 任务详情 / 调度 / 通知 / 日志配置 | `TaskDetailModal.jsx`、`editor/modals.jsx` | `ui-smoke` 弹窗矩阵 | ✅ |
+| 编辑器撤销/重做 / 复制粘贴 / 整理 / MiniMap | `FlowEditor.jsx`、`layout.js` | `layout.test.js` + E2E | ✅ |
+| 画布 ↔ 日志双向联动 | `FlowEditor.jsx`、`RunDrawer.jsx` | E2E（focus-flash） | ✅ |
+| 可访问性（skip link / aria / focus / reduced-motion） | 各组件 + CSS | `ui-smoke` 交互契约 + 手动键盘走查 | ✅ |
+| 长日志 `content-visibility` | `styles.css` | 交互巡检无溢出/无报错 | ✅ |
+
+### 11.7 文档 / 护栏
+
+| 功能 | 实现 | 自动化 / 检测 | 状态 |
+|---|---|---|---|
+| README / API / MCP / SECURITY / STORAGE / ROADMAP | `README.md`、`docs/` | `project-audit`（链接/端点/MCP/陈旧说法） | ✅ |
+| PRD 与实现同步 | `docs/PRD.md` | 本矩阵 + 维护基线 | ✅ |
+| 文档站 wiki（含交互规范页） | `tools/build-wiki.cjs`、`wiki/` | `build-wiki` + Pages CI | ✅ |
+| 文案金标准 | `web/src` | `copy-audit` | ✅ |
+| 秘密 / 私有资产 / 本地测试样例 | 仓库 | `secret-scan`（内容级 + 历史） | ✅ |
+| 组件 / 链接 / CSS 契约 | 仓库 | `project-audit` | ✅ |
+

@@ -123,7 +123,9 @@ npx modern-web-guidance@latest install
 
 | 工具 | 作用 |
 |---|---|
-| `node tools/ui-smoke.cjs <baseUrl>` | UI 冒烟检查：无依赖 CDP 驱动真实浏览器，按 7 种视口 × 明暗主题逐项体检（横向溢出 / 顶栏重叠 / 图标按钮框 / 下拉菜单被裁 / 弹窗 ✕·Esc·滚动锁 / 页面出现 undefined·NaN / 控制台报错） |
+| `node tools/ui-smoke.cjs <baseUrl>` | UI 冒烟检查：无依赖 CDP 驱动真实浏览器，按 7 种视口 × 明暗主题逐项体检（横向溢出 / 顶栏重叠 / 图标按钮框 / 下拉菜单被裁 / 弹窗 ✕·Esc·滚动锁·居中 / 页面出现 undefined·NaN / 控制台报错） |
+| `node tools/ui-interaction-audit.cjs <baseUrl>` | 全量交互巡检：9 视口 × 明暗主题，逐项核对顶栏单行等高、工具条分组、弹窗居中、设置分区、任务详情、模板页、移动端「更多」、编辑器画布/MiniMap/更多菜单 |
+| `node tools/verify-round.cjs <baseUrl>` | 一轮全量验收执行器：构建 → 服务端全量单测 → 4 个审计 → UI 冒烟 → 交互巡检，输出本轮汇总（PRD §12 三轮基线） |
 | `node tools/copy-audit.cjs` | 文案金标准审计：无常驻说明性文字、无说明性副标题、label 无括号说明 |
 | `node tools/secret-scan.cjs` | 秘密扫描：工作区 + 完整 git 历史的高危凭据 + 仓库内容政策（私有词表本地留存，不入库） |
 | `node tools/project-audit.cjs` | 项目一致性：相对 import、文档链接、wiki 页面来源、API 端点、MCP 工具、CSS 契约与陈旧交互说法 |

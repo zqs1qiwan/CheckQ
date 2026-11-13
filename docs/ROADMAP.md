@@ -71,6 +71,7 @@
 | PRD / API / ROADMAP / wiki 同步，脱敏内容级校验 | ✅ |
 | 编辑器：节点复制粘贴（含内部连线）、画布↔日志双向联动、单次运行 HAR 导出、按层级自动整理布局 | ✅ |
 | 代码整理：`FlowList.jsx` → `flow-list/`（562 行）、`FlowEditor.jsx` → `editor/`（646 行）；删除过时 `GAP-ANALYSIS*.md` | ✅ |
+| PRD 功能全量测试矩阵（§11）+ 连续 3 轮全量验收基线（§12，`verify-round` 执行器） | ✅ |
 
 ## P1（体验）
 

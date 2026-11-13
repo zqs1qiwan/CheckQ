@@ -6,6 +6,7 @@ import AccountPanel from '../AccountPanel.jsx';
 import UsersPanel from '../UsersPanel.jsx';
 import ApiKeysPanel from '../ApiKeysPanel.jsx';
 import { setToastLevel, getToastLevel } from '../../toast.js';
+import { CHANNEL_LABELS } from '../../util.js';
 import { setToast } from './helpers.js';
 
 function SettingsModal({ onClose, initialTab }) {

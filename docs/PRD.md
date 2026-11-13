@@ -1038,6 +1038,9 @@ GET    /api/notifications | POST /api/notifications/read | DELETE /api/notificat
 | 画布 ↔ 日志双向联动 | `FlowEditor.jsx`、`RunDrawer.jsx` | E2E（focus-flash） | ✅ |
 | 可访问性（skip link / aria / focus / reduced-motion） | 各组件 + CSS | `ui-smoke` 交互契约 + 手动键盘走查 | ✅ |
 | 长日志 `content-visibility` | `styles.css` | 交互巡检无溢出/无报错 | ✅ |
+| 二次确认弹窗生命周期（取消 / 确认 / Esc / ✕ 都真正关闭） | `confirm.jsx`（订阅者模型，resolve 同步清 state） | UI 冒烟 4 项 + 交互巡检嵌套确认 | ✅ |
+| 提交型弹窗保存后关闭 | `editor/modals.jsx`、各 Modal | UI 冒烟「保存后关闭」 | ✅ |
+| 全局提示条自动消失 | `toast.js` | UI 冒烟 2 项（出现 + 5s 后消失） | ✅ |
 
 ### 11.7 文档 / 护栏
 
@@ -1069,6 +1072,7 @@ GET    /api/notifications | POST /api/notifications/read | DELETE /api/notificat
 
 - 覆盖面：§11 矩阵中全部 ✅ 能力；未实现项（§10 待定）不纳入验收。
 - 本轮新增：`server/test/api-surface.test.js`（41 项断言，每个公开端点至少命中一次，含 HAR 路径）、`tools/ui-interaction-audit.cjs`（仓库护栏，固化 9 视口交互巡检）、`tools/verify-round.cjs`（一轮全量验收执行器）。
+- **回归复验（用户报「删除确认弹窗不消失」后）**：修复 `confirm.jsx` / `toast.js` / `NotifyModal` 三类弹窗生命周期问题，并补 UI 冒烟 8 项（68 项 / 0 问题）；重新连续 3 轮 `verify-round` 全绿，生产实例只读复验全绿（66 项 / 0 问题）。
 - 结论：**当前 PRD 描述的能力集在 3 轮连续验收中均无错误**；后续变更必须按本节基线回归。
 
 ---
